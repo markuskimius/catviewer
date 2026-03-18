@@ -1,0 +1,1159 @@
+<!--
+  CAT File Viewer v0.1.0
+  Copyright (c) 2026 Mark Kim
+  Licensed under GPL-2.0
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CAT File Viewer</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --surface2: #334155;
+            --border: #475569;
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --green: #22c55e;
+            --red: #ef4444;
+            --orange: #f59e0b;
+            --cyan: #06b6d4;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        header h1 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+        header .subtitle {
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+        .drop-zone {
+            margin: 24px;
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 48px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .drop-zone:hover, .drop-zone.drag-over {
+            border-color: var(--accent);
+            background: rgba(59, 130, 246, 0.05);
+        }
+        .drop-zone h2 {
+            font-size: 18px;
+            margin-bottom: 8px;
+        }
+        .drop-zone p {
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+        .drop-zone input { display: none; }
+        #app { display: none; }
+        #app.visible { display: block; }
+
+        .file-info {
+            margin: 0 24px;
+            padding: 16px 20px;
+            background: var(--surface);
+            border-radius: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px;
+            align-items: center;
+            font-size: 14px;
+        }
+        .file-info .stat { display: flex; align-items: center; gap: 6px; }
+        .file-info .stat-label { color: var(--text-muted); }
+        .file-info .stat-value { font-weight: 600; }
+        .file-info .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge-json { background: rgba(6, 182, 212, 0.15); color: var(--cyan); }
+        .badge-csv { background: rgba(34, 197, 94, 0.15); color: var(--green); }
+
+        .toolbar {
+            margin: 16px 24px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .toolbar input[type="text"],
+        .toolbar select {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: var(--text);
+            font-size: 14px;
+            outline: none;
+        }
+        .toolbar input[type="text"] { width: 300px; }
+        .toolbar input[type="text"]:focus,
+        .toolbar select:focus { border-color: var(--accent); }
+        .toolbar select { cursor: pointer; }
+        .toolbar .btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 8px 16px;
+            font-size: 14px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .toolbar .btn:hover { background: var(--accent-hover); }
+        .toolbar .btn-secondary {
+            background: var(--surface2);
+            color: var(--text);
+        }
+        .toolbar .btn-secondary:hover { background: var(--border); }
+        .toolbar .spacer { flex: 1; }
+        .toolbar .record-count { color: var(--text-muted); font-size: 13px; }
+
+        .tabs {
+            margin: 0 24px;
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--text-muted);
+            border-bottom: 2px solid transparent;
+            transition: all 0.15s;
+        }
+        .tab:hover { color: var(--text); }
+        .tab.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        .table-container {
+            margin: 0 24px 24px;
+            overflow-x: auto;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        th {
+            background: var(--surface);
+            padding: 10px 12px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            white-space: nowrap;
+            cursor: pointer;
+            user-select: none;
+        }
+        th:hover { color: var(--text); }
+        th .sort-arrow { margin-left: 4px; font-size: 10px; }
+        td {
+            padding: 8px 12px;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+            white-space: nowrap;
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        tr:hover td { background: rgba(59, 130, 246, 0.04); }
+        tr.selected td { background: rgba(59, 130, 246, 0.1); }
+
+        .event-type {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .et-order { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+        .et-route { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
+        .et-trade { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+        .et-cancel { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+        .et-modify { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+        .et-quote { background: rgba(6, 182, 212, 0.15); color: #22d3ee; }
+        .et-alloc { background: rgba(236, 72, 153, 0.15); color: #f472b6; }
+        .et-other { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
+
+        .action-new { color: var(--green); }
+        .action-rpr { color: var(--orange); }
+        .action-cor { color: var(--cyan); }
+        .action-del { color: var(--red); }
+
+        .side-buy { color: var(--green); font-weight: 600; }
+        .side-sell { color: var(--red); font-weight: 600; }
+
+        .detail-panel {
+            display: none;
+            margin: 0 24px 24px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .detail-panel.visible { display: block; }
+        .detail-panel h3 {
+            font-size: 15px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .detail-panel .close-btn {
+            margin-left: auto;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 18px;
+        }
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 8px;
+        }
+        .detail-field {
+            display: flex;
+            gap: 8px;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .detail-field:hover { background: var(--surface2); }
+        .detail-field .field-name {
+            color: var(--text-muted);
+            min-width: 140px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 12px;
+        }
+        .detail-field .field-value {
+            font-weight: 500;
+            word-break: break-all;
+            white-space: normal;
+        }
+
+        .summary-cards {
+            margin: 16px 24px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 12px;
+        }
+        .summary-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+        }
+        .summary-card .card-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+        .summary-card .card-value {
+            font-size: 22px;
+            font-weight: 700;
+        }
+        .summary-card .card-detail {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .pagination {
+            margin: 0 24px 24px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+        .pagination button {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 6px 12px;
+            color: var(--text);
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .pagination button:hover { background: var(--surface2); }
+        .pagination button:disabled { opacity: 0.4; cursor: default; }
+        .pagination .page-info { color: var(--text-muted); font-size: 13px; }
+
+        .raw-json {
+            margin: 0 24px 24px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 500px;
+            overflow-y: auto;
+            display: none;
+        }
+        .raw-json.visible { display: block; }
+
+        .error-bar {
+            margin: 0 24px;
+            padding: 12px 16px;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 8px;
+            color: var(--red);
+            font-size: 14px;
+            display: none;
+        }
+        .error-bar.visible { display: block; }
+
+        @media (max-width: 768px) {
+            .toolbar input[type="text"] { width: 100%; }
+            .summary-cards { grid-template-columns: repeat(2, 1fr); }
+            .detail-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>CAT File Viewer</h1>
+    <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
+    <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
+    <span class="spacer" style="flex:1"></span>
+    <span class="subtitle">v0.1.0</span>
+</header>
+
+<div class="drop-zone" id="dropZone">
+    <h2>Drop a CAT file here or click to browse</h2>
+    <p>Supports JSON and CSV format CAT data files (.json, .csv, .txt)</p>
+    <input type="file" id="fileInput" accept=".json,.csv,.txt">
+</div>
+
+<div class="error-bar" id="errorBar"></div>
+
+<div id="app">
+    <div class="file-info" id="fileInfo"></div>
+    <div class="summary-cards" id="summaryCards"></div>
+
+    <div class="tabs" id="tabBar">
+        <div class="tab active" data-tab="table">Records</div>
+        <div class="tab" data-tab="summary">Event Summary</div>
+        <div class="tab" data-tab="raw">Raw Data</div>
+    </div>
+
+    <div id="tabTable">
+        <div class="toolbar">
+            <input type="text" id="searchInput" placeholder="Search all fields...">
+            <select id="eventFilter"><option value="">All Event Types</option></select>
+            <select id="actionFilter">
+                <option value="">All Actions</option>
+                <option value="NEW">NEW</option>
+                <option value="RPR">RPR (Repair)</option>
+                <option value="COR">COR (Correction)</option>
+                <option value="DEL">DEL (Delete)</option>
+            </select>
+            <select id="sideFilter">
+                <option value="">All Sides</option>
+                <option value="B">Buy</option>
+                <option value="S">Sell</option>
+                <option value="SL">Sell Long</option>
+                <option value="SS">Sell Short</option>
+                <option value="SX">Sell Short Exempt</option>
+            </select>
+            <span class="spacer"></span>
+            <span class="record-count" id="recordCount"></span>
+            <button class="btn btn-secondary" id="exportBtn">Export CSV</button>
+        </div>
+        <div class="table-container" id="tableContainer"></div>
+        <div class="pagination" id="pagination"></div>
+    </div>
+
+    <div id="tabSummary" style="display:none">
+        <div id="eventSummaryTable" class="table-container" style="margin:16px 24px"></div>
+    </div>
+
+    <div id="tabRaw" style="display:none">
+        <div class="raw-json visible" id="rawContent" style="margin:16px 24px"></div>
+    </div>
+
+    <div class="detail-panel" id="detailPanel">
+        <h3>
+            <span id="detailTitle">Record Detail</span>
+            <button class="close-btn" id="closeDetail">&times;</button>
+        </h3>
+        <div class="detail-grid" id="detailGrid"></div>
+    </div>
+</div>
+
+<script>
+// ── CAT Event Type Metadata ──
+const EVENT_CATEGORIES = {
+    // Equity Order Events
+    MENO: 'order', MENOS: 'order', MEOA: 'order', MEOAS: 'order',
+    MEOIR: 'order', MEOIRM: 'modify', MEOIRC: 'cancel',
+    MEOIMRQ: 'modify', MEOICRQ: 'cancel',
+    MEOJ: 'order', MEOJM: 'modify', MEOJC: 'cancel',
+    // Equity Route Events
+    MEOR: 'route', MEORS: 'route', MEORM: 'modify', MEORC: 'cancel',
+    MEORMS: 'modify', MEORCS: 'cancel',
+    // Equity Modify/Cancel Events
+    MEOM: 'modify', MEOMS: 'modify', MEOMRQ: 'modify',
+    MECO: 'cancel', MECOCRQ: 'cancel',
+    // Equity Quote Events
+    MENQ: 'quote', MENQS: 'quote', MERQ: 'quote', MERQS: 'quote',
+    MEQR: 'quote', MEQC: 'cancel', MEQM: 'modify', MEQS: 'quote',
+    // Equity Trade Events
+    MEOT: 'trade', MEOTS: 'trade',
+    // Equity Fulfillment/Allocation
+    MEOF: 'trade', MEOFS: 'trade', MEOA: 'alloc',
+    MEIC: 'trade',
+    // Option Events
+    MONO: 'order', MONOS: 'order', MOOA: 'order', MOOAS: 'order',
+    MOOIR: 'order', MOOIRM: 'modify', MOOIRC: 'cancel',
+    MOOIMRQ: 'modify', MOOICRQ: 'cancel',
+    MOOJ: 'order', MOOJM: 'modify', MOOJC: 'cancel',
+    MOOR: 'route', MOORS: 'route', MOORM: 'modify', MOORC: 'cancel',
+    MOORMS: 'modify', MOORCS: 'cancel',
+    MOOM: 'modify', MOOMS: 'modify', MOOMRQ: 'modify',
+    MOCO: 'cancel', MOCOCRQ: 'cancel',
+    MONQ: 'quote', MORQ: 'quote', MOQR: 'quote', MOQC: 'cancel', MOQM: 'modify',
+    MOOT: 'trade', MOOTS: 'trade',
+    MOOF: 'trade', MOOFS: 'trade', MOOA: 'alloc',
+    // Multi-Leg Events
+    MLNO: 'order', MLNOS: 'order', MLOA: 'order', MLOAS: 'order',
+    MLOIR: 'order', MLOIRM: 'modify', MLOIRC: 'cancel',
+    MLOIMRQ: 'modify', MLOICRQ: 'cancel',
+    MLOJ: 'order', MLOJM: 'modify', MLOJC: 'cancel',
+    MLOR: 'route', MLORS: 'route', MLORM: 'modify', MLORC: 'cancel',
+    MLORMS: 'modify', MLORCS: 'cancel',
+    MLOM: 'modify', MLOMS: 'modify', MLOMRQ: 'modify',
+    MLCO: 'cancel', MLCOCRQ: 'cancel',
+    MLNQ: 'quote', MLNQS: 'quote', MLRQ: 'quote', MLRQS: 'quote',
+    MLQR: 'quote', MLQC: 'cancel', MLQM: 'modify', MLQS: 'quote',
+    MLOT: 'trade', MLOTS: 'trade',
+    MLOF: 'trade', MLOFS: 'trade',
+    MEOJ: 'order',
+    MLOA: 'alloc', MOOA: 'alloc',
+    MEOPA: 'alloc', MOOPA: 'alloc', MLOPA: 'alloc',
+    MEOPAA: 'alloc', MOOPAA: 'alloc', MLOPAA: 'alloc',
+    MEOE: 'order', MOOE: 'order',
+};
+
+const CATEGORY_CLASS = {
+    order: 'et-order', route: 'et-route', trade: 'et-trade',
+    cancel: 'et-cancel', modify: 'et-modify', quote: 'et-quote',
+    alloc: 'et-alloc',
+};
+
+const CATEGORY_LABELS = {
+    order: 'Order', route: 'Route', trade: 'Trade',
+    cancel: 'Cancel', modify: 'Modify', quote: 'Quote',
+    alloc: 'Allocation',
+};
+
+// Key columns to show in the table (in order of importance)
+const PRIORITY_COLUMNS = [
+    'type', 'actionType', 'firmROEID', 'symbol', 'eventTimestamp',
+    'orderKeyDate', 'orderID', 'side', 'price', 'quantity',
+    'orderType', 'timeInForce', 'deptType', 'manualFlag',
+    'CATReporterIMID', 'firmDesignatedID', 'accountHolderType',
+    'destination', 'routedOrderID', 'senderIMID',
+    'tradeKeyDate', 'tradeID', 'fillPrice', 'fillQty',
+    'errorROEID',
+];
+
+// ── State ──
+let allRecords = [];
+let filteredRecords = [];
+let columns = [];
+let fileFormat = '';
+let sortCol = null;
+let sortAsc = true;
+let currentPage = 0;
+const PAGE_SIZE = 100;
+let selectedRow = -1;
+
+// ── DOM ──
+const $ = id => document.getElementById(id);
+const dropZone = $('dropZone');
+const fileInput = $('fileInput');
+const app = $('app');
+const errorBar = $('errorBar');
+
+// ── File Drop / Select ──
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files.length) handleFile(e.target.files[0]); });
+
+function showError(msg) {
+    errorBar.textContent = msg;
+    errorBar.classList.add('visible');
+}
+function clearError() {
+    errorBar.classList.remove('visible');
+}
+
+// ── CSV field ordering for common event types ──
+// Per the spec, CSV fields are positional based on the event's field specification table.
+// The `type` field tells us the event type. We use field position from the spec.
+// For CSV parsing, we first try to detect if it's a known CAT event type.
+const MENO_CSV_FIELDS = [
+    'actionType','errorROEID','firmROEID','type','CATReporterIMID',
+    'orderKeyDate','orderID','symbol','eventTimestamp','manualFlag',
+    'electronicDupFlag','electronicTimestamp','manualOrderKeyDate','manualOrderID',
+    'deptType','solicitationFlag','RFQID','side','price','quantity',
+    'minQty','orderType','timeInForce','tradingSession','handlingInstructions',
+    'custDspIntrFlag','firmDesignatedID','accountHolderType','affiliateFlag',
+    'infoBarrierID','aggregatedOrders','negotiatedTradeFlag','representativeInd',
+    'seqNum','atsDisplayInd','displayPrice','workingPrice','displayQty',
+    'atsOrderType','nbbPrice','nbbQty','nboPrice','nboQty','nbboSource',
+    'nbboTimestamp','netPrice','BFMMFlag'
+];
+
+// Generic CSV fields (positional) - we use the first record's type to determine
+// For simplicity, we'll auto-detect fields from position and label them field_1, field_2, etc.
+// unless we can identify the event type from position 4 (0-indexed: 3) which is always 'type'
+
+function parseCSV(text) {
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (!lines.length) return [];
+
+    const records = [];
+    for (const line of lines) {
+        const values = parseCSVLine(line);
+        // In CAT CSV, field position 4 (index 3) is always 'type'
+        const eventType = values[3] || '';
+        const record = {};
+        // Use generic positional field names, but map known positions
+        // CAT CSV always has: actionType(0), errorROEID(1), firmROEID(2), type(3)
+        // Then CATReporterIMID(4) and event-specific fields follow
+        record.actionType = values[0] || '';
+        record.errorROEID = values[1] || '';
+        record.firmROEID = values[2] || '';
+        record.type = values[3] || '';
+        record.CATReporterIMID = values[4] || '';
+
+        // For known event types, use named fields
+        if (eventType.startsWith('ME') || eventType.startsWith('MO') || eventType.startsWith('ML')) {
+            // Common fields after position 4 vary by event type
+            // Use generic field names for remaining positions
+            for (let i = 5; i < values.length; i++) {
+                record['field_' + (i + 1)] = values[i];
+            }
+            // Try to map common fields by event type prefix
+            mapCommonCSVFields(record, eventType, values);
+        } else {
+            for (let i = 5; i < values.length; i++) {
+                record['field_' + (i + 1)] = values[i];
+            }
+        }
+        records.push(record);
+    }
+    return records;
+}
+
+function mapCommonCSVFields(record, eventType, values) {
+    // All equity/option/multi-leg events share similar early field positions
+    // Position 5 is typically orderKeyDate or tradeKeyDate
+    // Position 6 is typically orderID or tradeID
+    // Position 7 is typically symbol
+    // This mapping handles the most common event types
+    if (eventType === 'MENO' || eventType === 'MONO' || eventType === 'MLNO') {
+        const fields = MENO_CSV_FIELDS;
+        for (let i = 5; i < values.length && i < fields.length; i++) {
+            if (values[i] !== '') {
+                record[fields[i]] = values[i];
+                delete record['field_' + (i + 1)];
+            }
+        }
+    } else if (eventType === 'MEOJ' || eventType === 'MOOJ' || eventType === 'MLOJ') {
+        // Order modification events have similar early structure
+        assignFields(record, values, [
+            'actionType','errorROEID','firmROEID','type','CATReporterIMID',
+            'orderKeyDate','orderID','symbol','priorOrderID','priorOrderKeyDate',
+            'manualOrderKeyDate','eventTimestamp','manualFlag','electronicDupFlag',
+            'initiator','electronicTimestamp','quantity','minQty','leavesQty'
+        ]);
+    } else if (eventType === 'MEOT' || eventType === 'MOOT' || eventType === 'MLOT') {
+        assignFields(record, values, [
+            'actionType','errorROEID','firmROEID','type','CATReporterIMID',
+            'tradeKeyDate','tradeID','symbol','eventTimestamp','manualFlag',
+            'electronicDupFlag','electronicTimestamp','cancelFlag','cancelTimestamp',
+            'side','price','quantity','capacity','firmDesignatedID','accountHolderType'
+        ]);
+    } else if (eventType === 'MEOR' || eventType === 'MOOR' || eventType === 'MLOR') {
+        assignFields(record, values, [
+            'actionType','errorROEID','firmROEID','type','CATReporterIMID',
+            'orderKeyDate','orderID','symbol','eventTimestamp','manualFlag',
+            'electronicDupFlag','electronicTimestamp','senderIMID',
+            'destination','destinationType','routedOrderID','session',
+            'side','price','quantity','orderType','timeInForce','handlingInstructions'
+        ]);
+    } else if (eventType === 'MECO' || eventType === 'MOCO' || eventType === 'MLCO') {
+        assignFields(record, values, [
+            'actionType','errorROEID','firmROEID','type','CATReporterIMID',
+            'orderKeyDate','orderID','symbol','eventTimestamp','manualFlag',
+            'electronicDupFlag','electronicTimestamp','cancelQty','leavesQty',
+            'initiator'
+        ]);
+    } else if (eventType === 'MEOM' || eventType === 'MOOM' || eventType === 'MLOM') {
+        assignFields(record, values, [
+            'actionType','errorROEID','firmROEID','type','CATReporterIMID',
+            'orderKeyDate','orderID','symbol','eventTimestamp','manualFlag',
+            'electronicDupFlag','electronicTimestamp','priorOrderID',
+            'priorOrderKeyDate','initiator','price','quantity','minQty',
+            'leavesQty','orderType','timeInForce','handlingInstructions'
+        ]);
+    }
+    // Other event types will retain generic field_N names
+}
+
+function assignFields(record, values, fields) {
+    for (let i = 5; i < values.length && i < fields.length; i++) {
+        if (values[i] !== '') {
+            record[fields[i]] = values[i];
+            delete record['field_' + (i + 1)];
+        }
+    }
+}
+
+function parseCSVLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (inQuotes) {
+            if (ch === '"' && line[i + 1] === '"') {
+                current += '"';
+                i++;
+            } else if (ch === '"') {
+                inQuotes = false;
+            } else {
+                current += ch;
+            }
+        } else {
+            if (ch === '"') {
+                inQuotes = true;
+            } else if (ch === ',') {
+                result.push(current);
+                current = '';
+            } else {
+                current += ch;
+            }
+        }
+    }
+    result.push(current);
+    return result;
+}
+
+function parseJSON(text) {
+    // CAT JSON files: each line is a separate JSON object (NDJSON / JSON Lines)
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    const records = [];
+    let jsonArrayAttempt = false;
+
+    // First, try as a JSON array
+    try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) {
+            return parsed;
+        }
+    } catch (e) {
+        // Not a JSON array, try line-by-line
+    }
+
+    for (const line of lines) {
+        try {
+            records.push(JSON.parse(line));
+        } catch (e) {
+            // skip unparseable lines
+        }
+    }
+    return records;
+}
+
+function detectFormat(filename, text) {
+    const ext = filename.toLowerCase().split('.').pop();
+    if (ext === 'json') return 'json';
+    if (ext === 'csv' || ext === 'txt') {
+        // Check if content looks like JSON
+        const trimmed = text.trimStart();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) return 'json';
+        return 'csv';
+    }
+    // Auto-detect from content
+    const trimmed = text.trimStart();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) return 'json';
+    return 'csv';
+}
+
+function handleFile(file) {
+    clearError();
+    const reader = new FileReader();
+    reader.onload = e => {
+        try {
+            const text = e.target.result;
+            fileFormat = detectFormat(file.name, text);
+
+            if (fileFormat === 'json') {
+                allRecords = parseJSON(text);
+            } else {
+                allRecords = parseCSV(text);
+            }
+
+            if (!allRecords.length) {
+                showError('No records found in file.');
+                return;
+            }
+
+            // Flatten nested objects for display
+            allRecords = allRecords.map(flattenRecord);
+
+            initializeUI(file);
+        } catch (err) {
+            showError('Error parsing file: ' + err.message);
+        }
+    };
+    reader.onerror = () => showError('Error reading file.');
+    reader.readAsText(file);
+}
+
+function flattenRecord(record) {
+    const flat = {};
+    for (const [key, value] of Object.entries(record)) {
+        if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+            for (const [subKey, subVal] of Object.entries(value)) {
+                flat[key + '.' + subKey] = subVal;
+            }
+        } else if (Array.isArray(value)) {
+            flat[key] = JSON.stringify(value);
+        } else {
+            flat[key] = value;
+        }
+    }
+    return flat;
+}
+
+function initializeUI(file) {
+    dropZone.style.display = 'none';
+    app.classList.add('visible');
+
+    // Determine columns
+    const colSet = new Set();
+    allRecords.forEach(r => Object.keys(r).forEach(k => colSet.add(k)));
+    const allCols = Array.from(colSet);
+
+    // Sort columns: priority columns first, then alphabetical
+    columns = [];
+    for (const col of PRIORITY_COLUMNS) {
+        if (allCols.includes(col)) columns.push(col);
+    }
+    for (const col of allCols.sort()) {
+        if (!columns.includes(col)) columns.push(col);
+    }
+
+    // File info bar
+    const eventTypes = new Set(allRecords.map(r => r.type).filter(Boolean));
+    const symbols = new Set(allRecords.map(r => r.symbol).filter(Boolean));
+    $('fileInfo').innerHTML = `
+        <div class="stat">
+            <span class="stat-label">File:</span>
+            <span class="stat-value">${escapeHtml(file.name)}</span>
+        </div>
+        <div class="stat">
+            <span class="badge ${fileFormat === 'json' ? 'badge-json' : 'badge-csv'}">${fileFormat.toUpperCase()}</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Records:</span>
+            <span class="stat-value">${allRecords.length.toLocaleString()}</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Event Types:</span>
+            <span class="stat-value">${eventTypes.size}</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Symbols:</span>
+            <span class="stat-value">${symbols.size ? Array.from(symbols).slice(0, 5).join(', ') + (symbols.size > 5 ? '...' : '') : 'N/A'}</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Size:</span>
+            <span class="stat-value">${formatSize(file.size)}</span>
+        </div>
+    `;
+
+    // Populate event type filter
+    const eventFilter = $('eventFilter');
+    eventFilter.innerHTML = '<option value="">All Event Types</option>';
+    Array.from(eventTypes).sort().forEach(t => {
+        const cat = EVENT_CATEGORIES[t] || 'other';
+        const label = CATEGORY_LABELS[cat] || 'Other';
+        eventFilter.innerHTML += `<option value="${t}">${t} (${label})</option>`;
+    });
+
+    // Summary cards
+    renderSummaryCards();
+
+    // Apply filters and render
+    applyFilters();
+    renderRawTab();
+}
+
+function renderSummaryCards() {
+    const cards = $('summaryCards');
+    const typeCounts = {};
+    const actionCounts = {};
+    const sideCounts = {};
+    let symbols = new Set();
+
+    allRecords.forEach(r => {
+        const t = r.type || 'Unknown';
+        typeCounts[t] = (typeCounts[t] || 0) + 1;
+        const a = r.actionType || 'Unknown';
+        actionCounts[a] = (actionCounts[a] || 0) + 1;
+        if (r.side) sideCounts[r.side] = (sideCounts[r.side] || 0) + 1;
+        if (r.symbol) symbols.add(r.symbol);
+    });
+
+    const catCounts = {};
+    for (const [type, count] of Object.entries(typeCounts)) {
+        const cat = CATEGORY_LABELS[EVENT_CATEGORIES[type] || 'other'] || 'Other';
+        catCounts[cat] = (catCounts[cat] || 0) + count;
+    }
+
+    let html = '';
+    html += card('Total Records', allRecords.length.toLocaleString(), `${Object.keys(typeCounts).length} event types`);
+    html += card('Symbols', symbols.size.toLocaleString(), symbols.size ? Array.from(symbols).slice(0, 3).join(', ') : '');
+
+    for (const [cat, count] of Object.entries(catCounts).sort((a, b) => b[1] - a[1])) {
+        html += card(cat + ' Events', count.toLocaleString(), '');
+    }
+
+    html += card('Actions', '', Object.entries(actionCounts).map(([k, v]) => `${k}: ${v}`).join(', '));
+
+    if (Object.keys(sideCounts).length) {
+        html += card('Sides', '', Object.entries(sideCounts).map(([k, v]) => `${k}: ${v}`).join(', '));
+    }
+
+    cards.innerHTML = html;
+}
+
+function card(label, value, detail) {
+    return `<div class="summary-card">
+        <div class="card-label">${label}</div>
+        <div class="card-value">${value}</div>
+        ${detail ? `<div class="card-detail">${escapeHtml(detail)}</div>` : ''}
+    </div>`;
+}
+
+function applyFilters() {
+    const search = $('searchInput').value.toLowerCase();
+    const eventType = $('eventFilter').value;
+    const action = $('actionFilter').value;
+    const side = $('sideFilter').value;
+
+    filteredRecords = allRecords.filter(r => {
+        if (eventType && r.type !== eventType) return false;
+        if (action && r.actionType !== action) return false;
+        if (side && r.side !== side) return false;
+        if (search) {
+            const match = Object.values(r).some(v =>
+                String(v).toLowerCase().includes(search)
+            );
+            if (!match) return false;
+        }
+        return true;
+    });
+
+    if (sortCol !== null) {
+        filteredRecords.sort((a, b) => {
+            let va = a[sortCol] ?? '';
+            let vb = b[sortCol] ?? '';
+            // Try numeric comparison
+            const na = Number(va), nb = Number(vb);
+            if (!isNaN(na) && !isNaN(nb)) {
+                return sortAsc ? na - nb : nb - na;
+            }
+            va = String(va); vb = String(vb);
+            return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+        });
+    }
+
+    currentPage = 0;
+    renderTable();
+    $('recordCount').textContent = `${filteredRecords.length.toLocaleString()} of ${allRecords.length.toLocaleString()} records`;
+}
+
+function renderTable() {
+    const start = currentPage * PAGE_SIZE;
+    const pageRecords = filteredRecords.slice(start, start + PAGE_SIZE);
+
+    let html = '<table><thead><tr>';
+    html += '<th>#</th>';
+    for (const col of columns) {
+        const arrow = sortCol === col ? (sortAsc ? ' \u25B2' : ' \u25BC') : '';
+        html += `<th data-col="${escapeHtml(col)}">${escapeHtml(col)}<span class="sort-arrow">${arrow}</span></th>`;
+    }
+    html += '</tr></thead><tbody>';
+
+    pageRecords.forEach((record, idx) => {
+        const globalIdx = start + idx;
+        html += `<tr data-idx="${globalIdx}" class="${selectedRow === globalIdx ? 'selected' : ''}">`;
+        html += `<td>${globalIdx + 1}</td>`;
+        for (const col of columns) {
+            html += `<td>${formatCell(col, record[col])}</td>`;
+        }
+        html += '</tr>';
+    });
+
+    html += '</tbody></table>';
+    $('tableContainer').innerHTML = html;
+
+    // Pagination
+    const totalPages = Math.ceil(filteredRecords.length / PAGE_SIZE);
+    const pag = $('pagination');
+    if (totalPages > 1) {
+        pag.innerHTML = `
+            <button id="prevPage" ${currentPage === 0 ? 'disabled' : ''}>&laquo; Prev</button>
+            <span class="page-info">Page ${currentPage + 1} of ${totalPages}</span>
+            <button id="nextPage" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>Next &raquo;</button>
+        `;
+        $('prevPage')?.addEventListener('click', () => { currentPage--; renderTable(); });
+        $('nextPage')?.addEventListener('click', () => { currentPage++; renderTable(); });
+    } else {
+        pag.innerHTML = '';
+    }
+
+    // Row click handlers
+    $('tableContainer').querySelectorAll('tr[data-idx]').forEach(tr => {
+        tr.addEventListener('click', () => {
+            selectedRow = parseInt(tr.dataset.idx);
+            showDetail(allRecords[selectedRow]);
+            renderTable();
+        });
+    });
+
+    // Column sort handlers
+    $('tableContainer').querySelectorAll('th[data-col]').forEach(th => {
+        th.addEventListener('click', () => {
+            const col = th.dataset.col;
+            if (sortCol === col) {
+                sortAsc = !sortAsc;
+            } else {
+                sortCol = col;
+                sortAsc = true;
+            }
+            applyFilters();
+        });
+    });
+}
+
+function formatCell(col, value) {
+    if (value === undefined || value === null || value === '') return '<span style="color:var(--surface2)">&mdash;</span>';
+    const s = String(value);
+
+    if (col === 'type') {
+        const cat = EVENT_CATEGORIES[s] || 'other';
+        const cls = CATEGORY_CLASS[cat] || 'et-other';
+        return `<span class="event-type ${cls}">${escapeHtml(s)}</span>`;
+    }
+    if (col === 'actionType') {
+        const cls = { NEW: 'action-new', RPR: 'action-rpr', COR: 'action-cor', DEL: 'action-del' }[s] || '';
+        return `<span class="${cls}">${escapeHtml(s)}</span>`;
+    }
+    if (col === 'side') {
+        if (s === 'B') return '<span class="side-buy">BUY</span>';
+        if (s === 'S' || s === 'SL' || s === 'SS' || s === 'SX') return `<span class="side-sell">${escapeHtml(s)}</span>`;
+    }
+    if ((col === 'price' || col === 'fillPrice' || col === 'displayPrice' || col === 'workingPrice' || col === 'netPrice') && !isNaN(Number(s))) {
+        return Number(s).toFixed(s.includes('.') ? Math.max(2, (s.split('.')[1] || '').length) : 0);
+    }
+    if ((col === 'quantity' || col === 'fillQty' || col === 'leavesQty' || col === 'minQty' || col === 'displayQty') && !isNaN(Number(s))) {
+        return Number(s).toLocaleString();
+    }
+    if (col === 'manualFlag' || col === 'electronicDupFlag' || col === 'negotiatedTradeFlag' || col === 'cancelFlag' || col === 'solicitationFlag' || col === 'affiliateFlag' || col === 'custDspIntrFlag' || col === 'BFMMFlag') {
+        return s === 'true' || s === true ? '<span style="color:var(--orange)">Y</span>' : '<span style="color:var(--text-muted)">N</span>';
+    }
+    return escapeHtml(s);
+}
+
+function showDetail(record) {
+    const panel = $('detailPanel');
+    const grid = $('detailGrid');
+    const cat = EVENT_CATEGORIES[record.type] || 'other';
+    const cls = CATEGORY_CLASS[cat] || 'et-other';
+
+    $('detailTitle').innerHTML = `Record Detail &mdash; <span class="event-type ${cls}">${escapeHtml(record.type || 'Unknown')}</span>`;
+
+    let html = '';
+    for (const [key, value] of Object.entries(record)) {
+        if (value === undefined || value === null || value === '') continue;
+        html += `<div class="detail-field">
+            <span class="field-name">${escapeHtml(key)}</span>
+            <span class="field-value">${escapeHtml(String(value))}</span>
+        </div>`;
+    }
+    grid.innerHTML = html;
+    panel.classList.add('visible');
+}
+
+function renderEventSummary() {
+    const typeCounts = {};
+    allRecords.forEach(r => {
+        const t = r.type || 'Unknown';
+        if (!typeCounts[t]) typeCounts[t] = { type: t, count: 0, new: 0, rpr: 0, cor: 0, del: 0 };
+        typeCounts[t].count++;
+        const a = (r.actionType || '').toUpperCase();
+        if (a === 'NEW') typeCounts[t].new++;
+        else if (a === 'RPR') typeCounts[t].rpr++;
+        else if (a === 'COR') typeCounts[t].cor++;
+        else if (a === 'DEL') typeCounts[t].del++;
+    });
+
+    const sorted = Object.values(typeCounts).sort((a, b) => b.count - a.count);
+    let html = '<table><thead><tr><th>Event Type</th><th>Category</th><th>Count</th><th>NEW</th><th>RPR</th><th>COR</th><th>DEL</th></tr></thead><tbody>';
+    for (const row of sorted) {
+        const cat = EVENT_CATEGORIES[row.type] || 'other';
+        const cls = CATEGORY_CLASS[cat] || 'et-other';
+        const label = CATEGORY_LABELS[cat] || 'Other';
+        html += `<tr>
+            <td><span class="event-type ${cls}">${escapeHtml(row.type)}</span></td>
+            <td>${label}</td>
+            <td>${row.count.toLocaleString()}</td>
+            <td class="action-new">${row.new || ''}</td>
+            <td class="action-rpr">${row.rpr || ''}</td>
+            <td class="action-cor">${row.cor || ''}</td>
+            <td class="action-del">${row.del || ''}</td>
+        </tr>`;
+    }
+    html += '</tbody></table>';
+    $('eventSummaryTable').innerHTML = html;
+}
+
+function renderRawTab() {
+    const maxShow = 50;
+    const sample = allRecords.slice(0, maxShow);
+    $('rawContent').textContent = JSON.stringify(sample, null, 2) +
+        (allRecords.length > maxShow ? `\n\n... (${allRecords.length - maxShow} more records)` : '');
+}
+
+// ── Tab switching ──
+$('tabBar').addEventListener('click', e => {
+    const tab = e.target.closest('.tab');
+    if (!tab) return;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+
+    const name = tab.dataset.tab;
+    $('tabTable').style.display = name === 'table' ? '' : 'none';
+    $('tabSummary').style.display = name === 'summary' ? '' : 'none';
+    $('tabRaw').style.display = name === 'raw' ? '' : 'none';
+
+    if (name === 'summary') renderEventSummary();
+});
+
+// ── Filter listeners ──
+$('searchInput').addEventListener('input', debounce(applyFilters, 200));
+$('eventFilter').addEventListener('change', applyFilters);
+$('actionFilter').addEventListener('change', applyFilters);
+$('sideFilter').addEventListener('change', applyFilters);
+
+// ── Close detail ──
+$('closeDetail').addEventListener('click', () => {
+    $('detailPanel').classList.remove('visible');
+    selectedRow = -1;
+    renderTable();
+});
+
+// ── Export ──
+$('exportBtn').addEventListener('click', () => {
+    if (!filteredRecords.length) return;
+    const header = columns.join(',');
+    const rows = filteredRecords.map(r =>
+        columns.map(c => {
+            const v = r[c];
+            if (v === undefined || v === null) return '';
+            const s = String(v);
+            return s.includes(',') || s.includes('"') || s.includes('\n')
+                ? '"' + s.replace(/"/g, '""') + '"'
+                : s;
+        }).join(',')
+    );
+    const csv = header + '\n' + rows.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'cat_export.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+});
+
+// ── Helpers ──
+function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+}
+
+function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+}
+
+function debounce(fn, ms) {
+    let timer;
+    return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
+}
+</script>
+
+<footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
+    CAT File Viewer v0.1.0 &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
+</footer>
+
+</body>
+</html>
