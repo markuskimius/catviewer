@@ -1,6 +1,6 @@
 # CAT File Viewer
 
-Version 0.1.0
+Version 0.1.1
 
 Copyright (c) 2026 Mark Kim. Licensed under [GPL-2.0](LICENSE).
 
@@ -21,7 +21,7 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 ## Supported Formats
 
 - **JSON** — NDJSON (one JSON object per line) or JSON arrays, per the CAT Technical Specifications
-- **CSV** — Positional field format (no header row) as defined in the CAT spec. Known event types (MENO, MEOR, MEOT, MEOM, MECO, MEOJ) are automatically mapped to named fields.
+- **CSV** — Positional field format (no header row) as defined in the CAT spec. All 99 event types (39 equity, 35 options, 25 multi-leg) are mapped to named fields per the spec, with each event type having its own distinct field schema.
 
 ## Features
 

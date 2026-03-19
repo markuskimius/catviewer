@@ -37,7 +37,7 @@ A single-file web application for compliance officers to inspect CAT data files.
 
 ### CAT file format notes
 - **JSON files**: NDJSON (one JSON object per line) or a JSON array. Each record has a `type` field (e.g., `MENO`, `MEOR`, `MEOT`) and `actionType` (`NEW`, `RPR`, `COR`, `DEL`).
-- **CSV files**: Positional fields with no header row. Field position 4 (0-indexed 3) is always `type`. The viewer maps known event types (MENO, MEOR, MEOT, MECO, MEOM, MEOJ) to named fields per the spec.
+- **CSV files**: Positional fields with no header row. Field position 4 (0-indexed 3) is always `type`. The viewer maps all 99 event types (39 equity ME, 35 options MO, 25 multi-leg ML) to named fields per the spec, with each type having its own distinct field schema validated against `03.18.26-IM-4.1.0-r15.json`.
 - Event type prefixes: `ME` = equity, `MO` = option, `ML` = multi-leg
 
 ### Sample data

@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v0.1.0
+  CAT File Viewer v0.1.1
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -356,7 +356,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v0.1.0</span>
+    <span class="subtitle">v0.1.1</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -535,26 +535,113 @@ function clearError() {
     errorBar.classList.remove('visible');
 }
 
-// ── CSV field ordering for common event types ──
-// Per the spec, CSV fields are positional based on the event's field specification table.
-// The `type` field tells us the event type. We use field position from the spec.
-// For CSV parsing, we first try to detect if it's a known CAT event type.
-const MENO_CSV_FIELDS = [
-    'actionType','errorROEID','firmROEID','type','CATReporterIMID',
-    'orderKeyDate','orderID','symbol','eventTimestamp','manualFlag',
-    'electronicDupFlag','electronicTimestamp','manualOrderKeyDate','manualOrderID',
-    'deptType','solicitationFlag','RFQID','side','price','quantity',
-    'minQty','orderType','timeInForce','tradingSession','handlingInstructions',
-    'custDspIntrFlag','firmDesignatedID','accountHolderType','affiliateFlag',
-    'infoBarrierID','aggregatedOrders','negotiatedTradeFlag','representativeInd',
-    'seqNum','atsDisplayInd','displayPrice','workingPrice','displayQty',
-    'atsOrderType','nbbPrice','nbbQty','nboPrice','nboQty','nbboSource',
-    'nbboTimestamp','netPrice','BFMMFlag'
-];
-
-// Generic CSV fields (positional) - we use the first record's type to determine
-// For simplicity, we'll auto-detect fields from position and label them field_1, field_2, etc.
-// unless we can identify the event type from position 4 (0-indexed: 3) which is always 'type'
+// ── CSV field ordering for all CAT event types ──
+// Per CAT Technical Specifications v4.1.0 r15, CSV fields are positional with no header row.
+// Each event type has its own field schema. The 'type' field at position 4 (index 3) identifies
+// the event type. Fields named 'retiredFieldPosition' or 'reservedForFutureUse' are placeholders
+// that occupy a CSV position but should remain blank.
+// Coverage: 99 event types (39 equity ME, 35 options MO, 25 multi-leg ML)
+const CAT_CSV_FIELDS = {
+  'MEAA': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','allocationKeyDate','allocationID','priorAllocationKeyDate','priorAllocationID','symbol','eventTimestamp','quantity','price','side','firmDesignatedID','retiredFieldPosition','institutionFlag','tradeDate','settlementDate','allocationType','DVPCustodianID','correspondentCRD','newOrderFDID','allocationInstructionTime','cancelFlag','cancelTimestamp','retiredFieldPosition','accountHolderType'],
+  'MECO': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','parentOrderKeyDate','parentOrderID','originatingIMID','eventTimestamp','side','price','quantity','minQty','orderType','timeInForce','tradingSession','handlingInstructions','seqNum','atsDisplayInd','displayPrice','workingPrice','displayQty','nbbPrice','nbbQty','nboPrice','nboQty','nbboSource','nbboTimestamp','multiLegInd','infoBarrierID','netPrice','manualFlag','electronicTimestamp'],
+  'MECOC': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','originatingIMID','eventTimestamp','side','cancelQty','leavesQty','reservedForFutureUse','seqNum','manualFlag','electronicTimestamp'],
+  'MECOM': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','priorOrderKeyDate','priorOrderID','originatingIMID','eventTimestamp','side','price','quantity','minQty','leavesQty','orderType','timeInForce','tradingSession','handlingInstructions','seqNum','atsDisplayInd','displayPrice','workingPrice','displayQty','nbbPrice','nbbQty','nboPrice','nboQty','nbboSource','nbboTimestamp','netPrice','manualFlag','electronicTimestamp'],
+  'MECR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','cancelQty','retiredFieldPosition','senderIMID','destination','destinationType','routedOrderID','session','routeRejectedFlag','seqNum','multiLegInd'],
+  'MECRS': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','originatingIMID','eventTimestamp','manualFlag','senderIMID','destination','destinationType','routedOrderID','session','routeRejectedFlag','multiLegInd'],
+  'MEIC': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','cancelQty','leavesQty','initiator','requestTimestamp','infoBarrierID','deskOrderID'],
+  'MEICR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','cancelQty','deskOrderID'],
+  'MEIM': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','priorOrderKeyDate','priorOrderID','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','deptType','receivingDeskType','infoBarrierID','initiator','side','price','quantity','minQty','leavesQty','orderType','handlingInstructions','timeInForce','tradingSession','requestTimestamp','netPrice','deskOrderID','priorDeskOrderID'],
+  'MEIMR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','deptType','receivingDeskType','infoBarrierID','side','price','quantity','minQty','retiredFieldPosition','orderType','handlingInstructions','timeInForce','tradingSession','netPrice','deskOrderID'],
+  'MEIR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','parentOrderKeyDate','parentOrderID','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','deptType','receivingDeskType','infoBarrierID','side','price','quantity','minQty','orderType','handlingInstructions','timeInForce','tradingSession','multiLegInd','netPrice','deskOrderID'],
+  'MEMR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','senderIMID','destination','destinationType','routedOrderID','priorRoutedOrderID','session','side','price','quantity','minQty','retiredFieldPosition','orderType','timeInForce','tradingSession','affiliateFlag','isoInd','handlingInstructions','routeRejectedFlag','dupROIDCond','seqNum','netPrice','multiLegInd'],
+  'MEMRS': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','originatingIMID','eventTimestamp','manualFlag','senderIMID','destination','destinationType','routedOrderID','session','routeRejectedFlag','multiLegInd'],
+  'MENO': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','eventTimestamp','manualFlag','electronicDupFlag','electronicTimestamp','manualOrderKeyDate','manualOrderID','deptType','solicitationFlag','RFQID','side','price','quantity','minQty','orderType','timeInForce','tradingSession','handlingInstructions','custDspIntrFlag','firmDesignatedID','accountHolderType','affiliateFlag','infoBarrierID','aggregatedOrders','negotiatedTradeFlag','representativeInd','seqNum','atsDisplayInd','displayPrice','workingPrice','displayQty','atsOrderType','nbbPrice','nbbQty','nboPrice','nboQty','nbboSource','nbboTimestamp','netPrice','BFMMFlag'],
+  'MENOS': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','originatingIMID','eventTimestamp','aggregatedOrders','firmDesignatedID'],
+  'MENQ': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','symbol','retiredFieldPosition','retiredFieldPosition','eventTimestamp','seqNum','retiredFieldPosition','retiredFieldPosition','retiredFieldPosition','onlyOneQuoteFlag','bidPrice','bidQty','askPrice','askQty','firmDesignatedID','accountHolderType','unsolicitedInd','retiredFieldPosition','retiredFieldPosition','unpricedInd','manualFlag','electronicTimestamp','representativeQuoteInd','askAggregatedOrders','bidAggregatedOrders','RFQID','RFQFlag','bidRelativePrice','askRelativePrice','validUntilDuration'],
+  'MENQS': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','symbol','eventTimestamp','representativeQuoteInd','askAggregatedOrders','bidAggregatedOrders'],
+  'MEOA': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','eventTimestamp','manualFlag','electronicDupFlag','electronicTimestamp','receiverIMID','senderIMID','senderType','routedOrderID','manualOrderKeyDate','manualOrderID','affiliateFlag','deptType','side','price','quantity','minQty','orderType','timeInForce','tradingSession','isoInd','handlingInstructions','custDspIntrFlag','infoBarrierID','seqNum','atsDisplayInd','displayPrice','workingPrice','displayQty','atsOrderType','nbbPrice','nbbQty','nboPrice','nboQty','nbboSource','nbboTimestamp','solicitationFlag','pairedOrderID','netPrice'],
+  'MEOC': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','cancelQty','leavesQty','initiator','seqNum','requestTimestamp','infoBarrierID'],
+  'MEOCR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','cancelQty','seqNum','infoBarrierID'],
+  'MEOE': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','priorOrderKeyDate','priorOrderID','originatingIMID','eventTimestamp','timeInForce','tradingSession','reservedForFutureUse','side','price','quantity','minQty','orderType','seqNum','atsDisplayInd','displayPrice','workingPrice','displayQty','nbbPrice','nbbQty','nboPrice','nboQty','nbboSource','nbboTimestamp','triggerPrice','netPrice'],
+  'MEOF': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','fillKeyDate','fulfillmentID','symbol','eventTimestamp','manualFlag','electronicTimestamp','fulfillmentLinkType','cancelFlag','cancelTimestamp','quantity','price','capacity','clientDetails','firmDetails','infoBarrierID'],
+  'MEOFS': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','fillKeyDate','fulfillmentID','symbol','eventTimestamp','firmDetails'],
+  'MEFA': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','fillKeyDate','fulfillmentID','priorFillKeyDate','priorFulfillmentID','symbol','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','quantity','capacity','price','fulfillmentLinkType','clientDetails','firmDetails'],
+  'MEOJ': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','priorOrderKeyDate','priorOrderID','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','initiator','price','quantity','minQty','leavesQty','seqNum','atsDisplayInd','displayPrice','workingPrice','displayQty','nbbPrice','nbbQty','nboPrice','nboQty','nbboSource','nbboTimestamp','timeInForce','netPrice'],
+  'MEOM': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','priorOrderKeyDate','priorOrderID','originatingIMID','eventTimestamp','manualFlag','manualOrderKeyDate','manualOrderID','electronicDupFlag','electronicTimestamp','receiverIMID','senderIMID','senderType','routedOrderID','requestTimestamp','reservedForFutureUse','reservedForFutureUse','reservedForFutureUse','initiator','side','price','quantity','minQty','leavesQty','orderType','timeInForce','tradingSession','isoInd','handlingInstructions','custDspIntrFlag','infoBarrierID','aggregatedOrders','representativeInd','seqNum','atsDisplayInd','displayPrice','workingPrice','displayQty','atsOrderType','nbbPrice','nbbQty','nboPrice','nboQty','nbboSource','nbboTimestamp','netPrice','BFMMFlag'],
+  'MEOMR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','receiverIMID','senderIMID','senderType','reservedForFutureUse','reservedForFutureUse','side','price','quantity','minQty','orderType','timeInForce','tradingSession','isoInd','handlingInstructions','custDspIntrFlag','infoBarrierID','reservedForFutureUse','reservedForFutureUse','seqNum','atsDisplayInd','displayPrice','workingPrice','displayQty','atsOrderType','nbbPrice','nbbQty','nboPrice','nboQty','nbboSource','nbboTimestamp','netPrice'],
+  'MEOMS': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','originatingIMID','eventTimestamp','aggregatedOrders'],
+  'MEOR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','originatingIMID','eventTimestamp','manualFlag','electronicDupFlag','electronicTimestamp','senderIMID','destination','destinationType','routedOrderID','session','side','price','quantity','minQty','orderType','timeInForce','tradingSession','affiliateFlag','isoInd','handlingInstructions','routeRejectedFlag','dupROIDCond','seqNum','multiLegInd','pairedOrderID','infoBarrierID','netPrice','quoteKeyDate','quoteID'],
+  'MEORS': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','symbol','originatingIMID','eventTimestamp','manualFlag','senderIMID','destination','destinationType','routedOrderID','session','routeRejectedFlag'],
+  'MEOT': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','tradeKeyDate','tradeID','symbol','eventTimestamp','manualFlag','electronicTimestamp','cancelFlag','cancelTimestamp','retiredFieldPosition','retiredFieldPosition','quantity','price','capacity','tapeTradeID','marketCenterID','sideDetailsInd','buyDetails','sellDetails','reportingExceptionCode','seqNum','nbbPrice','nbbQty','nboPrice','nboQty','nbboSource','nbboTimestamp','retiredFieldPosition','clearingFirm','counterparty','multiLegInd','infoBarrierID'],
+  'MEOTS': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','tradeKeyDate','tradeID','symbol','eventTimestamp','buyDetails','sellDetails','multiLegInd'],
+  'MEPA': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','allocationKeyDate','allocationID','symbol','eventTimestamp','cancelFlag','cancelTimestamp','quantity','price','side','firmDesignatedID','retiredFieldPosition','institutionFlag','tradeDate','settlementDate','allocationType','DVPCustodianID','correspondentCRD','newOrderFDID','allocationInstructionTime','retiredFieldPosition','accountHolderType'],
+  'MEQC': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','symbol','originatingIMID','eventTimestamp','seqNum','reservedForFutureUse','initiator','retiredFieldPosition','manualFlag','electronicTimestamp','RFQID'],
+  'MEQM': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','symbol','priorQuoteKeyDate','priorQuoteID','eventTimestamp','seqNum','bidPrice','bidQty','askPrice','askQty','unsolicitedInd','unpricedInd','manualFlag','electronicTimestamp','RFQID','bidRelativePrice','askRelativePrice','validUntilDuration'],
+  'MEQR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','symbol','receivedQuoteID','eventTimestamp','seqNum','receiverIMID','senderIMID','onlyOneQuoteFlag','retiredFieldPosition','retiredFieldPosition','bidPrice','bidQty','askPrice','askQty','retiredFieldPosition','unsolicitedInd','quoteWantedInd','unpricedInd','dupROIDCond','manualFlag','electronicTimestamp','RFQID','RFQFlag','bidRelativePrice','askRelativePrice','senderType','validUntilDuration'],
+  'MEQS': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','symbol','originatingIMID','eventTimestamp','seqNum','mpStatusCode','manualFlag','electronicTimestamp'],
+  'MERQ': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','symbol','eventTimestamp','seqNum','senderIMID','destination','routedQuoteID','bidPrice','bidQty','askPrice','askQty','quoteRejectedFlag','unpricedInd','dupROIDCond','manualFlag','electronicTimestamp','destinationType','session','RFQID','bidRelativePrice','askRelativePrice','validUntilDuration'],
+  'MERQS': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','symbol','eventTimestamp','senderIMID','destination','routedQuoteID','quoteRejectedFlag','destinationType','session'],
+  'MLCO': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','parentOrderKeyDate','parentOrderID','underlying','eventTimestamp','price','quantity','minQty','orderType','timeInForce','tradingSession','handlingInstructions','numberOfLegs','priceType','legDetails','manualFlag','electronicTimestamp'],
+  'MLCOC': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','underlying','originatingIMID','eventTimestamp','reservedForFutureUse','cancelQty','leavesQty','numberOfLegs','manualFlag','electronicTimestamp'],
+  'MLCOM': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','underlying','priorOrderKeyDate','priorOrderID','originatingIMID','eventTimestamp','reservedForFutureUse','price','quantity','minQty','leavesQty','orderType','timeInForce','tradingSession','handlingInstructions','numberOfLegs','priceType','legDetails','manualFlag','electronicTimestamp'],
+  'MLCR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','underlying','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','cancelQty','retiredFieldPosition','senderIMID','destination','destinationType','routedOrderID','session','routeRejectedFlag','numberOfLegs','reservedForFutureUse'],
+  'MLIC': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','underlying','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','cancelQty','leavesQty','initiator','requestTimestamp','numberOfLegs','deskOrderID'],
+  'MLICR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','underlying','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','cancelQty','numberOfLegs','deskOrderID'],
+  'MLIM': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','underlying','priorOrderKeyDate','priorOrderID','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','deptType','receivingDeskType','initiator','reservedForFutureUse','price','quantity','minQty','leavesQty','orderType','handlingInstructions','timeInForce','tradingSession','requestTimestamp','numberOfLegs','priceType','legDetails','deskOrderID','priorDeskOrderID'],
+  'MLIMR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','underlying','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','deptType','receivingDeskType','reservedForFutureUse','price','quantity','minQty','retiredFieldPosition','orderType','handlingInstructions','timeInForce','tradingSession','numberOfLegs','priceType','legDetails','deskOrderID'],
+  'MLIR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','parentOrderKeyDate','parentOrderID','underlying','eventTimestamp','manualFlag','electronicTimestamp','deptType','receivingDeskType','price','quantity','minQty','orderType','timeInForce','tradingSession','handlingInstructions','numberOfLegs','priceType','legDetails','deskOrderID'],
+  'MLMR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','underlying','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','senderIMID','destination','destinationType','routedOrderID','priorRoutedOrderID','session','reservedForFutureUse','price','quantity','minQty','retiredFieldPosition','orderType','timeInForce','tradingSession','affiliateFlag','handlingInstructions','routeRejectedFlag','dupROIDCond','exchOriginCode','numberOfLegs','priceType','legDetails'],
+  'MLNO': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','underlying','eventTimestamp','manualFlag','manualOrderKeyDate','manualOrderID','electronicDupFlag','electronicTimestamp','deptType','price','quantity','minQty','orderType','timeInForce','tradingSession','handlingInstructions','firmDesignatedID','accountHolderType','affiliateFlag','aggregatedOrders','representativeInd','solicitationFlag','RFQID','numberOfLegs','priceType','legDetails'],
+  'MLNQ': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','underlying','eventTimestamp','onlyOneQuoteFlag','bidPrice','bidQty','askPrice','askQty','firmDesignatedID','accountHolderType','numberOfLegs','RFQID','RFQFlag','quotePriceType','validUntilDuration','legDetails'],
+  'MLOA': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','underlying','eventTimestamp','manualOrderKeyDate','manualOrderID','manualFlag','electronicDupFlag','electronicTimestamp','receiverIMID','senderIMID','senderType','routedOrderID','price','quantity','minQty','orderType','timeInForce','tradingSession','handlingInstructions','affiliateFlag','solicitationFlag','pairedOrderID','numberOfLegs','priceType','legDetails','deptType'],
+  'MLOC': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','underlying','eventTimestamp','manualFlag','electronicTimestamp','cancelQty','leavesQty','initiator','requestTimestamp'],
+  'MLOCR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','underlying','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','cancelQty'],
+  'MLOE': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','priorOrderKeyDate','priorOrderID','underlying','eventTimestamp','price','quantity','minQty','orderType','timeInForce','tradingSession','numberOfLegs','priceType','triggerPrice','legDetails'],
+  'MLOM': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','priorOrderKeyDate','priorOrderID','underlying','eventTimestamp','manualOrderKeyDate','manualOrderID','manualFlag','electronicDupFlag','electronicTimestamp','receiverIMID','senderIMID','senderType','routedOrderID','initiator','price','quantity','minQty','leavesQty','orderType','timeInForce','tradingSession','handlingInstructions','reservedForFutureUse','aggregatedOrders','representativeInd','requestTimestamp','numberOfLegs','priceType','legDetails'],
+  'MLOMR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','underlying','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','receiverIMID','senderIMID','senderType','timeInForce','price','quantity','minQty','orderType','tradingSession','handlingInstructions','numberOfLegs','priceType','legDetails'],
+  'MLOR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','underlying','eventTimestamp','manualFlag','electronicDupFlag','electronicTimestamp','senderIMID','destination','destinationType','routedOrderID','session','price','quantity','minQty','orderType','timeInForce','tradingSession','handlingInstructions','affiliateFlag','routeRejectedFlag','exchOriginCode','pairedOrderID','numberOfLegs','priceType','legDetails'],
+  'MLOS': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','underlying','eventTimestamp','manualFlag','aggregatedOrders','firmDesignatedID','senderIMID','destination','destinationType','routedOrderID','session','routeRejectedFlag','legDetails'],
+  'MLQC': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','underlying','eventTimestamp','retiredFieldPosition','RFQID'],
+  'MLQM': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','underlying','priorQuoteKeyDate','priorQuoteID','receiverIMID','senderIMID','routedQuoteID','eventTimestamp','bidPrice','bidQty','askPrice','askQty','numberOfLegs','RFQID','quotePriceType','validUntilDuration','legDetails'],
+  'MLQR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','underlying','receivedQuoteID','dupROIDCond','eventTimestamp','receiverIMID','senderIMID','onlyOneQuoteFlag','bidPrice','bidQty','askPrice','askQty','numberOfLegs','RFQID','RFQFlag','quotePriceType','senderType','validUntilDuration','legDetails'],
+  'MLQS': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','underlying','eventTimestamp','firmDesignatedID','senderIMID','destination','destinationType','routedQuoteID','quoteRejectedFlag','RFQID','legDetails'],
+  'MLRQ': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','underlying','eventTimestamp','senderIMID','destination','routedQuoteID','dupROIDCond','bidPrice','bidQty','askPrice','askQty','quoteRejectedFlag','destinationType','numberOfLegs','RFQID','quotePriceType','validUntilDuration','legDetails'],
+  'MOAA': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','allocationKeyDate','allocationID','priorAllocationKeyDate','priorAllocationID','optionID','eventTimestamp','quantity','price','side','firmDesignatedID','retiredFieldPosition','institutionFlag','tradeDate','settlementDate','allocationType','retiredFieldPosition','correspondentCRD','newOrderFDID','allocationInstructionTime','cancelFlag','cancelTimestamp','retiredFieldPosition','occClearingMemberID','accountHolderType'],
+  'MOCO': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','parentOrderKeyDate','parentOrderID','originatingIMID','eventTimestamp','side','price','quantity','minQty','orderType','timeInForce','tradingSession','handlingInstructions','openCloseIndicator','retiredFieldPosition','retiredFieldPosition','multiLegInd','netPrice','manualFlag','electronicTimestamp'],
+  'MOCOC': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','originatingIMID','eventTimestamp','side','cancelQty','leavesQty','reservedForFutureUse','retiredFieldPosition','manualFlag','electronicTimestamp'],
+  'MOCOM': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','priorOrderKeyDate','priorOrderID','originatingIMID','eventTimestamp','side','price','quantity','minQty','leavesQty','orderType','timeInForce','tradingSession','handlingInstructions','openCloseIndicator','retiredFieldPosition','retiredFieldPosition','netPrice','manualFlag','electronicTimestamp'],
+  'MOCR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','cancelQty','retiredFieldPosition','senderIMID','destination','destinationType','routedOrderID','session','routeRejectedFlag','multiLegInd'],
+  'MOCRS': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','originatingIMID','eventTimestamp','manualFlag','senderIMID','destination','destinationType','routedOrderID','session','routeRejectedFlag','multiLegInd'],
+  'MOFA': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','fillKeyDate','fulfillmentID','optionID','priorFillKeyDate','priorFulfillmentID','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','fulfillmentLinkType','quantity','price','clientDetails','firmDetails','retiredFieldPosition'],
+  'MOIC': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','cancelQty','leavesQty','initiator','requestTimestamp','deskOrderID'],
+  'MOICR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','cancelQty','deskOrderID'],
+  'MOIM': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','priorOrderKeyDate','priorOrderID','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','deptType','receivingDeskType','initiator','side','price','quantity','minQty','leavesQty','orderType','handlingInstructions','openCloseIndicator','timeInForce','tradingSession','requestTimestamp','netPrice','deskOrderID','priorDeskOrderID'],
+  'MOIMR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','deptType','receivingDeskType','side','price','quantity','minQty','retiredFieldPosition','orderType','handlingInstructions','timeInForce','tradingSession','netPrice','deskOrderID'],
+  'MOIR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','parentOrderKeyDate','parentOrderID','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','deptType','receivingDeskType','side','price','quantity','minQty','orderType','handlingInstructions','openCloseIndicator','retiredFieldPosition','retiredFieldPosition','timeInForce','tradingSession','multiLegInd','netPrice','deskOrderID'],
+  'MOMR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','senderIMID','destination','destinationType','routedOrderID','priorRoutedOrderID','session','side','price','quantity','minQty','retiredFieldPosition','orderType','timeInForce','tradingSession','affiliateFlag','handlingInstructions','routeRejectedFlag','dupROIDCond','exchOriginCode','openCloseIndicator','netPrice','multiLegInd'],
+  'MOMRS': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','originatingIMID','eventTimestamp','manualFlag','senderIMID','destination','destinationType','routedOrderID','session','routeRejectedFlag','multiLegInd'],
+  'MONO': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','eventTimestamp','manualFlag','manualOrderKeyDate','manualOrderID','electronicDupFlag','electronicTimestamp','deptType','side','price','quantity','minQty','orderType','timeInForce','tradingSession','handlingInstructions','firmDesignatedID','accountHolderType','affiliateFlag','aggregatedOrders','solicitationFlag','openCloseIndicator','representativeInd','retiredFieldPosition','RFQID','netPrice'],
+  'MONOS': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','originatingIMID','eventTimestamp','aggregatedOrders','retiredFieldPosition','retiredFieldPosition','firmDesignatedID'],
+  'MONQ': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','optionID','eventTimestamp','onlyOneQuoteFlag','bidPrice','bidQty','askPrice','askQty','firmDesignatedID','accountHolderType','RFQID','RFQFlag','bidRelativePrice','askRelativePrice','validUntilDuration'],
+  'MOOA': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','eventTimestamp','manualOrderKeyDate','manualOrderID','manualFlag','electronicDupFlag','electronicTimestamp','receiverIMID','senderIMID','senderType','routedOrderID','deptType','side','price','quantity','minQty','orderType','timeInForce','tradingSession','handlingInstructions','affiliateFlag','solicitationFlag','pairedOrderID','openCloseIndicator','retiredFieldPosition','retiredFieldPosition','netPrice'],
+  'MOOC': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','cancelQty','leavesQty','initiator','retiredFieldPosition','requestTimestamp'],
+  'MOOCR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','cancelQty'],
+  'MOOE': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','priorOrderKeyDate','priorOrderID','originatingIMID','eventTimestamp','timeInForce','tradingSession','reservedForFutureUse','side','price','quantity','minQty','orderType','openCloseIndicator','triggerPrice','netPrice'],
+  'MOOF': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','fillKeyDate','fulfillmentID','optionID','eventTimestamp','manualFlag','electronicTimestamp','quantity','price','fulfillmentLinkType','clientDetails','firmDetails','retiredFieldPosition','cancelFlag','cancelTimestamp'],
+  'MOOFS': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','fillKeyDate','fulfillmentID','optionID','eventTimestamp','firmDetails'],
+  'MOOJ': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','priorOrderKeyDate','priorOrderID','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','initiator','price','quantity','minQty','leavesQty','retiredFieldPosition','retiredFieldPosition','timeInForce','netPrice'],
+  'MOOM': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','priorOrderKeyDate','priorOrderID','originatingIMID','eventTimestamp','manualOrderKeyDate','manualOrderID','manualFlag','electronicDupFlag','electronicTimestamp','receiverIMID','senderIMID','senderType','routedOrderID','initiator','side','price','quantity','minQty','leavesQty','orderType','timeInForce','tradingSession','handlingInstructions','openCloseIndicator','requestTimestamp','reservedForFutureUse','aggregatedOrders','representativeInd','retiredFieldPosition','retiredFieldPosition','netPrice'],
+  'MOOMR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','originatingIMID','eventTimestamp','manualFlag','electronicTimestamp','receiverIMID','senderIMID','senderType','side','price','quantity','minQty','timeInForce','orderType','tradingSession','handlingInstructions','openCloseIndicator','netPrice'],
+  'MOOMS': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','originatingIMID','eventTimestamp','aggregatedOrders'],
+  'MOOR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','originatingIMID','eventTimestamp','manualFlag','electronicDupFlag','electronicTimestamp','senderIMID','destination','destinationType','routedOrderID','session','side','price','quantity','minQty','orderType','timeInForce','tradingSession','handlingInstructions','routeRejectedFlag','exchOriginCode','affiliateFlag','multiLegInd','openCloseIndicator','retiredFieldPosition','retiredFieldPosition','pairedOrderID','netPrice'],
+  'MOORS': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','orderKeyDate','orderID','optionID','originatingIMID','eventTimestamp','senderIMID','destination','destinationType','routedOrderID','session','routeRejectedFlag','manualFlag'],
+  'MOOT': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','tradeKeyDate','tradeID','optionID','eventTimestamp','manualFlag','electronicTimestamp','cancelFlag','cancelTimestamp','quantity','price','capacity','tapeTradeID','sideDetailsInd','buyDetails','sellDetails','marketCenterID','multiLegInd','clearingFirm'],
+  'MOPA': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','allocationKeyDate','allocationID','optionID','eventTimestamp','cancelFlag','cancelTimestamp','quantity','price','side','firmDesignatedID','retiredFieldPosition','institutionFlag','tradeDate','settlementDate','allocationType','retiredFieldPosition','correspondentCRD','newOrderFDID','allocationInstructionTime','retiredFieldPosition','occClearingMemberID','accountHolderType'],
+  'MOQC': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','optionID','originatingIMID','eventTimestamp','RFQID'],
+  'MOQM': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','optionID','priorQuoteKeyDate','priorQuoteID','receiverIMID','senderIMID','routedQuoteID','eventTimestamp','bidPrice','bidQty','askPrice','askQty','RFQID','bidRelativePrice','askRelativePrice','validUntilDuration'],
+  'MOQR': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','optionID','receivedQuoteID','dupROIDCond','eventTimestamp','receiverIMID','senderIMID','onlyOneQuoteFlag','bidPrice','bidQty','askPrice','askQty','RFQID','RFQFlag','bidRelativePrice','askRelativePrice','senderType','validUntilDuration'],
+  'MORQ': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','optionID','eventTimestamp','senderIMID','destination','routedQuoteID','dupROIDCond','bidPrice','bidQty','askPrice','askQty','quoteRejectedFlag','destinationType','RFQID','bidRelativePrice','askRelativePrice','validUntilDuration'],
+};
 
 function parseCSV(text) {
     const lines = text.split(/\r?\n/).filter(l => l.trim());
@@ -563,28 +650,34 @@ function parseCSV(text) {
     const records = [];
     for (const line of lines) {
         const values = parseCSVLine(line);
-        // In CAT CSV, field position 4 (index 3) is always 'type'
         const eventType = values[3] || '';
+        const fields = CAT_CSV_FIELDS[eventType];
         const record = {};
-        // Use generic positional field names, but map known positions
-        // CAT CSV always has: actionType(0), errorROEID(1), firmROEID(2), type(3)
-        // Then CATReporterIMID(4) and event-specific fields follow
-        record.actionType = values[0] || '';
-        record.errorROEID = values[1] || '';
-        record.firmROEID = values[2] || '';
-        record.type = values[3] || '';
-        record.CATReporterIMID = values[4] || '';
 
-        // For known event types, use named fields
-        if (eventType.startsWith('ME') || eventType.startsWith('MO') || eventType.startsWith('ML')) {
-            // Common fields after position 4 vary by event type
-            // Use generic field names for remaining positions
-            for (let i = 5; i < values.length; i++) {
-                record['field_' + (i + 1)] = values[i];
+        if (fields) {
+            // Known event type: use spec-defined field names
+            let retiredCount = 0;
+            for (let i = 0; i < values.length; i++) {
+                if (i < fields.length) {
+                    let fieldName = fields[i];
+                    // Handle duplicate field names (retiredFieldPosition, reservedForFutureUse)
+                    if (fieldName === 'retiredFieldPosition' || fieldName === 'reservedForFutureUse') {
+                        retiredCount++;
+                        fieldName = fieldName + '_' + retiredCount;
+                    }
+                    record[fieldName] = values[i];
+                } else {
+                    // Extra values beyond the spec - use positional names
+                    record['field_' + (i + 1)] = values[i];
+                }
             }
-            // Try to map common fields by event type prefix
-            mapCommonCSVFields(record, eventType, values);
         } else {
+            // Unknown event type: use common prefix fields + positional
+            record.actionType = values[0] || '';
+            record.errorROEID = values[1] || '';
+            record.firmROEID = values[2] || '';
+            record.type = values[3] || '';
+            record.CATReporterIMID = values[4] || '';
             for (let i = 5; i < values.length; i++) {
                 record['field_' + (i + 1)] = values[i];
             }
@@ -592,71 +685,6 @@ function parseCSV(text) {
         records.push(record);
     }
     return records;
-}
-
-function mapCommonCSVFields(record, eventType, values) {
-    // All equity/option/multi-leg events share similar early field positions
-    // Position 5 is typically orderKeyDate or tradeKeyDate
-    // Position 6 is typically orderID or tradeID
-    // Position 7 is typically symbol
-    // This mapping handles the most common event types
-    if (eventType === 'MENO' || eventType === 'MONO' || eventType === 'MLNO') {
-        const fields = MENO_CSV_FIELDS;
-        for (let i = 5; i < values.length && i < fields.length; i++) {
-            if (values[i] !== '') {
-                record[fields[i]] = values[i];
-                delete record['field_' + (i + 1)];
-            }
-        }
-    } else if (eventType === 'MEOJ' || eventType === 'MOOJ' || eventType === 'MLOJ') {
-        // Order modification events have similar early structure
-        assignFields(record, values, [
-            'actionType','errorROEID','firmROEID','type','CATReporterIMID',
-            'orderKeyDate','orderID','symbol','priorOrderID','priorOrderKeyDate',
-            'manualOrderKeyDate','eventTimestamp','manualFlag','electronicDupFlag',
-            'initiator','electronicTimestamp','quantity','minQty','leavesQty'
-        ]);
-    } else if (eventType === 'MEOT' || eventType === 'MOOT' || eventType === 'MLOT') {
-        assignFields(record, values, [
-            'actionType','errorROEID','firmROEID','type','CATReporterIMID',
-            'tradeKeyDate','tradeID','symbol','eventTimestamp','manualFlag',
-            'electronicDupFlag','electronicTimestamp','cancelFlag','cancelTimestamp',
-            'side','price','quantity','capacity','firmDesignatedID','accountHolderType'
-        ]);
-    } else if (eventType === 'MEOR' || eventType === 'MOOR' || eventType === 'MLOR') {
-        assignFields(record, values, [
-            'actionType','errorROEID','firmROEID','type','CATReporterIMID',
-            'orderKeyDate','orderID','symbol','eventTimestamp','manualFlag',
-            'electronicDupFlag','electronicTimestamp','senderIMID',
-            'destination','destinationType','routedOrderID','session',
-            'side','price','quantity','orderType','timeInForce','handlingInstructions'
-        ]);
-    } else if (eventType === 'MECO' || eventType === 'MOCO' || eventType === 'MLCO') {
-        assignFields(record, values, [
-            'actionType','errorROEID','firmROEID','type','CATReporterIMID',
-            'orderKeyDate','orderID','symbol','eventTimestamp','manualFlag',
-            'electronicDupFlag','electronicTimestamp','cancelQty','leavesQty',
-            'initiator'
-        ]);
-    } else if (eventType === 'MEOM' || eventType === 'MOOM' || eventType === 'MLOM') {
-        assignFields(record, values, [
-            'actionType','errorROEID','firmROEID','type','CATReporterIMID',
-            'orderKeyDate','orderID','symbol','eventTimestamp','manualFlag',
-            'electronicDupFlag','electronicTimestamp','priorOrderID',
-            'priorOrderKeyDate','initiator','price','quantity','minQty',
-            'leavesQty','orderType','timeInForce','handlingInstructions'
-        ]);
-    }
-    // Other event types will retain generic field_N names
-}
-
-function assignFields(record, values, fields) {
-    for (let i = 5; i < values.length && i < fields.length; i++) {
-        if (values[i] !== '') {
-            record[fields[i]] = values[i];
-            delete record['field_' + (i + 1)];
-        }
-    }
 }
 
 function parseCSVLine(line) {
@@ -1151,7 +1179,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v0.1.0 &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v0.1.1 &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
