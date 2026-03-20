@@ -14,7 +14,7 @@ Supports CAT Technical Specifications for Industry Members v4.1.0 r15.
 
 Open `index.html` in any modern browser. No server, build step, or dependencies required.
 
-1. Drag and drop a CAT data file onto the page (or click to browse)
+1. Drag and drop a CAT data file onto the page (or click to browse). Multiple files supported; hold Shift while dropping to append.
 2. Browse, filter, sort, and inspect records
 3. Export filtered results to CSV
 
@@ -28,7 +28,11 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 - **Sortable, paginated records table** with priority column ordering for the most important CAT fields
 - **Color-coded event types** — orders, routes, trades, cancels, modifications, quotes, and allocations are visually distinguished
 - **Filtering** — by event type, action type (NEW/RPR/COR/DEL), side (Buy/Sell/Short), and free-text search across all fields
-- **Record detail panel** — click any row to inspect all fields
+- **Record detail panel** — fixed to the bottom of the viewport with translated/original view modes
+- **Translated display** — human-readable timestamps, dates, side codes, and compound fields (legDetails, buyDetails, sellDetails)
+- **Clickable linkage fields** — navigate between related records via orderID, tradeID, parentOrderID, priorOrderID, etc.
+- **Order chain view** — hierarchy tree showing parent/child order relationships
+- **Multi-file support** — load multiple files via drag-and-drop or file picker; hold Shift to append
 - **Event Summary tab** — counts by event type and action type
 - **Raw Data tab** — parsed JSON view of loaded records
 - **CSV export** — download filtered results
@@ -40,7 +44,7 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 
 ## Reference
 
-Based on the [CAT Reporting Technical Specifications for Industry Members](https://www.catnmsplan.com/technical-specifications) v4.1.0 r15.
+Based on the [CAT Reporting Technical Specifications for Industry Members v4.1.0 r15](https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf). See also: [CAT Reference Data](https://catnmsplan.com/reference-data).
 
 ## License
 

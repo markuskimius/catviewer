@@ -8,10 +8,7 @@ This repository is for work related to **CAT (Consolidated Audit Trail) reportin
 
 ## Reference Specification
 
-The primary reference document is:
-- `03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf`
-
-This ~63,000-line PDF covers:
+The primary reference document is the [CAT Reporting Technical Specifications for Industry Members v4.1.0 r15](https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf). This ~63,000-line PDF covers:
 - **CAT Reporting Fundamentals**: Order IDs, timestamps, order handling instructions, Firm ROE IDs, FDIDs, equity/option symbols, data types, and linkage rules
 - **Special Reporting Requirements**: ATS reporting, manual orders, allocation events, RFQ responses, representative orders, combined orders, multi-leg orders, and more
 - **Event specifications**: Detailed schemas for order lifecycle events (New Order, Route, Trade, Cancel, etc.) for both equities and options
@@ -25,19 +22,22 @@ When working with this spec, use `pdftotext` to extract relevant sections rather
 A single-file web application for compliance officers to inspect CAT data files. No build step required — open `index.html` directly in a browser.
 
 ### Key features
-- Drag-and-drop or file picker for JSON (NDJSON) and CSV format CAT files
+- Drag-and-drop or file picker for JSON (NDJSON) and CSV format CAT files (multiple files supported; hold Shift to append)
 - Auto-detects format from extension and content
 - Sortable, paginated record table with priority column ordering
 - Filters by event type, action type (NEW/RPR/COR/DEL), side, and free-text search
 - Color-coded event type badges (order/route/trade/cancel/modify/quote/allocation)
-- Record detail panel on row click showing all fields
+- Fixed record detail panel at bottom of viewport with translated/original view modes
+- Translated display for timestamps, dates, side codes, compound fields (legDetails, buyDetails, sellDetails)
+- Clickable linkage fields (orderID, tradeID, parentOrderID, priorOrderID, etc.) for navigating between related records
+- Order chain view with hierarchy tree
 - Event Summary tab with counts broken down by action type
 - Raw Data tab showing parsed JSON
 - CSV export of filtered results
 
 ### CAT file format notes
 - **JSON files**: NDJSON (one JSON object per line) or a JSON array. Each record has a `type` field (e.g., `MENO`, `MEOR`, `MEOT`) and `actionType` (`NEW`, `RPR`, `COR`, `DEL`).
-- **CSV files**: Positional fields with no header row. Field position 4 (0-indexed 3) is always `type`. The viewer maps all 99 event types (39 equity ME, 35 options MO, 25 multi-leg ML) to named fields per the spec, with each type having its own distinct field schema validated against `03.18.26-IM-4.1.0-r15.json`.
+- **CSV files**: Positional fields with no header row. Field position 4 (0-indexed 3) is always `type`. The viewer maps all 99 event types (39 equity ME, 35 options MO, 25 multi-leg ML) to named fields per the spec, with each type having its own distinct field schema.
 - Event type prefixes: `ME` = equity, `MO` = option, `ML` = multi-leg
 
 ### Sample data
