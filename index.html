@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.03.19b
+  CAT File Viewer v2026.03.19c
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -175,9 +175,8 @@
             overflow: auto;
             border: 1px solid var(--border);
             border-radius: 8px;
-            height: calc(100vh - 220px);
+            max-height: calc(100vh - 220px);
             scrollbar-gutter: stable;
-            resize: vertical;
         }
         table {
             width: 100%;
@@ -409,7 +408,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.03.19b</span>
+    <span class="subtitle">v2026.03.19c</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -1418,7 +1417,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.03.19b &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.03.19c &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
