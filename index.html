@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.03.19h
+  CAT File Viewer v2026.03.19i
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -518,7 +518,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.03.19h</span>
+    <span class="subtitle">v2026.03.19i</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -527,7 +527,7 @@
     <input type="file" id="fileInput" accept=".json,.csv,.txt,.gz">
 </div>
 
-<div class="drag-overlay" id="dragOverlay"><h2>Drop file to open</h2></div>
+<div class="drag-overlay" id="dragOverlay"><h2>Drop to open &mdash; Hold Shift to add</h2></div>
 <div class="error-bar" id="errorBar"></div>
 
 <div id="app">
@@ -681,6 +681,7 @@ const PRIORITY_COLUMNS = [
 
 // ── State ──
 let allRecords = [];
+let loadedFiles = [];
 let filteredRecords = [];
 let columns = [];
 let fileFormat = '';
@@ -724,7 +725,7 @@ document.addEventListener('drop', e => {
     e.preventDefault();
     dragCounter = 0;
     dragOverlay.classList.remove('visible');
-    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0], e.shiftKey);
 });
 fileInput.addEventListener('change', e => {
     if (e.target.files.length) handleFile(e.target.files[0]);
@@ -976,42 +977,57 @@ async function decompressGzip(file) {
     return await resp.text();
 }
 
-function handleFile(file) {
+function handleFile(file, append) {
     clearError();
     const isGz = file.name.toLowerCase().endsWith('.gz');
 
     if (isGz) {
-        decompressGzip(file).then(text => processFileText(file, text)).catch(err => {
+        decompressGzip(file).then(text => processFileText(file, text, append)).catch(err => {
             showError('Error decompressing file: ' + err.message);
         });
     } else {
         const reader = new FileReader();
-        reader.onload = e => processFileText(file, e.target.result);
+        reader.onload = e => processFileText(file, e.target.result, append);
         reader.onerror = () => showError('Error reading file.');
         reader.readAsText(file);
     }
 }
 
-function processFileText(file, text) {
+function processFileText(file, text, append) {
     try {
-        fileFormat = detectFormat(file.name, text);
-
-        if (fileFormat === 'json') {
-            allRecords = parseJSON(text);
-        } else {
-            allRecords = parseCSV(text);
+        if (append && loadedFiles.some(f => f.name === file.name)) {
+            showError(`File "${file.name}" is already loaded.`);
+            return;
         }
 
-        if (!allRecords.length) {
+        const fmt = detectFormat(file.name, text);
+
+        let newRecords;
+        if (fmt === 'json') {
+            newRecords = parseJSON(text);
+        } else {
+            newRecords = parseCSV(text);
+        }
+
+        if (!newRecords.length) {
             showError('No records found in file.');
             return;
         }
 
         // Flatten nested objects for display
-        allRecords = allRecords.map(flattenRecord);
+        newRecords = newRecords.map(flattenRecord);
+
+        if (append) {
+            allRecords = allRecords.concat(newRecords);
+        } else {
+            allRecords = newRecords;
+            loadedFiles = [];
+        }
+        loadedFiles.push({ name: file.name, format: fmt, size: file.size, count: newRecords.length });
+        fileFormat = fmt;
         buildOrderIndex();
 
-        initializeUI(file);
+        initializeUI();
     } catch (err) {
         showError('Error parsing file: ' + err.message);
     }
@@ -1344,11 +1360,11 @@ function updateChainBar() {
     });
 }
 
-function initializeUI(file) {
+function initializeUI() {
     dropZone.style.display = 'none';
     app.classList.add('visible');
 
-    // Reset state for new file
+    // Reset view state
     currentPage = 0;
     selectedRow = -1;
     sortCol = null;
@@ -1357,6 +1373,7 @@ function initializeUI(file) {
     $('actionFilter').value = '';
     $('sideFilter').value = '';
     $('detailPanel').classList.remove('visible');
+    document.body.classList.remove('detail-open');
     currentDetailRecord = null;
     detailMode = 'translated';
     $('showAllFields').checked = false;
@@ -1385,14 +1402,16 @@ function initializeUI(file) {
     // File info bar
     const eventTypes = new Set(allRecords.map(r => r.type).filter(Boolean));
     const symbols = new Set(allRecords.map(r => r.symbol).filter(Boolean));
-    document.title = `${file.name} — CAT File Viewer`;
+    const totalSize = loadedFiles.reduce((s, f) => s + f.size, 0);
+    const fileNames = loadedFiles.map(f => f.name);
+    document.title = `${fileNames.join(', ')} — CAT File Viewer`;
+    const fileListHtml = loadedFiles.map(f =>
+        `${escapeHtml(f.name)} <span class="badge ${f.format === 'json' ? 'badge-json' : 'badge-csv'}">${f.format.toUpperCase()}</span>`
+    ).join(', ');
     $('fileInfo').innerHTML = `
         <div class="stat">
-            <span class="stat-label">File:</span>
-            <span class="stat-value">${escapeHtml(file.name)}</span>
-        </div>
-        <div class="stat">
-            <span class="badge ${fileFormat === 'json' ? 'badge-json' : 'badge-csv'}">${fileFormat.toUpperCase()}</span>
+            <span class="stat-label">${loadedFiles.length > 1 ? 'Files:' : 'File:'}</span>
+            <span class="stat-value">${fileListHtml}</span>
         </div>
         <div class="stat">
             <span class="stat-label">Records:</span>
@@ -1408,7 +1427,7 @@ function initializeUI(file) {
         </div>
         <div class="stat">
             <span class="stat-label">Size:</span>
-            <span class="stat-value">${formatSize(file.size)}</span>
+            <span class="stat-value">${formatSize(totalSize)}</span>
         </div>
     `;
 
@@ -1956,7 +1975,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.03.19h &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.03.19i &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
