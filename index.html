@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.03.19j
+  CAT File Viewer v2026.03.19k
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -530,13 +530,13 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.03.19j</span>
+    <span class="subtitle">v2026.03.19k</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
     <h2>Drop a CAT file here or click to browse</h2>
     <p>Supports JSON and CSV format CAT data files (.json, .csv, .txt, .gz)</p>
-    <input type="file" id="fileInput" accept=".json,.csv,.txt,.gz">
+    <input type="file" id="fileInput" accept=".json,.csv,.txt,.gz" multiple>
 </div>
 
 <div class="drag-overlay" id="dragOverlay"><h2>Drop to open &mdash; Hold Shift to add</h2></div>
@@ -737,10 +737,12 @@ document.addEventListener('drop', e => {
     e.preventDefault();
     dragCounter = 0;
     dragOverlay.classList.remove('visible');
-    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0], e.shiftKey);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) handleFiles(files, e.shiftKey);
 });
 fileInput.addEventListener('change', e => {
-    if (e.target.files.length) handleFile(e.target.files[0]);
+    const files = Array.from(e.target.files);
+    if (files.length) handleFiles(files);
     fileInput.value = '';  // allow re-selecting same file
 });
 
@@ -987,6 +989,14 @@ async function decompressGzip(file) {
     const stream = file.stream().pipeThrough(ds);
     const resp = new Response(stream);
     return await resp.text();
+}
+
+function handleFiles(files, append) {
+    // First file replaces unless append is true; rest always append
+    handleFile(files[0], append);
+    for (let i = 1; i < files.length; i++) {
+        handleFile(files[i], true);
+    }
 }
 
 function handleFile(file, append) {
@@ -1987,7 +1997,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.03.19j &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.03.19k &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
