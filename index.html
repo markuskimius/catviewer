@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.03.19c
+  CAT File Viewer v2026.03.19d
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -235,6 +235,72 @@
         .side-buy { color: var(--green); font-weight: 600; }
         .side-sell { color: var(--red); font-weight: 600; }
 
+        .order-chain-bar {
+            margin: 0 24px 8px;
+            padding: 8px 16px;
+            background: var(--surface);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            border-radius: 6px;
+            display: none;
+            align-items: center;
+            gap: 12px;
+            font-size: 13px;
+            flex-wrap: wrap;
+        }
+        .order-chain-bar.visible { display: flex; }
+        .order-chain-bar .chain-label { color: var(--text-muted); }
+        .order-chain-bar .chain-id {
+            font-weight: 600;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            color: var(--accent);
+        }
+        .order-chain-bar .chain-info { color: var(--text-muted); font-size: 12px; }
+        .chain-parent-link {
+            color: var(--accent);
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .chain-parent-link:hover { text-decoration: underline; }
+        .depth-controls { display: flex; gap: 4px; }
+        .depth-btn {
+            padding: 3px 10px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            background: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .depth-btn:hover { background: var(--surface2); color: var(--text); }
+        .depth-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+        .depth-btn:disabled { opacity: 0.3; cursor: default; }
+        .clear-chain {
+            margin-left: auto;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 18px;
+            padding: 0 4px;
+        }
+        .clear-chain:hover { color: var(--red); }
+        .tree-cell {
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            color: var(--border);
+            white-space: pre;
+            padding: 8px 0 8px 12px !important;
+            width: 1px;
+        }
+        .order-group-first td { border-top: 2px solid var(--border) !important; }
+        .order-link {
+            cursor: pointer;
+            border-bottom: 1px dashed var(--text-muted);
+        }
+        .order-link:hover {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
         .detail-panel {
             display: none;
             margin: 0 24px 24px;
@@ -408,7 +474,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.03.19c</span>
+    <span class="subtitle">v2026.03.19d</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -452,6 +518,18 @@
             <span class="spacer"></span>
             <span class="record-count" id="recordCount"></span>
             <button class="btn btn-secondary" id="exportBtn">Export CSV</button>
+        </div>
+        <div class="order-chain-bar" id="orderChainBar">
+            <span class="chain-label">Order Chain:</span>
+            <span class="chain-id" id="chainRootID"></span>
+            <span class="chain-info" id="chainInfo"></span>
+            <span id="chainParent"></span>
+            <div class="depth-controls" id="depthControls">
+                <button class="depth-btn" data-depth="0">This order</button>
+                <button class="depth-btn" data-depth="1">+ Children</button>
+                <button class="depth-btn active" data-depth="Infinity">+ All</button>
+            </div>
+            <button class="clear-chain" id="clearChain" title="Clear order chain filter">&times;</button>
         </div>
         <div class="table-container" id="tableContainer"></div>
         <div class="pagination" id="pagination"></div>
@@ -567,6 +645,10 @@ let sortAsc = true;
 let currentPage = 0;
 const PAGE_SIZE = 100;
 let selectedRow = -1;
+let orderIndex = {};
+let orderChainRoot = null;
+let orderChainDepth = Infinity;
+let chainDisplayData = null;
 
 // ── DOM ──
 const $ = id => document.getElementById(id);
@@ -883,6 +965,7 @@ function processFileText(file, text) {
 
         // Flatten nested objects for display
         allRecords = allRecords.map(flattenRecord);
+        buildOrderIndex();
 
         initializeUI(file);
     } catch (err) {
@@ -906,6 +989,198 @@ function flattenRecord(record) {
     return flat;
 }
 
+// ── Order Chain / Hierarchy ──
+function buildOrderIndex() {
+    orderIndex = {};
+    for (const r of allRecords) {
+        const oid = r.orderID;
+        if (!oid) continue;
+        if (!orderIndex[oid]) orderIndex[oid] = { parentOrderID: null, children: new Set() };
+        if (r.parentOrderID && r.parentOrderID !== oid) {
+            orderIndex[oid].parentOrderID = r.parentOrderID;
+            if (!orderIndex[r.parentOrderID]) orderIndex[r.parentOrderID] = { parentOrderID: null, children: new Set() };
+            orderIndex[r.parentOrderID].children.add(oid);
+        }
+    }
+}
+
+function getChainOrderIDs(rootID, maxDepth) {
+    const result = new Set();
+    function walk(id, depth) {
+        if (depth > maxDepth || result.has(id)) return;
+        result.add(id);
+        const entry = orderIndex[id];
+        if (entry) {
+            for (const child of entry.children) walk(child, depth + 1);
+        }
+    }
+    walk(rootID, 0);
+    return result;
+}
+
+function buildChainDisplay(rootID, maxDepth, records) {
+    const result = [];
+    const byOrder = {};
+    for (const r of records) {
+        if (!r.orderID) continue;
+        (byOrder[r.orderID] ||= []).push(r);
+    }
+    for (const recs of Object.values(byOrder)) {
+        recs.sort((a, b) => (a.eventTimestamp || '').localeCompare(b.eventTimestamp || ''));
+    }
+
+    function hasRecords(id, depth) {
+        if (byOrder[id]?.length) return true;
+        if (depth >= maxDepth) return false;
+        const entry = orderIndex[id];
+        return entry && Array.from(entry.children).some(c => hasRecords(c, depth + 1));
+    }
+
+    function dfs(id, depth, lastFlags) {
+        const recs = byOrder[id] || [];
+        for (let i = 0; i < recs.length; i++) {
+            let prefix = '';
+            for (let d = 0; d < depth; d++) {
+                if (d < depth - 1) {
+                    prefix += lastFlags[d] ? '    ' : '│   ';
+                } else {
+                    prefix += i === 0
+                        ? (lastFlags[d] ? '└── ' : '├── ')
+                        : (lastFlags[d] ? '    ' : '│   ');
+                }
+            }
+            result.push({ record: recs[i], depth, orderID: id, isFirstOfOrder: i === 0, treePrefix: prefix });
+        }
+        const entry = orderIndex[id];
+        if (entry && depth < maxDepth) {
+            const kids = Array.from(entry.children).sort().filter(c => hasRecords(c, depth + 1));
+            kids.forEach((c, i) => dfs(c, depth + 1, [...lastFlags, i === kids.length - 1]));
+        }
+    }
+
+    dfs(rootID, 0, []);
+    return result;
+}
+
+function getFilterState() {
+    return {
+        search: $('searchInput').value,
+        eventType: $('eventFilter').value,
+        action: $('actionFilter').value,
+        side: $('sideFilter').value,
+        chainRoot: orderChainRoot,
+        chainDepth: orderChainDepth === Infinity ? 'Infinity' : orderChainDepth,
+    };
+}
+
+function buildFilterURL(state) {
+    const params = new URLSearchParams();
+    if (state.search) params.set('q', state.search);
+    if (state.eventType) params.set('type', state.eventType);
+    if (state.action) params.set('action', state.action);
+    if (state.side) params.set('side', state.side);
+    if (state.chainRoot) params.set('chain', state.chainRoot);
+    if (state.chainRoot && state.chainDepth !== 'Infinity') params.set('depth', state.chainDepth);
+    const qs = params.toString();
+    return qs ? '?' + qs : location.pathname;
+}
+
+function syncURL(push) {
+    const state = getFilterState();
+    const url = buildFilterURL(state);
+    if (push) {
+        history.pushState(state, '', url);
+    } else {
+        history.replaceState(state, '', url);
+    }
+}
+
+function restoreFilterState(state) {
+    if (!state) state = {};
+    $('searchInput').value = state.search || '';
+    $('eventFilter').value = state.eventType || '';
+    $('actionFilter').value = state.action || '';
+    $('sideFilter').value = state.side || '';
+
+    orderChainRoot = state.chainRoot || null;
+    orderChainDepth = (!state.chainDepth || state.chainDepth === 'Infinity') ? Infinity : Number(state.chainDepth);
+    chainDisplayData = null;
+
+    if (orderChainRoot) {
+        updateChainBar();
+    } else {
+        $('orderChainBar').classList.remove('visible');
+    }
+    applyFilters();
+}
+
+function loadFiltersFromURL() {
+    const params = new URLSearchParams(location.search);
+    if (!params.toString()) return;
+    const state = {
+        search: params.get('q') || '',
+        eventType: params.get('type') || '',
+        action: params.get('action') || '',
+        side: params.get('side') || '',
+        chainRoot: params.get('chain') || null,
+        chainDepth: params.get('depth') || 'Infinity',
+    };
+    $('searchInput').value = state.search;
+    $('eventFilter').value = state.eventType;
+    $('actionFilter').value = state.action;
+    $('sideFilter').value = state.side;
+
+    orderChainRoot = state.chainRoot;
+    orderChainDepth = state.chainDepth === 'Infinity' ? Infinity : Number(state.chainDepth);
+
+    if (orderChainRoot) updateChainBar();
+    history.replaceState(state, '', location.href);
+}
+
+function enterOrderChain(orderID) {
+    orderChainRoot = orderID;
+    orderChainDepth = Infinity;
+    syncURL(true);
+    updateChainBar();
+    applyFilters();
+}
+
+function clearOrderChain() {
+    orderChainRoot = null;
+    orderChainDepth = Infinity;
+    chainDisplayData = null;
+    $('orderChainBar').classList.remove('visible');
+    syncURL(true);
+    applyFilters();
+}
+
+function updateChainBar() {
+    const bar = $('orderChainBar');
+    bar.classList.add('visible');
+    $('chainRootID').textContent = orderChainRoot;
+
+    const allIDs = getChainOrderIDs(orderChainRoot, Infinity);
+    const totalDescendants = allIDs.size - 1;
+    $('chainInfo').textContent = totalDescendants > 0
+        ? `(${totalDescendants} descendant order${totalDescendants > 1 ? 's' : ''})`
+        : '(no child orders)';
+
+    const entry = orderIndex[orderChainRoot];
+    const parentDiv = $('chainParent');
+    if (entry && entry.parentOrderID) {
+        parentDiv.innerHTML = `<span class="chain-parent-link" id="chainParentLink">\u2191 Parent: ${escapeHtml(entry.parentOrderID)}</span>`;
+        $('chainParentLink').addEventListener('click', () => enterOrderChain(entry.parentOrderID));
+    } else {
+        parentDiv.innerHTML = '';
+    }
+
+    document.querySelectorAll('.depth-btn').forEach(btn => {
+        const d = btn.dataset.depth === 'Infinity' ? Infinity : parseInt(btn.dataset.depth);
+        btn.classList.toggle('active', d === orderChainDepth);
+        if (d > 0) btn.disabled = totalDescendants === 0;
+    });
+}
+
 function initializeUI(file) {
     dropZone.style.display = 'none';
     app.classList.add('visible');
@@ -924,6 +1199,11 @@ function initializeUI(file) {
     $('showAllFields').checked = false;
     document.querySelectorAll('.detail-tab').forEach(t => t.classList.toggle('active', t.dataset.detailTab === 'translated'));
     showDetail._measured = false;
+    orderChainRoot = null;
+    orderChainDepth = Infinity;
+    chainDisplayData = null;
+    $('orderChainBar').classList.remove('visible');
+    history.replaceState({}, '', location.pathname);
 
     // Determine columns
     const colSet = new Set();
@@ -980,7 +1260,11 @@ function initializeUI(file) {
     // Summary cards
     renderSummaryCards();
 
-    // Apply filters and render
+    // On first file load, apply filters from URL; on subsequent loads, start clean
+    if (!initializeUI._loaded) {
+        initializeUI._loaded = true;
+        loadFiltersFromURL();
+    }
     applyFilters();
     renderRawTab();
 }
@@ -1038,7 +1322,13 @@ function applyFilters() {
     const action = $('actionFilter').value;
     const side = $('sideFilter').value;
 
-    filteredRecords = allRecords.filter(r => {
+    let pool = allRecords;
+    if (orderChainRoot) {
+        const chainIDs = getChainOrderIDs(orderChainRoot, orderChainDepth);
+        pool = allRecords.filter(r => r.orderID && chainIDs.has(r.orderID));
+    }
+
+    filteredRecords = pool.filter(r => {
         if (eventType && r.type !== eventType) return false;
         if (action && r.actionType !== action) return false;
         if (side && r.side !== side) return false;
@@ -1051,23 +1341,29 @@ function applyFilters() {
         return true;
     });
 
-    if (sortCol !== null) {
-        filteredRecords.sort((a, b) => {
-            let va = a[sortCol] ?? '';
-            let vb = b[sortCol] ?? '';
-            // Try numeric comparison
-            const na = Number(va), nb = Number(vb);
-            if (!isNaN(na) && !isNaN(nb)) {
-                return sortAsc ? na - nb : nb - na;
-            }
-            va = String(va); vb = String(vb);
-            return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
-        });
+    if (orderChainRoot) {
+        chainDisplayData = buildChainDisplay(orderChainRoot, orderChainDepth, filteredRecords);
+        filteredRecords = chainDisplayData.map(d => d.record);
+    } else {
+        chainDisplayData = null;
+        if (sortCol !== null) {
+            filteredRecords.sort((a, b) => {
+                let va = a[sortCol] ?? '';
+                let vb = b[sortCol] ?? '';
+                const na = Number(va), nb = Number(vb);
+                if (!isNaN(na) && !isNaN(nb)) {
+                    return sortAsc ? na - nb : nb - na;
+                }
+                va = String(va); vb = String(vb);
+                return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+            });
+        }
     }
 
     currentPage = 0;
     renderTable();
     $('recordCount').textContent = `${filteredRecords.length.toLocaleString()} of ${allRecords.length.toLocaleString()} records`;
+    syncURL(false);
 }
 
 function renderTable() {
@@ -1076,6 +1372,7 @@ function renderTable() {
 
     let html = '<table><thead><tr>';
     html += '<th>#</th>';
+    if (chainDisplayData) html += '<th style="width:1px;padding:0 8px"></th>';
     for (const col of columns) {
         const arrow = sortCol === col ? (sortAsc ? ' \u25B2' : ' \u25BC') : '';
         html += `<th data-col="${escapeHtml(col)}">${escapeHtml(col)}<span class="sort-arrow">${arrow}</span></th>`;
@@ -1084,8 +1381,15 @@ function renderTable() {
 
     pageRecords.forEach((record, idx) => {
         const globalIdx = start + idx;
-        html += `<tr data-idx="${globalIdx}" class="${selectedRow === globalIdx ? 'selected' : ''}">`;
+        const chainEntry = chainDisplayData ? chainDisplayData[globalIdx] : null;
+        const groupFirst = chainEntry && chainEntry.isFirstOfOrder && chainEntry.depth > 0;
+        let cls = selectedRow === globalIdx ? 'selected' : '';
+        if (groupFirst) cls += ' order-group-first';
+        html += `<tr data-idx="${globalIdx}" class="${cls}">`;
         html += `<td>${globalIdx + 1}</td>`;
+        if (chainDisplayData) {
+            html += `<td class="tree-cell">${chainEntry ? escapeHtml(chainEntry.treePrefix) : ''}</td>`;
+        }
         for (const col of columns) {
             html += `<td>${formatCell(col, record[col])}</td>`;
         }
@@ -1114,8 +1418,16 @@ function renderTable() {
     $('tableContainer').querySelectorAll('tr[data-idx]').forEach(tr => {
         tr.addEventListener('click', () => {
             selectedRow = parseInt(tr.dataset.idx);
-            showDetail(allRecords[selectedRow]);
+            showDetail(filteredRecords[selectedRow]);
             renderTable();
+        });
+    });
+
+    // Order chain link handlers
+    $('tableContainer').querySelectorAll('.order-link').forEach(el => {
+        el.addEventListener('click', e => {
+            e.stopPropagation();
+            enterOrderChain(el.dataset.orderId);
         });
     });
 
@@ -1161,6 +1473,9 @@ function formatCell(col, value) {
     if (value === undefined || value === null || value === '') return '<span style="color:var(--surface2)">&mdash;</span>';
     const s = String(value);
 
+    if ((col === 'orderID' || col === 'parentOrderID') && orderIndex[s]) {
+        return `<span class="order-link" data-order-id="${escapeHtml(s)}" title="Show order chain">${escapeHtml(s)}</span>`;
+    }
     if (col === 'type') {
         const cat = EVENT_CATEGORIES[s] || 'other';
         const cls = CATEGORY_CLASS[cat] || 'et-other';
@@ -1349,6 +1664,23 @@ $('eventFilter').addEventListener('change', applyFilters);
 $('actionFilter').addEventListener('change', applyFilters);
 $('sideFilter').addEventListener('change', applyFilters);
 
+// ── Order chain controls ──
+$('clearChain').addEventListener('click', clearOrderChain);
+$('depthControls').addEventListener('click', e => {
+    const btn = e.target.closest('.depth-btn');
+    if (!btn || btn.disabled) return;
+    orderChainDepth = btn.dataset.depth === 'Infinity' ? Infinity : parseInt(btn.dataset.depth);
+    syncURL(true);
+    updateChainBar();
+    applyFilters();
+});
+
+// ── History (back button) ──
+window.addEventListener('popstate', e => {
+    if (!allRecords.length) return;
+    restoreFilterState(e.state);
+});
+
 // ── Detail panel controls ──
 $('closeDetail').addEventListener('click', () => {
     $('detailPanel').classList.remove('visible');
@@ -1417,7 +1749,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.03.19c &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.03.19d &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
