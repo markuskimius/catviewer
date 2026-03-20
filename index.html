@@ -158,9 +158,12 @@
 
         .table-container {
             margin: 0 24px 24px;
-            overflow-x: auto;
+            overflow: auto;
             border: 1px solid var(--border);
             border-radius: 8px;
+            height: calc(100vh - 220px);
+            scrollbar-gutter: stable;
+            resize: vertical;
         }
         table {
             width: 100%;
@@ -176,6 +179,7 @@
             border-bottom: 1px solid var(--border);
             position: sticky;
             top: 0;
+            z-index: 1;
             white-space: nowrap;
             cursor: pointer;
             user-select: none;
@@ -224,9 +228,13 @@
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 8px;
-            padding: 20px;
+            padding: 16px 20px;
+            overflow-y: visible;
         }
         .detail-panel.visible { display: block; }
+        body.detail-open #tabTable { display: flex; flex-direction: column; min-height: calc(100vh - 220px); }
+        body.detail-open .table-container { flex: none; min-height: 120px; height: 40vh; }
+        body.detail-open .detail-panel.visible { flex-shrink: 0; min-height: var(--detail-height); }
         .detail-panel h3 {
             font-size: 15px;
             margin-bottom: 12px;
@@ -402,6 +410,13 @@
         </div>
         <div class="table-container" id="tableContainer"></div>
         <div class="pagination" id="pagination"></div>
+        <div class="detail-panel" id="detailPanel">
+            <h3>
+                <span id="detailTitle">Record Detail</span>
+                <button class="close-btn" id="closeDetail">&times;</button>
+            </h3>
+            <div class="detail-grid" id="detailGrid"></div>
+        </div>
     </div>
 
     <div id="tabSummary" style="display:none">
@@ -410,14 +425,6 @@
 
     <div id="tabRaw" style="display:none">
         <div class="raw-json visible" id="rawContent" style="margin:16px 24px"></div>
-    </div>
-
-    <div class="detail-panel" id="detailPanel">
-        <h3>
-            <span id="detailTitle">Record Detail</span>
-            <button class="close-btn" id="closeDetail">&times;</button>
-        </h3>
-        <div class="detail-grid" id="detailGrid"></div>
     </div>
 </div>
 
@@ -902,7 +909,7 @@ function renderSummaryCards() {
     html += card('Actions', '', Object.entries(actionCounts).map(([k, v]) => `${k}: ${v}`).join(', '));
 
     if (Object.keys(sideCounts).length) {
-        html += card('Sides', '', Object.entries(sideCounts).map(([k, v]) => `${k}: ${v}`).join(', '));
+        html += card('Sides', '', Object.entries(sideCounts).map(([k, v]) => `${FIELD_LABELS.side[k] || k}: ${v}`).join(', '));
     }
 
     cards.innerHTML = html;
@@ -1018,6 +1025,29 @@ function renderTable() {
     });
 }
 
+const FIELD_LABELS = {
+    side: { B: 'BUY', S: 'SELL', SL: 'SELL LONG', SS: 'SELL SHORT', SX: 'SELL SHORT EXEMPT' },
+    orderType: { CAB: 'Cabinet', LMT: 'Limit', MKT: 'Market' },
+    tradingSession: { FOR: 'Foreign Only', PRE: 'Pre-Market', PREREG: 'Pre + Regular', REG: 'Regular', REGPOST: 'Regular + Post', POST: 'Post-Market', PREPOST: 'Pre + Post', ALL: 'All Sessions' },
+    capacity: { A: 'Agency', P: 'Principal', R: 'Riskless Principal' },
+    destinationType: { F: 'Industry Member', E: 'Exchange', N: 'Foreign', O: 'Foreign (OTC)', D: 'Display Facility', S: 'Non-CAT Entity' },
+    senderType: { F: 'Industry Member', E: 'Exchange', N: 'Foreign', S: 'Non-CAT Entity' },
+    openCloseIndicator: { Open: 'Open', Close: 'Close' },
+    allocationType: { CUS: 'Custodian', DVP: 'Delivery vs Payment', CUSF: 'Custodian Fee', DVPF: 'DVP Fee', CMTA: 'CMTA', FLP: 'Fully Linked Post-Trade', FRM: 'Firm', STO: 'Stock Transfer Officer', OTH: 'Other' },
+    accountHolderType: { A: 'Angel Investor', E: 'Employee', F: 'Firm', I: 'Individual', O: 'Other', V: 'Venture Capital', P: 'Proprietary', X: 'Clearing Firm/Bank' },
+    deptType: { A: 'Agency', ATS: 'Alt Trading System', DMA: 'Direct Market Access', SA: 'Sponsored Access', T: 'Trading', O: 'Other' },
+    receivingDeskType: { A: 'Agency', AR: 'Arbitrage', B: 'Block Trading', C: 'Convertible', CR: 'Credit', D: 'Derivatives', EC: 'Electronic Comms', FB: 'Fixed Income/Bond', IN: 'Institutional', IS: 'Institutional Sales', O: 'Other', PF: 'Prime Finance', PR: 'Private Equity/M&A', PT: 'Primary Trading', S: 'Sales', SW: 'Swap', T: 'Trader', TR: 'Transaction Svcs/Risk' },
+    initiator: { C: 'Customer', F: 'Firm' },
+    isoInd: { ISOD: 'ISO - Day', ISOI: 'ISO - IOC', NA: 'N/A' },
+    atsDisplayInd: { S: 'Subscribers Only', A: 'Aggregated by Price', Y: 'Public Quotation', N: 'Not Displayed' },
+    sideDetailsInd: { BUY: 'Buy Side', SELL: 'Sell Side', NA: 'N/A' },
+};
+
+function translateValue(col, raw) {
+    const map = FIELD_LABELS[col];
+    return map && map[raw] ? map[raw] : null;
+}
+
 function formatCell(col, value) {
     if (value === undefined || value === null || value === '') return '<span style="color:var(--surface2)">&mdash;</span>';
     const s = String(value);
@@ -1032,8 +1062,14 @@ function formatCell(col, value) {
         return `<span class="${cls}">${escapeHtml(s)}</span>`;
     }
     if (col === 'side') {
-        if (s === 'B') return '<span class="side-buy">BUY</span>';
-        if (s === 'S' || s === 'SL' || s === 'SS' || s === 'SX') return `<span class="side-sell">${escapeHtml(s)}</span>`;
+        const label = FIELD_LABELS.side[s];
+        if (label) {
+            const cls = s === 'B' ? 'side-buy' : 'side-sell';
+            return `<span class="${cls}">${label}</span>`;
+        }
+    }
+    if (FIELD_LABELS[col] && FIELD_LABELS[col][s]) {
+        return `<span title="${escapeHtml(s)}">${escapeHtml(FIELD_LABELS[col][s])}</span>`;
     }
     if ((col === 'price' || col === 'fillPrice' || col === 'displayPrice' || col === 'workingPrice' || col === 'netPrice') && !isNaN(Number(s))) {
         return Number(s).toFixed(s.includes('.') ? Math.max(2, (s.split('.')[1] || '').length) : 0);
@@ -1058,13 +1094,34 @@ function showDetail(record) {
     let html = '';
     for (const [key, value] of Object.entries(record)) {
         if (value === undefined || value === null || value === '') continue;
+        const raw = String(value);
+        const label = translateValue(key, raw);
+        const display = label ? `${label} <span style="color:var(--text-muted)">(${escapeHtml(raw)})</span>` : escapeHtml(raw);
         html += `<div class="detail-field">
             <span class="field-name">${escapeHtml(key)}</span>
-            <span class="field-value">${escapeHtml(String(value))}</span>
+            <span class="field-value">${display}</span>
         </div>`;
     }
     grid.innerHTML = html;
     panel.classList.add('visible');
+    document.body.classList.add('detail-open');
+
+    // On first show, measure max detail height from actual records
+    if (!showDetail._measured) {
+        showDetail._measured = true;
+        let maxFields = 0;
+        allRecords.forEach(r => {
+            const count = Object.entries(r).filter(([, v]) => v !== undefined && v !== null && v !== '').length;
+            if (count > maxFields) maxFields = count;
+        });
+        const placeholder = Array.from({length: maxFields}, (_, i) =>
+            `<div class="detail-field"><span class="field-name">field${i}</span><span class="field-value">value</span></div>`
+        ).join('');
+        grid.innerHTML = placeholder;
+        const h = panel.offsetHeight;
+        document.documentElement.style.setProperty('--detail-height', h + 'px');
+        grid.innerHTML = html;
+    }
 }
 
 function renderEventSummary() {
@@ -1131,6 +1188,7 @@ $('sideFilter').addEventListener('change', applyFilters);
 // ── Close detail ──
 $('closeDetail').addEventListener('click', () => {
     $('detailPanel').classList.remove('visible');
+    document.body.classList.remove('detail-open');
     selectedRow = -1;
     renderTable();
 });
