@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.03.19k
+  CAT File Viewer v2026.03.19l
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -530,7 +530,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.03.19k</span>
+    <span class="subtitle">v2026.03.19l</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -1180,6 +1180,8 @@ function renderSideDetailsHTML(value, fields, mode) {
                 const d = raw.slice(0,4)+'-'+raw.slice(4,6)+'-'+raw.slice(6,8);
                 const t = raw.slice(9,11)+':'+raw.slice(11,13)+':'+raw.slice(13);
                 html += `<td title="${escapeHtml(raw)}">${d} ${t}</td>`;
+            } else if (mode === 'translated' && LINKAGE_FIELDS[f] && lookupLinkedRecords(f, raw)) {
+                html += `<td><span class="order-link" data-link-field="${escapeHtml(f)}" data-link-value="${escapeHtml(raw)}" title="Show linked records">${escapeHtml(String(raw))}</span></td>`;
             } else {
                 html += `<td>${escapeHtml(String(raw))}</td>`;
             }
@@ -1188,6 +1190,35 @@ function renderSideDetailsHTML(value, fields, mode) {
     });
     html += '</tbody></table>';
     return html;
+}
+
+// ── Linkage fields: maps field name → the target field it references ──
+const LINKAGE_FIELDS = {
+    orderID: 'orderID', parentOrderID: 'orderID', priorOrderID: 'orderID',
+    manualOrderID: 'orderID', pairedOrderID: 'orderID',
+    tradeID: 'tradeID',
+};
+
+// Index: targetField → id value → array of records
+let idIndex = {};
+
+function buildIdIndex() {
+    idIndex = {};
+    for (const r of allRecords) {
+        for (const field of ['orderID', 'tradeID']) {
+            const val = r[field];
+            if (!val) continue;
+            if (!idIndex[field]) idIndex[field] = {};
+            if (!idIndex[field][val]) idIndex[field][val] = [];
+            idIndex[field][val].push(r);
+        }
+    }
+}
+
+function lookupLinkedRecords(fieldName, value) {
+    const target = LINKAGE_FIELDS[fieldName];
+    if (!target) return null;
+    return idIndex[target] && idIndex[target][value] || null;
 }
 
 // ── Order Chain / Hierarchy ──
@@ -1203,6 +1234,7 @@ function buildOrderIndex() {
             orderIndex[r.parentOrderID].children.add(oid);
         }
     }
+    buildIdIndex();
 }
 
 function getChainOrderIDs(rootID, maxDepth) {
@@ -1336,6 +1368,29 @@ function loadFiltersFromURL() {
 
     if (orderChainRoot) updateChainBar();
     history.replaceState(state, '', location.href);
+}
+
+function handleLinkClick(el) {
+    const field = el.dataset.linkField;
+    const value = el.dataset.linkValue;
+    const target = LINKAGE_FIELDS[field];
+    if (!target) return;
+
+    // If target is orderID, use order chain view
+    if (target === 'orderID') {
+        const record = allRecords.find(r => r.orderID === value);
+        if (record) showDetail(record);
+        enterOrderChain(value);
+        return;
+    }
+
+    // For other linkage types, filter the search to show linked records
+    const records = lookupLinkedRecords(field, value);
+    if (records && records.length) {
+        showDetail(records[0]);
+        $('searchInput').value = value;
+        applyFilters();
+    }
 }
 
 function enterOrderChain(orderID) {
@@ -1628,11 +1683,11 @@ function renderTable() {
         });
     });
 
-    // Order chain link handlers
+    // Linkage field click handlers
     $('tableContainer').querySelectorAll('.order-link').forEach(el => {
         el.addEventListener('click', e => {
             e.stopPropagation();
-            enterOrderChain(el.dataset.orderId);
+            handleLinkClick(el);
         });
     });
 
@@ -1693,8 +1748,8 @@ function formatCell(col, value) {
         }
         return escapeHtml(s);
     }
-    if ((col === 'orderID' || col === 'parentOrderID') && orderIndex[s]) {
-        return `<span class="order-link" data-order-id="${escapeHtml(s)}" title="Show order chain">${escapeHtml(s)}</span>`;
+    if (LINKAGE_FIELDS[col] && lookupLinkedRecords(col, s)) {
+        return `<span class="order-link" data-link-field="${escapeHtml(col)}" data-link-value="${escapeHtml(s)}" title="Show linked records">${escapeHtml(s)}</span>`;
     }
     if (col === 'type') {
         const cat = EVENT_CATEGORIES[s] || 'other';
@@ -1946,11 +2001,7 @@ $('showAllFields').addEventListener('change', () => {
 $('detailGrid').addEventListener('click', e => {
     const link = e.target.closest('.order-link');
     if (!link) return;
-    const oid = link.dataset.orderId;
-    // Show the first record for this orderID in the detail panel
-    const record = allRecords.find(r => r.orderID === oid);
-    if (record) showDetail(record);
-    enterOrderChain(oid);
+    handleLinkClick(link);
 });
 
 // ── Export ──
@@ -1997,7 +2048,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.03.19k &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.03.19l &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
