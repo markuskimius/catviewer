@@ -43,3 +43,6 @@ A single-file web application for compliance officers to inspect CAT data files.
 ### Sample data
 - `sample_data.json` — 15 records covering MENO, MEOR, MEOT, MEOM, MECO, MENQ events
 - `sample_data.csv` — 6 records (MENO, MEOR) in CSV positional format
+
+### Versioning
+Version is automatically set by a git pre-commit hook (`.git/hooks/pre-commit`). Format: `vYYYY.MM.DD` with a letter suffix (`a`, `b`, ...) for multiple commits on the same day. Do not manually set version numbers in `index.html`.
