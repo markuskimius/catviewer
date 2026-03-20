@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.03.19f
+  CAT File Viewer v2026.03.19g
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -175,7 +175,7 @@
             overflow: auto;
             border: 1px solid var(--border);
             border-radius: 8px;
-            max-height: calc(100vh - 220px);
+            height: calc(65vh - 220px);
             scrollbar-gutter: stable;
         }
         table {
@@ -342,17 +342,20 @@
 
         .detail-panel {
             display: none;
-            margin: 0 24px 24px;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
             background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 8px;
+            border-top: 1px solid var(--border);
             padding: 16px 20px;
-            overflow-y: visible;
+            overflow-y: auto;
+            height: 35vh;
+            box-shadow: 0 -2px 12px rgba(0,0,0,0.15);
         }
         .detail-panel.visible { display: block; }
-        body.detail-open #tabTable { display: flex; flex-direction: column; min-height: calc(100vh - 220px); }
-        body.detail-open .table-container { flex: none; min-height: 120px; max-height: 40vh; }
-        body.detail-open .detail-panel.visible { flex-shrink: 0; min-height: var(--detail-height); }
+        body.detail-open { padding-bottom: 35vh; }
         .detail-panel h3 {
             font-size: 15px;
             margin-bottom: 0;
@@ -513,7 +516,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.03.19f</span>
+    <span class="subtitle">v2026.03.19g</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -1701,24 +1704,6 @@ function showDetail(record) {
     panel.classList.add('visible');
     document.body.classList.add('detail-open');
 
-    // On first show, measure max detail height from actual records
-    if (!showDetail._measured) {
-        showDetail._measured = true;
-        let maxFields = 0;
-        allRecords.forEach(r => {
-            const count = Object.entries(r).filter(([, v]) => v !== undefined && v !== null && v !== '').length;
-            if (count > maxFields) maxFields = count;
-        });
-        const grid = $('detailGrid');
-        const savedHtml = grid.innerHTML;
-        const placeholder = Array.from({length: maxFields}, (_, i) =>
-            `<div class="detail-field"><span class="field-name">field${i}</span><span class="field-value">value</span></div>`
-        ).join('');
-        grid.innerHTML = placeholder;
-        const h = panel.offsetHeight;
-        document.documentElement.style.setProperty('--detail-height', h + 'px');
-        grid.innerHTML = savedHtml;
-    }
 }
 
 function renderEventSummary() {
@@ -1878,7 +1863,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.03.19f &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.03.19g &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
