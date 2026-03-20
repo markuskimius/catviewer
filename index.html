@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.03.19i
+  CAT File Viewer v2026.03.19j
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -501,8 +501,20 @@
             color: var(--red);
             font-size: 14px;
             display: none;
+            align-items: center;
+            justify-content: space-between;
         }
-        .error-bar.visible { display: block; }
+        .error-bar.visible { display: flex; }
+        .error-bar .close-btn {
+            background: none;
+            border: none;
+            color: var(--red);
+            font-size: 18px;
+            cursor: pointer;
+            padding: 0 0 0 12px;
+            opacity: 0.6;
+        }
+        .error-bar .close-btn:hover { opacity: 1; }
 
         @media (max-width: 768px) {
             .toolbar input[type="text"] { width: 100%; }
@@ -518,7 +530,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.03.19i</span>
+    <span class="subtitle">v2026.03.19j</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -733,7 +745,7 @@ fileInput.addEventListener('change', e => {
 });
 
 function showError(msg) {
-    errorBar.textContent = msg;
+    errorBar.innerHTML = `<span>${escapeHtml(msg)}</span><button class="close-btn" onclick="clearError()">&times;</button>`;
     errorBar.classList.add('visible');
 }
 function clearError() {
@@ -1975,7 +1987,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.03.19i &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.03.19j &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
