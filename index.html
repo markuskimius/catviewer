@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.03.19g
+  CAT File Viewer v2026.03.19h
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -175,7 +175,7 @@
             overflow: auto;
             border: 1px solid var(--border);
             border-radius: 8px;
-            height: calc(65vh - 220px);
+            height: calc(55vh - 220px);
             scrollbar-gutter: stable;
         }
         table {
@@ -351,11 +351,13 @@
             border-top: 1px solid var(--border);
             padding: 16px 20px;
             overflow-y: auto;
-            height: 35vh;
+            height: 45vh;
             box-shadow: 0 -2px 12px rgba(0,0,0,0.15);
         }
         .detail-panel.visible { display: block; }
-        body.detail-open { padding-bottom: 35vh; }
+        body.detail-open { padding-bottom: 45vh; }
+        body.detail-open footer { display: none; }
+        body.detail-open .pagination { display: none; }
         .detail-panel h3 {
             font-size: 15px;
             margin-bottom: 0;
@@ -516,7 +518,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.03.19g</span>
+    <span class="subtitle">v2026.03.19h</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -1019,6 +1021,8 @@ function processFileText(file, text) {
 const COMPOUND_FIELDS = new Set(['legDetails', 'buyDetails', 'sellDetails', 'aggregatedOrders', 'clientDetails', 'firmDetails']);
 
 const LEG_DETAIL_FIELDS = ['legRefID', 'symbol', 'optionID', 'openCloseIndicator', 'side', 'legRatioQuantity'];
+const TRADE_SIDE_FIELDS = ['orderKeyDate', 'orderID', 'side', 'retiredFieldPosition', 'firmDesignatedID', 'accountHolderType', 'originatingIMID', 'BFMMFlag'];
+const TRADE_SIDE_FIELDS_SUPP = ['orderKeyDate', 'orderID', 'side', 'quantity', 'originatingIMID', 'firmDesignatedID', 'accountHolderType', 'BFMMFlag'];
 
 function flattenRecord(record) {
     const flat = {};
@@ -1083,8 +1087,61 @@ function renderLegDetailsHTML(value, mode) {
             const raw = leg[f];
             if (raw === undefined || raw === null || raw === '') {
                 html += '<td><span style="color:var(--surface2)">&mdash;</span></td>';
+            } else if (mode === 'translated' && f === 'side' && FIELD_LABELS.side[raw]) {
+                const sideCls = (raw === 'B') ? 'side-buy' : 'side-sell';
+                html += `<td title="${escapeHtml(raw)}"><span class="${sideCls}">${escapeHtml(FIELD_LABELS.side[raw])}</span></td>`;
             } else if (mode === 'translated' && FIELD_LABELS[f] && FIELD_LABELS[f][raw]) {
                 html += `<td title="${escapeHtml(raw)}">${escapeHtml(FIELD_LABELS[f][raw])}</td>`;
+            } else {
+                html += `<td>${escapeHtml(String(raw))}</td>`;
+            }
+        }
+        html += '</tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+}
+
+function parseSideDetails(value, fields) {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    const str = String(value);
+    if (!str.trim()) return [];
+    return str.split('|').filter(s => s.trim()).map(element => {
+        const parts = element.split('@');
+        const obj = {};
+        fields.forEach((field, i) => {
+            if (parts[i] !== undefined && parts[i] !== '') obj[field] = parts[i];
+        });
+        return obj;
+    });
+}
+
+function renderSideDetailsHTML(value, fields, mode) {
+    const items = parseSideDetails(value, fields);
+    if (!items.length) return escapeHtml(String(value));
+    // Filter out retiredFieldPosition
+    const displayFields = fields.filter(f => f !== 'retiredFieldPosition');
+    let html = '<table class="leg-table"><thead><tr>';
+    for (const f of displayFields) {
+        html += `<th>${escapeHtml(f)}</th>`;
+    }
+    html += '</tr></thead><tbody>';
+    items.forEach(item => {
+        html += '<tr>';
+        for (const f of displayFields) {
+            const raw = item[f];
+            if (raw === undefined || raw === null || raw === '') {
+                html += '<td><span style="color:var(--surface2)">&mdash;</span></td>';
+            } else if (mode === 'translated' && f === 'side' && FIELD_LABELS.side[raw]) {
+                const sideCls = (raw === 'B') ? 'side-buy' : 'side-sell';
+                html += `<td title="${escapeHtml(raw)}"><span class="${sideCls}">${escapeHtml(FIELD_LABELS.side[raw])}</span></td>`;
+            } else if (mode === 'translated' && FIELD_LABELS[f] && FIELD_LABELS[f][raw]) {
+                html += `<td title="${escapeHtml(raw)}">${escapeHtml(FIELD_LABELS[f][raw])}</td>`;
+            } else if (mode === 'translated' && /KeyDate$/.test(f) && /^\d{8}T\d{6}\.\d+$/.test(raw)) {
+                const d = raw.slice(0,4)+'-'+raw.slice(4,6)+'-'+raw.slice(6,8);
+                const t = raw.slice(9,11)+':'+raw.slice(11,13)+':'+raw.slice(13);
+                html += `<td title="${escapeHtml(raw)}">${d} ${t}</td>`;
             } else {
                 html += `<td>${escapeHtml(String(raw))}</td>`;
             }
@@ -1328,6 +1385,7 @@ function initializeUI(file) {
     // File info bar
     const eventTypes = new Set(allRecords.map(r => r.type).filter(Boolean));
     const symbols = new Set(allRecords.map(r => r.symbol).filter(Boolean));
+    document.title = `${file.name} — CAT File Viewer`;
     $('fileInfo').innerHTML = `
         <div class="stat">
             <span class="stat-label">File:</span>
@@ -1583,6 +1641,17 @@ function formatCell(col, value) {
         const summary = formatLegSummary(value);
         return summary ? `<span class="leg-summary">${escapeHtml(summary)}</span>` : escapeHtml(s);
     }
+    if (col === 'buyDetails' || col === 'sellDetails') {
+        const items = parseSideDetails(value, TRADE_SIDE_FIELDS);
+        if (items.length) {
+            const item = items[0];
+            const sideLabel = FIELD_LABELS.side[item.side] || item.side || '';
+            const sideCls = (item.side === 'B') ? 'side-buy' : 'side-sell';
+            const parts = [item.orderID || '', item.firmDesignatedID || ''].filter(Boolean);
+            return `<span class="leg-summary"><span class="${sideCls}">${escapeHtml(sideLabel)}</span>${parts.length ? ' | ' + escapeHtml(parts.join(' | ')) : ''}</span>`;
+        }
+        return escapeHtml(s);
+    }
     if ((col === 'orderID' || col === 'parentOrderID') && orderIndex[s]) {
         return `<span class="order-link" data-order-id="${escapeHtml(s)}" title="Show order chain">${escapeHtml(s)}</span>`;
     }
@@ -1604,6 +1673,17 @@ function formatCell(col, value) {
     }
     if (FIELD_LABELS[col] && FIELD_LABELS[col][s]) {
         return `<span title="${escapeHtml(s)}">${escapeHtml(FIELD_LABELS[col][s])}</span>`;
+    }
+    // Timestamps: YYYYMMDDTHHMMSS.ffffff → YYYY-MM-DD HH:MM:SS.ffffff
+    if (/Timestamp$|KeyDate$/.test(col) && /^\d{8}T\d{6}\.\d+$/.test(s)) {
+        const d = s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);
+        const t = s.slice(9,11)+':'+s.slice(11,13)+':'+s.slice(13);
+        return `<span title="${escapeHtml(s)}">${d} ${t}</span>`;
+    }
+    // Dates: YYYYMMDD → YYYY-MM-DD
+    if (/Date$/.test(col) && /^\d{8}$/.test(s)) {
+        const d = s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);
+        return `<span title="${escapeHtml(s)}">${d}</span>`;
     }
     if ((col === 'price' || col === 'fillPrice' || col === 'displayPrice' || col === 'workingPrice' || col === 'netPrice') && !isNaN(Number(s))) {
         return Number(s).toFixed(s.includes('.') ? Math.max(2, (s.split('.')[1] || '').length) : 0);
@@ -1665,13 +1745,25 @@ function renderDetailGrid(record, mode, showAll) {
             continue;
         }
 
-        // Compound fields (legDetails, etc.) get a full-width sub-table in translated mode
+        // Compound fields (legDetails, buyDetails, sellDetails) get a full-width sub-table in translated mode
         if (key === 'legDetails' && mode === 'translated') {
             const legs = parseLegDetails(value);
             if (legs.length) {
                 html += `<div class="detail-field-wide">
                     <div class="field-name">${escapeHtml(key)}</div>
                     ${renderLegDetailsHTML(value, mode)}
+                </div>`;
+                continue;
+            }
+        }
+        if ((key === 'buyDetails' || key === 'sellDetails') && mode === 'translated') {
+            const isSupp = (record.type || '').endsWith('S'); // MEOTS, MOOTS
+            const fields = isSupp ? TRADE_SIDE_FIELDS_SUPP : TRADE_SIDE_FIELDS;
+            const items = parseSideDetails(value, fields);
+            if (items.length) {
+                html += `<div class="detail-field-wide">
+                    <div class="field-name">${escapeHtml(key)}</div>
+                    ${renderSideDetailsHTML(value, fields, mode)}
                 </div>`;
                 continue;
             }
@@ -1704,6 +1796,7 @@ function showDetail(record) {
     panel.classList.add('visible');
     document.body.classList.add('detail-open');
 
+    $('tabBar').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function renderEventSummary() {
@@ -1863,7 +1956,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.03.19g &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.03.19h &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
