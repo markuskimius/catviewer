@@ -72,6 +72,20 @@
         #app { display: none; }
         #app.visible { display: block; }
 
+        .drag-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: rgba(15, 23, 42, 0.85);
+            border: 3px dashed var(--accent);
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+        .drag-overlay.visible { display: flex; }
+        .drag-overlay h2 { font-size: 22px; color: var(--accent); }
+
         .file-info {
             margin: 0 24px;
             padding: 16px 20px;
@@ -237,7 +251,7 @@
         body.detail-open .detail-panel.visible { flex-shrink: 0; min-height: var(--detail-height); }
         .detail-panel h3 {
             font-size: 15px;
-            margin-bottom: 12px;
+            margin-bottom: 0;
             display: flex;
             align-items: center;
             gap: 8px;
@@ -250,6 +264,37 @@
             cursor: pointer;
             font-size: 18px;
         }
+        .detail-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 8px;
+        }
+        .detail-tab {
+            padding: 4px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-radius: 4px;
+            border: none;
+            background: none;
+        }
+        .detail-tab:hover { color: var(--text); }
+        .detail-tab.active { background: var(--surface2); color: var(--text); }
+        .detail-toggle {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--text-muted);
+            cursor: pointer;
+            user-select: none;
+        }
+        .detail-toggle input { cursor: pointer; }
         .detail-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -369,10 +414,11 @@
 
 <div class="drop-zone" id="dropZone">
     <h2>Drop a CAT file here or click to browse</h2>
-    <p>Supports JSON and CSV format CAT data files (.json, .csv, .txt)</p>
-    <input type="file" id="fileInput" accept=".json,.csv,.txt">
+    <p>Supports JSON and CSV format CAT data files (.json, .csv, .txt, .gz)</p>
+    <input type="file" id="fileInput" accept=".json,.csv,.txt,.gz">
 </div>
 
+<div class="drag-overlay" id="dragOverlay"><h2>Drop file to open</h2></div>
 <div class="error-bar" id="errorBar"></div>
 
 <div id="app">
@@ -415,6 +461,13 @@
                 <span id="detailTitle">Record Detail</span>
                 <button class="close-btn" id="closeDetail">&times;</button>
             </h3>
+            <div class="detail-toolbar">
+                <button class="detail-tab active" data-detail-tab="translated">Translated</button>
+                <button class="detail-tab" data-detail-tab="original">Original</button>
+                <label class="detail-toggle">
+                    <input type="checkbox" id="showAllFields"> Show all fields
+                </label>
+            </div>
             <div class="detail-grid" id="detailGrid"></div>
         </div>
     </div>
@@ -524,15 +577,34 @@ const app = $('app');
 const errorBar = $('errorBar');
 
 // ── File Drop / Select ──
+const dragOverlay = $('dragOverlay');
+let dragCounter = 0;
+
 dropZone.addEventListener('click', () => fileInput.click());
-dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-dropZone.addEventListener('drop', e => {
+
+document.addEventListener('dragenter', e => {
     e.preventDefault();
-    dropZone.classList.remove('drag-over');
+    dragCounter++;
+    dragOverlay.classList.add('visible');
+});
+document.addEventListener('dragover', e => {
+    e.preventDefault();
+});
+document.addEventListener('dragleave', e => {
+    e.preventDefault();
+    dragCounter--;
+    if (dragCounter <= 0) { dragCounter = 0; dragOverlay.classList.remove('visible'); }
+});
+document.addEventListener('drop', e => {
+    e.preventDefault();
+    dragCounter = 0;
+    dragOverlay.classList.remove('visible');
     if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
 });
-fileInput.addEventListener('change', e => { if (e.target.files.length) handleFile(e.target.files[0]); });
+fileInput.addEventListener('change', e => {
+    if (e.target.files.length) handleFile(e.target.files[0]);
+    fileInput.value = '';  // allow re-selecting same file
+});
 
 function showError(msg) {
     errorBar.textContent = msg;
@@ -750,8 +822,15 @@ function parseJSON(text) {
     return records;
 }
 
+function stripGzExtension(filename) {
+    const lower = filename.toLowerCase();
+    if (lower.endsWith('.gz')) return filename.slice(0, -3);
+    return filename;
+}
+
 function detectFormat(filename, text) {
-    const ext = filename.toLowerCase().split('.').pop();
+    const name = stripGzExtension(filename).toLowerCase();
+    const ext = name.split('.').pop();
     if (ext === 'json') return 'json';
     if (ext === 'csv' || ext === 'txt') {
         // Check if content looks like JSON
@@ -765,35 +844,51 @@ function detectFormat(filename, text) {
     return 'csv';
 }
 
+async function decompressGzip(file) {
+    const ds = new DecompressionStream('gzip');
+    const stream = file.stream().pipeThrough(ds);
+    const resp = new Response(stream);
+    return await resp.text();
+}
+
 function handleFile(file) {
     clearError();
-    const reader = new FileReader();
-    reader.onload = e => {
-        try {
-            const text = e.target.result;
-            fileFormat = detectFormat(file.name, text);
+    const isGz = file.name.toLowerCase().endsWith('.gz');
 
-            if (fileFormat === 'json') {
-                allRecords = parseJSON(text);
-            } else {
-                allRecords = parseCSV(text);
-            }
+    if (isGz) {
+        decompressGzip(file).then(text => processFileText(file, text)).catch(err => {
+            showError('Error decompressing file: ' + err.message);
+        });
+    } else {
+        const reader = new FileReader();
+        reader.onload = e => processFileText(file, e.target.result);
+        reader.onerror = () => showError('Error reading file.');
+        reader.readAsText(file);
+    }
+}
 
-            if (!allRecords.length) {
-                showError('No records found in file.');
-                return;
-            }
+function processFileText(file, text) {
+    try {
+        fileFormat = detectFormat(file.name, text);
 
-            // Flatten nested objects for display
-            allRecords = allRecords.map(flattenRecord);
-
-            initializeUI(file);
-        } catch (err) {
-            showError('Error parsing file: ' + err.message);
+        if (fileFormat === 'json') {
+            allRecords = parseJSON(text);
+        } else {
+            allRecords = parseCSV(text);
         }
-    };
-    reader.onerror = () => showError('Error reading file.');
-    reader.readAsText(file);
+
+        if (!allRecords.length) {
+            showError('No records found in file.');
+            return;
+        }
+
+        // Flatten nested objects for display
+        allRecords = allRecords.map(flattenRecord);
+
+        initializeUI(file);
+    } catch (err) {
+        showError('Error parsing file: ' + err.message);
+    }
 }
 
 function flattenRecord(record) {
@@ -815,6 +910,21 @@ function flattenRecord(record) {
 function initializeUI(file) {
     dropZone.style.display = 'none';
     app.classList.add('visible');
+
+    // Reset state for new file
+    currentPage = 0;
+    selectedRow = -1;
+    sortCol = null;
+    sortAsc = true;
+    $('searchInput').value = '';
+    $('actionFilter').value = '';
+    $('sideFilter').value = '';
+    $('detailPanel').classList.remove('visible');
+    currentDetailRecord = null;
+    detailMode = 'translated';
+    $('showAllFields').checked = false;
+    document.querySelectorAll('.detail-tab').forEach(t => t.classList.toggle('active', t.dataset.detailTab === 'translated'));
+    showDetail._measured = false;
 
     // Determine columns
     const colSet = new Set();
@@ -1083,26 +1193,79 @@ function formatCell(col, value) {
     return escapeHtml(s);
 }
 
-function showDetail(record) {
-    const panel = $('detailPanel');
-    const grid = $('detailGrid');
-    const cat = EVENT_CATEGORIES[record.type] || 'other';
-    const cls = CATEGORY_CLASS[cat] || 'et-other';
+let detailMode = 'translated';
+let currentDetailRecord = null;
 
-    $('detailTitle').innerHTML = `Record Detail &mdash; <span class="event-type ${cls}">${escapeHtml(record.type || 'Unknown')}</span>`;
+function getFieldsForType(type) {
+    return CAT_CSV_FIELDS[type] || null;
+}
+
+function renderDetailGrid(record, mode, showAll) {
+    const grid = $('detailGrid');
+    const typeFields = getFieldsForType(record.type);
+
+    // Determine which keys to show
+    let keys;
+    if (showAll && typeFields) {
+        // Deduplicate field names from schema (retiredFieldPosition etc. can repeat)
+        const seen = {};
+        keys = [];
+        for (const f of typeFields) {
+            if (seen[f]) {
+                // skip duplicate schema positions (retiredFieldPosition, reservedForFutureUse)
+                continue;
+            }
+            seen[f] = true;
+            keys.push(f);
+        }
+        // Also include any keys in the record not in the schema
+        for (const k of Object.keys(record)) {
+            if (!seen[k]) { seen[k] = true; keys.push(k); }
+        }
+    } else {
+        keys = Object.keys(record);
+    }
 
     let html = '';
-    for (const [key, value] of Object.entries(record)) {
-        if (value === undefined || value === null || value === '') continue;
+    for (const key of keys) {
+        const value = record[key];
+        const isEmpty = value === undefined || value === null || value === '';
+
+        if (!showAll && isEmpty) continue;
+
+        if (isEmpty) {
+            html += `<div class="detail-field">
+                <span class="field-name">${escapeHtml(key)}</span>
+                <span class="field-value"><span style="color:var(--surface2)">&mdash;</span></span>
+            </div>`;
+            continue;
+        }
+
         const raw = String(value);
-        const label = translateValue(key, raw);
-        const display = label ? `${label} <span style="color:var(--text-muted)">(${escapeHtml(raw)})</span>` : escapeHtml(raw);
+        let display;
+        if (mode === 'translated') {
+            const label = translateValue(key, raw);
+            display = label ? `${label} <span style="color:var(--text-muted)">(${escapeHtml(raw)})</span>` : escapeHtml(raw);
+        } else {
+            display = escapeHtml(raw);
+        }
         html += `<div class="detail-field">
             <span class="field-name">${escapeHtml(key)}</span>
             <span class="field-value">${display}</span>
         </div>`;
     }
     grid.innerHTML = html;
+}
+
+function showDetail(record) {
+    const panel = $('detailPanel');
+    const cat = EVENT_CATEGORIES[record.type] || 'other';
+    const cls = CATEGORY_CLASS[cat] || 'et-other';
+
+    currentDetailRecord = record;
+    $('detailTitle').innerHTML = `Record Detail &mdash; <span class="event-type ${cls}">${escapeHtml(record.type || 'Unknown')}</span>`;
+
+    renderDetailGrid(record, detailMode, $('showAllFields').checked);
     panel.classList.add('visible');
     document.body.classList.add('detail-open');
 
@@ -1114,13 +1277,15 @@ function showDetail(record) {
             const count = Object.entries(r).filter(([, v]) => v !== undefined && v !== null && v !== '').length;
             if (count > maxFields) maxFields = count;
         });
+        const grid = $('detailGrid');
+        const savedHtml = grid.innerHTML;
         const placeholder = Array.from({length: maxFields}, (_, i) =>
             `<div class="detail-field"><span class="field-name">field${i}</span><span class="field-value">value</span></div>`
         ).join('');
         grid.innerHTML = placeholder;
         const h = panel.offsetHeight;
         document.documentElement.style.setProperty('--detail-height', h + 'px');
-        grid.innerHTML = html;
+        grid.innerHTML = savedHtml;
     }
 }
 
@@ -1185,12 +1350,28 @@ $('eventFilter').addEventListener('change', applyFilters);
 $('actionFilter').addEventListener('change', applyFilters);
 $('sideFilter').addEventListener('change', applyFilters);
 
-// ── Close detail ──
+// ── Detail panel controls ──
 $('closeDetail').addEventListener('click', () => {
     $('detailPanel').classList.remove('visible');
     document.body.classList.remove('detail-open');
     selectedRow = -1;
+    currentDetailRecord = null;
     renderTable();
+});
+
+document.querySelector('.detail-toolbar').addEventListener('click', e => {
+    const tab = e.target.closest('.detail-tab');
+    if (!tab || !currentDetailRecord) return;
+    document.querySelectorAll('.detail-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    detailMode = tab.dataset.detailTab;
+    renderDetailGrid(currentDetailRecord, detailMode, $('showAllFields').checked);
+});
+
+$('showAllFields').addEventListener('change', () => {
+    if (currentDetailRecord) {
+        renderDetailGrid(currentDetailRecord, detailMode, $('showAllFields').checked);
+    }
 });
 
 // ── Export ──
