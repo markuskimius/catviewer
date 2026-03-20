@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.03.19d
+  CAT File Viewer v2026.03.19e
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -301,6 +301,45 @@
             border-bottom-color: var(--accent);
         }
 
+        .leg-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            margin-top: 4px;
+        }
+        .leg-table th {
+            position: static;
+            background: var(--surface2);
+            padding: 4px 8px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+            font-size: 11px;
+        }
+        .leg-table td {
+            padding: 4px 8px;
+            border-bottom: 1px solid rgba(71, 85, 105, 0.2);
+            white-space: nowrap;
+        }
+        .leg-summary {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+        .detail-field-wide {
+            grid-column: 1 / -1;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .detail-field-wide:hover { background: var(--surface2); }
+        .detail-field-wide .field-name {
+            color: var(--text-muted);
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 12px;
+            margin-bottom: 6px;
+        }
+
         .detail-panel {
             display: none;
             margin: 0 24px 24px;
@@ -312,7 +351,7 @@
         }
         .detail-panel.visible { display: block; }
         body.detail-open #tabTable { display: flex; flex-direction: column; min-height: calc(100vh - 220px); }
-        body.detail-open .table-container { flex: none; min-height: 120px; height: 40vh; }
+        body.detail-open .table-container { flex: none; min-height: 120px; max-height: 40vh; }
         body.detail-open .detail-panel.visible { flex-shrink: 0; min-height: var(--detail-height); }
         .detail-panel h3 {
             font-size: 15px;
@@ -474,7 +513,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.03.19d</span>
+    <span class="subtitle">v2026.03.19e</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -973,10 +1012,18 @@ function processFileText(file, text) {
     }
 }
 
+// Fields that contain multi-dimensional arrays and should be preserved as-is
+const COMPOUND_FIELDS = new Set(['legDetails', 'buyDetails', 'sellDetails', 'aggregatedOrders', 'clientDetails', 'firmDetails']);
+
+const LEG_DETAIL_FIELDS = ['legRefID', 'symbol', 'optionID', 'openCloseIndicator', 'side', 'legRatioQuantity'];
+
 function flattenRecord(record) {
     const flat = {};
     for (const [key, value] of Object.entries(record)) {
-        if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        if (COMPOUND_FIELDS.has(key)) {
+            // Keep compound fields as-is (array or CSV string)
+            flat[key] = value;
+        } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
             for (const [subKey, subVal] of Object.entries(value)) {
                 flat[key + '.' + subKey] = subVal;
             }
@@ -987,6 +1034,62 @@ function flattenRecord(record) {
         }
     }
     return flat;
+}
+
+function parseLegDetails(value) {
+    if (!value) return [];
+    // Already an array of objects (JSON format)
+    if (Array.isArray(value)) return value;
+    // CSV format: elements separated by |, fields within each element separated by @
+    const str = String(value);
+    if (!str.trim()) return [];
+    return str.split('|').filter(s => s.trim()).map(element => {
+        const parts = element.split('@');
+        const leg = {};
+        LEG_DETAIL_FIELDS.forEach((field, i) => {
+            if (parts[i] !== undefined && parts[i] !== '') leg[field] = parts[i];
+        });
+        return leg;
+    });
+}
+
+function formatLegSummary(value) {
+    const legs = parseLegDetails(value);
+    if (!legs.length) return '';
+    const parts = legs.map(leg => {
+        const sym = leg.symbol || leg.optionID || '?';
+        const side = FIELD_LABELS.side[leg.side] || leg.side || '';
+        return `${sym} ${side}`;
+    });
+    return `${legs.length} leg${legs.length > 1 ? 's' : ''}: ${parts.join(' / ')}`;
+}
+
+function renderLegDetailsHTML(value, mode) {
+    const legs = parseLegDetails(value);
+    if (!legs.length) return escapeHtml(String(value));
+    let html = '<table class="leg-table"><thead><tr>';
+    html += '<th>#</th>';
+    for (const f of LEG_DETAIL_FIELDS) {
+        html += `<th>${escapeHtml(f)}</th>`;
+    }
+    html += '</tr></thead><tbody>';
+    legs.forEach((leg, i) => {
+        html += '<tr>';
+        html += `<td>${i + 1}</td>`;
+        for (const f of LEG_DETAIL_FIELDS) {
+            const raw = leg[f];
+            if (raw === undefined || raw === null || raw === '') {
+                html += '<td><span style="color:var(--surface2)">&mdash;</span></td>';
+            } else if (mode === 'translated' && FIELD_LABELS[f] && FIELD_LABELS[f][raw]) {
+                html += `<td title="${escapeHtml(raw)}">${escapeHtml(FIELD_LABELS[f][raw])}</td>`;
+            } else {
+                html += `<td>${escapeHtml(String(raw))}</td>`;
+            }
+        }
+        html += '</tr>';
+    });
+    html += '</tbody></table>';
+    return html;
 }
 
 // ── Order Chain / Hierarchy ──
@@ -1473,6 +1576,10 @@ function formatCell(col, value) {
     if (value === undefined || value === null || value === '') return '<span style="color:var(--surface2)">&mdash;</span>';
     const s = String(value);
 
+    if (col === 'legDetails') {
+        const summary = formatLegSummary(value);
+        return summary ? `<span class="leg-summary">${escapeHtml(summary)}</span>` : escapeHtml(s);
+    }
     if ((col === 'orderID' || col === 'parentOrderID') && orderIndex[s]) {
         return `<span class="order-link" data-order-id="${escapeHtml(s)}" title="Show order chain">${escapeHtml(s)}</span>`;
     }
@@ -1555,11 +1662,22 @@ function renderDetailGrid(record, mode, showAll) {
             continue;
         }
 
-        const raw = String(value);
+        // Compound fields (legDetails, etc.) get a full-width sub-table in translated mode
+        if (key === 'legDetails' && mode === 'translated') {
+            const legs = parseLegDetails(value);
+            if (legs.length) {
+                html += `<div class="detail-field-wide">
+                    <div class="field-name">${escapeHtml(key)}</div>
+                    ${renderLegDetailsHTML(value, mode)}
+                </div>`;
+                continue;
+            }
+        }
+
+        const raw = (typeof value === 'object') ? JSON.stringify(value) : String(value);
         let display;
         if (mode === 'translated') {
-            const label = translateValue(key, raw);
-            display = label ? `${label} <span style="color:var(--text-muted)">(${escapeHtml(raw)})</span>` : escapeHtml(raw);
+            display = formatCell(key, value);
         } else {
             display = escapeHtml(raw);
         }
@@ -1749,7 +1867,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.03.19d &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.03.19e &copy; 2026 Mark Kim &mdash; Licensed under GPL-2.0 | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
