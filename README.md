@@ -25,11 +25,12 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 
 ## Features
 
-- **Sortable, paginated records table** with priority column ordering for the most important CAT fields
+- **Sortable, paginated records table** with priority column ordering and configurable page size (50/100/250/500/All)
+- **Sticky header** — stays visible while scrolling through records
 - **Color-coded event types** — orders, routes, trades, cancels, modifications, quotes, and allocations are visually distinguished
 - **Filtering** — by event type, action type (NEW/RPR/COR/DEL), side (Buy/Sell/Short), and free-text search across all fields
-- **Record detail panel** — fixed to the bottom of the viewport with translated/original view modes
-- **Translated display** — human-readable timestamps, dates, side codes, and compound fields (legDetails, buyDetails, sellDetails)
+- **Record detail panel** — fixed to the bottom of the viewport with animated slide-up/down transitions and translated/original view modes
+- **Translated display** — human-readable timestamps (string format and epoch nanoseconds → Eastern Time), dates, side codes, and compound fields (legDetails, buyDetails, sellDetails)
 - **Clickable linkage fields** — navigate between related records via orderID, tradeID, parentOrderID, priorOrderID, etc.
 - **Order chain view** — hierarchy tree showing parent/child order relationships
 - **Multi-file support** — load multiple files via drag-and-drop or file picker; hold Shift to append

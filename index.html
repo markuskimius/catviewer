@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.03.19n
+  CAT File Viewer v2026.03.20
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -30,6 +30,8 @@
             background: var(--bg);
             color: var(--text);
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
         header {
             background: var(--surface);
@@ -72,8 +74,8 @@
             font-size: 14px;
         }
         .drop-zone input { display: none; }
-        #app { display: none; }
-        #app.visible { display: block; }
+        #app { display: none; flex: 1; flex-direction: column; }
+        #app.visible { display: flex; }
 
         .drag-overlay {
             display: none;
@@ -173,12 +175,15 @@
             border-bottom-color: var(--accent);
         }
 
+        #tabTable { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+        #tabSummary, #tabRaw { flex: 1; }
         .table-container {
             margin: 0 24px 24px;
             overflow: auto;
             border: 1px solid var(--border);
             border-radius: 8px;
-            height: calc(55vh - 220px);
+            flex: 1;
+            min-height: 200px;
             scrollbar-gutter: stable;
         }
         table {
@@ -344,7 +349,6 @@
         }
 
         .detail-panel {
-            display: none;
             position: fixed;
             bottom: 0;
             left: 0;
@@ -356,11 +360,22 @@
             overflow-y: auto;
             height: 45vh;
             box-shadow: 0 -2px 12px rgba(0,0,0,0.15);
+            transform: translateY(100%);
+            opacity: 0;
+            visibility: hidden;
+            transition: transform 0.3s ease, opacity 0.3s ease, visibility 0s 0.3s;
         }
-        .detail-panel.visible { display: block; }
+        .detail-panel.visible {
+            transform: translateY(0);
+            opacity: 1;
+            visibility: visible;
+            transition: transform 0.3s ease, opacity 0.3s ease, visibility 0s 0s;
+        }
+        body { transition: padding-bottom 0.3s ease; }
         body.detail-open { padding-bottom: 45vh; }
         body.detail-open footer { display: none; }
-        body.detail-open .pagination { display: none; }
+        body.detail-open .table-container { flex: none; height: calc(55vh - 250px); }
+        body.detail-open .pagination { margin-bottom: 8px; }
         .detail-panel h3 {
             font-size: 15px;
             margin-bottom: 0;
@@ -465,6 +480,15 @@
             align-items: center;
             gap: 8px;
             font-size: 14px;
+            transition: margin-bottom 0.3s ease;
+        }
+        .pagination select {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 4px 8px;
+            color: var(--text);
+            font-size: 13px;
         }
         .pagination button {
             background: var(--surface);
@@ -533,7 +557,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.03.19n</span>
+    <span class="subtitle">v2026.03.20</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -703,7 +727,7 @@ let fileFormat = '';
 let sortCol = null;
 let sortAsc = true;
 let currentPage = 0;
-const PAGE_SIZE = 100;
+let PAGE_SIZE = 100;
 let selectedRow = -1;
 let orderIndex = {};
 let orderChainRoot = null;
@@ -1179,10 +1203,14 @@ function renderSideDetailsHTML(value, fields, mode) {
                 html += `<td title="${escapeHtml(raw)}"><span class="${sideCls}">${escapeHtml(FIELD_LABELS.side[raw])}</span></td>`;
             } else if (mode === 'translated' && FIELD_LABELS[f] && FIELD_LABELS[f][raw]) {
                 html += `<td title="${escapeHtml(raw)}">${escapeHtml(FIELD_LABELS[f][raw])}</td>`;
-            } else if (mode === 'translated' && /KeyDate$/.test(f) && /^\d{8}T\d{6}\.\d+$/.test(raw)) {
+            } else if (mode === 'translated' && /Timestamp$|KeyDate$/.test(f) && /^\d{8}[T ]\d{6}(\.\d+)?$/.test(raw)) {
                 const d = raw.slice(0,4)+'-'+raw.slice(4,6)+'-'+raw.slice(6,8);
                 const t = raw.slice(9,11)+':'+raw.slice(11,13)+':'+raw.slice(13);
                 html += `<td title="${escapeHtml(raw)}">${d} ${t}</td>`;
+            } else if (mode === 'translated' && /Timestamp$|KeyDate$/.test(f) && /^\d{13,19}$/.test(String(raw))) {
+                const et = formatEpochNanosToET(raw);
+                if (et) html += `<td title="${escapeHtml(String(raw))} (UTC epoch ns → ET)">${et}</td>`;
+                else html += `<td>${escapeHtml(String(raw))}</td>`;
             } else if (mode === 'translated' && LINKAGE_FIELDS[f] && lookupLinkedRecords(f, raw)) {
                 html += `<td><span class="order-link" data-link-field="${escapeHtml(f)}" data-link-value="${escapeHtml(raw)}" title="Show linked records">${escapeHtml(String(raw))}</span></td>`;
             } else {
@@ -1630,8 +1658,8 @@ function applyFilters() {
 }
 
 function renderTable() {
-    const start = currentPage * PAGE_SIZE;
-    const pageRecords = filteredRecords.slice(start, start + PAGE_SIZE);
+    const start = PAGE_SIZE === Infinity ? 0 : currentPage * PAGE_SIZE;
+    const pageRecords = PAGE_SIZE === Infinity ? filteredRecords : filteredRecords.slice(start, start + PAGE_SIZE);
 
     let html = '<table><thead><tr>';
     html += '<th>#</th>';
@@ -1663,19 +1691,31 @@ function renderTable() {
     $('tableContainer').innerHTML = html;
 
     // Pagination
-    const totalPages = Math.ceil(filteredRecords.length / PAGE_SIZE);
+    const totalPages = Math.max(1, Math.ceil(filteredRecords.length / PAGE_SIZE));
     const pag = $('pagination');
-    if (totalPages > 1) {
-        pag.innerHTML = `
-            <button id="prevPage" ${currentPage === 0 ? 'disabled' : ''}>&laquo; Prev</button>
-            <span class="page-info">Page ${currentPage + 1} of ${totalPages}</span>
-            <button id="nextPage" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>Next &raquo;</button>
-        `;
-        $('prevPage')?.addEventListener('click', () => { currentPage--; renderTable(); });
-        $('nextPage')?.addEventListener('click', () => { currentPage++; renderTable(); });
-    } else {
-        pag.innerHTML = '';
-    }
+    const hasPrev = currentPage > 0;
+    const hasNext = currentPage < totalPages - 1;
+    pag.innerHTML = `
+        <button id="prevPage" ${hasPrev ? '' : 'disabled'}>&laquo; Prev</button>
+        <span class="page-info">Page ${currentPage + 1} of ${totalPages}</span>
+        <button id="nextPage" ${hasNext ? '' : 'disabled'}>Next &raquo;</button>
+        <span class="page-info" style="margin-left: auto;">Rows per page:</span>
+        <select id="pageSizeSelect">
+            <option value="100"${PAGE_SIZE===100?' selected':''}>100</option>
+            <option value="500"${PAGE_SIZE===500?' selected':''}>500</option>
+            <option value="1000"${PAGE_SIZE===1000?' selected':''}>1,000</option>
+            <option value="5000"${PAGE_SIZE===5000?' selected':''}>5,000</option>
+            <option value="10000"${PAGE_SIZE===10000?' selected':''}>10,000</option>
+            <option value="Infinity"${PAGE_SIZE===Infinity?' selected':''}>All</option>
+        </select>
+    `;
+    $('prevPage').addEventListener('click', () => { currentPage--; renderTable(); });
+    $('nextPage').addEventListener('click', () => { currentPage++; renderTable(); });
+    $('pageSizeSelect').addEventListener('change', (e) => {
+        PAGE_SIZE = e.target.value === 'Infinity' ? Infinity : parseInt(e.target.value);
+        currentPage = 0;
+        renderTable();
+    });
 
     // Row click handlers
     $('tableContainer').querySelectorAll('tr[data-idx]').forEach(tr => {
@@ -1710,22 +1750,50 @@ function renderTable() {
 }
 
 const FIELD_LABELS = {
-    side: { B: 'BUY', S: 'SELL', SL: 'SELL LONG', SS: 'SELL SHORT', SX: 'SELL SHORT EXEMPT' },
+    side: { B: 'BUY', S: 'SELL', SL: 'SELL LONG', SS: 'SHORT SALE', SX: 'SHORT SALE EXEMPT' },
     orderType: { CAB: 'Cabinet', LMT: 'Limit', MKT: 'Market' },
     tradingSession: { FOR: 'Foreign Only', PRE: 'Pre-Market', PREREG: 'Pre + Regular', REG: 'Regular', REGPOST: 'Regular + Post', POST: 'Post-Market', PREPOST: 'Pre + Post', ALL: 'All Sessions' },
     capacity: { A: 'Agency', P: 'Principal', R: 'Riskless Principal' },
     destinationType: { F: 'Industry Member', E: 'Exchange', N: 'Foreign', O: 'Foreign (OTC)', D: 'Display Facility', S: 'Non-CAT Entity' },
-    senderType: { F: 'Industry Member', E: 'Exchange', N: 'Foreign', S: 'Non-CAT Entity' },
+    senderType: { F: 'Industry Member', E: 'Exchange', N: 'Foreign', O: 'Foreign (OTC)', S: 'Non-CAT Entity' },
     openCloseIndicator: { Open: 'Open', Close: 'Close' },
-    allocationType: { CUS: 'Custodian', DVP: 'Delivery vs Payment', CUSF: 'Custodian Fee', DVPF: 'DVP Fee', CMTA: 'CMTA', FLP: 'Fully Linked Post-Trade', FRM: 'Firm', STO: 'Stock Transfer Officer', OTH: 'Other' },
-    accountHolderType: { A: 'Angel Investor', E: 'Employee', F: 'Firm', I: 'Individual', O: 'Other', V: 'Venture Capital', P: 'Proprietary', X: 'Clearing Firm/Bank' },
+    allocationType: { CUS: 'Custody Account', DVP: 'DVP/RVP Account', CUSF: 'Custody Free of Payment', DVPF: 'DVP/RVP Free of Payment', CMTA: 'Options CMTA', FLP: 'Correspondent Flip', FRM: 'Firm Account', STO: 'Step Out/Step In', OTH: 'Other' },
+    accountHolderType: { A: 'Institutional Customer', E: 'Employee Account', F: 'Foreign', I: 'Individual Customer', O: 'Market Making', V: 'Firm Agency Avg Price', P: 'Other Proprietary', X: 'Error Account' },
     deptType: { A: 'Agency', ATS: 'Alt Trading System', DMA: 'Direct Market Access', SA: 'Sponsored Access', T: 'Trading', O: 'Other' },
-    receivingDeskType: { A: 'Agency', AR: 'Arbitrage', B: 'Block Trading', C: 'Convertible', CR: 'Credit', D: 'Derivatives', EC: 'Electronic Comms', FB: 'Fixed Income/Bond', IN: 'Institutional', IS: 'Institutional Sales', O: 'Other', PF: 'Prime Finance', PR: 'Private Equity/M&A', PT: 'Primary Trading', S: 'Sales', SW: 'Swap', T: 'Trader', TR: 'Transaction Svcs/Risk' },
-    initiator: { C: 'Customer', F: 'Firm' },
+    receivingDeskType: { A: 'Agency', AR: 'Arbitrage', B: 'Block Trading', C: 'Convertible Desk', CR: 'Central Risk Books', D: 'Derivatives', EC: 'Equity Capital Markets', FB: 'Floor Broker', IN: 'International', IS: 'Institutional', O: 'Other', PF: 'Preferred Trading', PR: 'Proprietary', PT: 'Program Trading', S: 'Sales', SW: 'Swaps', T: 'Trading Desk', TR: 'Treasury' },
+    initiator: { C: 'Customer/Client', F: 'Firm' },
     isoInd: { ISOD: 'ISO - Day', ISOI: 'ISO - IOC', NA: 'N/A' },
     atsDisplayInd: { S: 'Subscribers Only', A: 'Aggregated by Price', Y: 'Public Quotation', N: 'Not Displayed' },
     sideDetailsInd: { BUY: 'Buy Side', SELL: 'Sell Side', NA: 'N/A' },
 };
+
+// Convert nanosecond Unix epoch (NUMBER format) to Eastern Time string
+// Returns "YYYY-MM-DD HH:MM:SS.fffffffff" in ET, or null if not a valid epoch
+function formatEpochNanosToET(val) {
+    // Accept number or numeric string of 13-19 digits (ms to ns precision)
+    const str = String(val);
+    if (!/^\d{13,19}$/.test(str)) return null;
+    // Extract milliseconds (first 13 digits) and sub-ms remainder
+    const msStr = str.slice(0, 13);
+    const subMs = str.slice(13).padEnd(6, '0'); // pad to get up to nanoseconds
+    const ms = Number(msStr);
+    const d = new Date(ms);
+    if (isNaN(d.getTime())) return null;
+    // Format in Eastern Time using Intl to get correct ET offset (handles DST)
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false
+    }).formatToParts(d);
+    const p = {};
+    for (const part of parts) p[part.type] = part.value;
+    // hour12:false can return '24' for midnight in some browsers; normalize
+    const hh = p.hour === '24' ? '00' : p.hour;
+    const fracMs = String(d.getUTCMilliseconds()).padStart(3, '0');
+    const frac = fracMs + subMs;
+    return `${p.year}-${p.month}-${p.day} ${hh}:${p.minute}:${p.second}.${frac}`;
+}
 
 function translateValue(col, raw) {
     const map = FIELD_LABELS[col];
@@ -1773,11 +1841,16 @@ function formatCell(col, value) {
     if (FIELD_LABELS[col] && FIELD_LABELS[col][s]) {
         return `<span title="${escapeHtml(s)}">${escapeHtml(FIELD_LABELS[col][s])}</span>`;
     }
-    // Timestamps: YYYYMMDDTHHMMSS.ffffff → YYYY-MM-DD HH:MM:SS.ffffff
-    if (/Timestamp$|KeyDate$/.test(col) && /^\d{8}T\d{6}\.\d+$/.test(s)) {
+    // Timestamps STRING format: YYYYMMDD[T| ]HHMMSS[.ffffff] → YYYY-MM-DD HH:MM:SS[.ffffff]
+    if (/Timestamp$|KeyDate$/.test(col) && /^\d{8}[T ]\d{6}(\.\d+)?$/.test(s)) {
         const d = s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);
         const t = s.slice(9,11)+':'+s.slice(11,13)+':'+s.slice(13);
         return `<span title="${escapeHtml(s)}">${d} ${t}</span>`;
+    }
+    // Timestamps NUMBER format: nanoseconds since epoch (UTC) → YYYY-MM-DD HH:MM:SS.fffffffff ET
+    if (/Timestamp$|KeyDate$/.test(col) && /^\d{13,19}$/.test(s)) {
+        const et = formatEpochNanosToET(value);
+        if (et) return `<span title="${escapeHtml(s)} (UTC epoch ns → ET)">${et}</span>`;
     }
     // Dates: YYYYMMDD → YYYY-MM-DD
     if (/Date$/.test(col) && /^\d{8}$/.test(s)) {
@@ -1892,10 +1965,17 @@ function showDetail(record) {
     $('detailTitle').innerHTML = `Record Detail &mdash; <span class="event-type ${cls}">${escapeHtml(record.type || 'Unknown')}</span>`;
 
     renderDetailGrid(record, detailMode, $('showAllFields').checked);
-    panel.classList.add('visible');
-    document.body.classList.add('detail-open');
 
-    $('tabBar').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Apply padding instantly (no transition) so scrollIntoView target is correct
+    document.body.style.transition = 'none';
+    document.body.classList.add('detail-open');
+    document.body.offsetHeight; // force reflow
+    document.body.style.transition = '';
+
+    panel.classList.add('visible');
+    const headerH = document.querySelector('header').offsetHeight;
+    const tabBarTop = $('tabBar').getBoundingClientRect().top + window.scrollY - headerH;
+    window.scrollTo({ top: tabBarTop, behavior: 'smooth' });
 }
 
 function renderEventSummary() {
@@ -1980,9 +2060,12 @@ window.addEventListener('popstate', e => {
 $('closeDetail').addEventListener('click', () => {
     $('detailPanel').classList.remove('visible');
     document.body.classList.remove('detail-open');
-    selectedRow = -1;
-    currentDetailRecord = null;
-    renderTable();
+    // Delay cleanup until slide-down animation finishes
+    setTimeout(() => {
+        selectedRow = -1;
+        currentDetailRecord = null;
+        renderTable();
+    }, 300);
 });
 
 document.querySelector('.detail-toolbar').addEventListener('click', e => {
@@ -2051,7 +2134,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.03.19n &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.03.20 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 

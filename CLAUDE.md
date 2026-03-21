@@ -24,11 +24,12 @@ A single-file web application for compliance officers to inspect CAT data files.
 ### Key features
 - Drag-and-drop or file picker for JSON (NDJSON) and CSV format CAT files (multiple files supported; hold Shift to append)
 - Auto-detects format from extension and content
-- Sortable, paginated record table with priority column ordering
+- Sortable, paginated record table with priority column ordering and configurable page size (50/100/250/500/All)
+- Sticky header that stays visible while scrolling
 - Filters by event type, action type (NEW/RPR/COR/DEL), side, and free-text search
 - Color-coded event type badges (order/route/trade/cancel/modify/quote/allocation)
-- Fixed record detail panel at bottom of viewport with translated/original view modes
-- Translated display for timestamps, dates, side codes, compound fields (legDetails, buyDetails, sellDetails)
+- Fixed record detail panel at bottom of viewport with animated slide-up/down transitions and translated/original view modes
+- Translated display for timestamps (both string format and epoch nanoseconds → Eastern Time), dates, side codes, compound fields (legDetails, buyDetails, sellDetails)
 - Clickable linkage fields (orderID, tradeID, parentOrderID, priorOrderID, etc.) for navigating between related records
 - Order chain view with hierarchy tree
 - Event Summary tab with counts broken down by action type
@@ -45,4 +46,4 @@ A single-file web application for compliance officers to inspect CAT data files.
 - `sample_data.csv` — 6 records (MENO, MEOR) in CSV positional format
 
 ### Versioning
-Version is automatically set by a git pre-commit hook (`.git/hooks/pre-commit`). Format: `vYYYY.MM.DD` with a letter suffix (`a`, `b`, ...) for multiple commits on the same day. Do not manually set version numbers in `index.html`.
+Version is automatically set by a git pre-commit hook (`.git/hooks/pre-commit`). Format: `vYYYY.MM.DD`. Do not manually set version numbers in `index.html`.
