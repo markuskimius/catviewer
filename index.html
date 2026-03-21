@@ -32,7 +32,7 @@
             height: 100vh;
             display: flex;
             flex-direction: column;
-            overflow: hidden;
+            overflow-y: auto;
         }
         header {
             background: var(--surface);
@@ -76,7 +76,7 @@
             font-size: 14px;
         }
         .drop-zone input { display: none; }
-        #app { display: none; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; }
+        #app { display: none; flex: 1; flex-direction: column; min-height: 0; overflow: visible; }
         #app.visible { display: flex; }
 
         .drag-overlay {
@@ -382,9 +382,11 @@
             z-index: 100;
             background: var(--surface);
             border-top: 1px solid var(--border);
-            padding: 16px 20px;
-            overflow-y: auto;
-            height: 45vh;
+            padding: 0;
+            overflow: hidden;
+            height: 45vh; /* default; overridden dynamically on first open */
+            display: flex;
+            flex-direction: column;
             box-shadow: 0 -2px 12px rgba(0,0,0,0.15);
             transform: translateY(100%);
             opacity: 0;
@@ -427,6 +429,12 @@
         .detail-resize-handle:hover::after,
         .detail-resize-handle:active::after {
             opacity: 0.8;
+        }
+        .detail-panel-content {
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+            padding: 16px 20px;
         }
         body { transition: padding-bottom 0.3s ease; }
         body.detail-open { padding-bottom: 45vh; height: auto; min-height: 100vh; overflow: visible; }
@@ -681,18 +689,20 @@
         <div class="pagination" id="pagination"></div>
         <div class="detail-panel" id="detailPanel">
             <div class="detail-resize-handle" id="detailResizeHandle"></div>
-            <h3>
-                <span id="detailTitle">Record Detail</span>
-                <button class="close-btn" id="closeDetail">&times;</button>
-            </h3>
-            <div class="detail-toolbar">
-                <button class="detail-tab active" data-detail-tab="translated">Translated</button>
-                <button class="detail-tab" data-detail-tab="original">Original</button>
-                <label class="detail-toggle">
-                    <input type="checkbox" id="showAllFields"> Show all fields
-                </label>
+            <div class="detail-panel-content">
+                <h3>
+                    <span id="detailTitle">Record Detail</span>
+                    <button class="close-btn" id="closeDetail">&times;</button>
+                </h3>
+                <div class="detail-toolbar">
+                    <button class="detail-tab active" data-detail-tab="translated">Translated</button>
+                    <button class="detail-tab" data-detail-tab="original">Original</button>
+                    <label class="detail-toggle">
+                        <input type="checkbox" id="showAllFields"> Show all fields
+                    </label>
+                </div>
+                <div class="detail-grid" id="detailGrid"></div>
             </div>
-            <div class="detail-grid" id="detailGrid"></div>
         </div>
     </div>
 
@@ -820,6 +830,8 @@ document.querySelector('header h1').addEventListener('click', () => {
     document.body.classList.remove('detail-open');
     $('detailPanel').style.height = '';
     document.body.style.paddingBottom = '';
+    const tc = document.querySelector('.table-container');
+    if (tc) tc.style.height = '';
     currentDetailRecord = null;
     app.classList.remove('visible');
     dropZone.style.display = '';
@@ -1635,7 +1647,6 @@ function initializeUI() {
     switchTab('table', false);
     $('showAllFields').checked = false;
     document.querySelectorAll('.detail-tab').forEach(t => t.classList.toggle('active', t.dataset.detailTab === 'translated'));
-    showDetail._measured = false;
     orderChainRoot = null;
     orderChainDepth = Infinity;
     chainDisplayData = null;
@@ -2196,6 +2207,44 @@ function showDetail(record, push) {
     document.body.classList.add('detail-open');
     document.body.offsetHeight; // force reflow
     document.body.style.transition = '';
+
+    // Calculate initial height: enough for 30 fields or 50vh, whichever is smaller
+    if (!panel.style.height) {
+        // Force visible to measure layout
+        panel.style.transition = 'none';
+        panel.style.transform = 'translateY(0)';
+        panel.style.visibility = 'visible';
+        panel.offsetHeight; // reflow
+
+        const grid = $('detailGrid');
+        const fields = grid.querySelectorAll('.detail-field');
+        if (fields.length > 0) {
+            const gridStyle = getComputedStyle(grid);
+            const numCols = gridStyle.gridTemplateColumns.split(' ').length || 1;
+            const fieldH = fields[0].offsetHeight + 8; // 8px gap
+            const fieldCount = Math.min(fields.length, 30);
+            const rowsFor30 = Math.ceil(fieldCount / numCols);
+            const gridHeight = rowsFor30 * fieldH;
+            // Measure non-grid overhead (title, toolbar, padding)
+            const contentEl = panel.querySelector('.detail-panel-content');
+            const panelPad = parseFloat(getComputedStyle(contentEl).paddingTop) + parseFloat(getComputedStyle(contentEl).paddingBottom);
+            const titleH = panel.querySelector('h3').offsetHeight;
+            const toolbarH = panel.querySelector('.detail-toolbar').offsetHeight;
+            const overhead = panelPad + titleH + toolbarH + 16; // 16px extra margin
+            const idealH = gridHeight + overhead;
+            const maxH = window.innerHeight * 0.5;
+            const finalH = Math.min(idealH, maxH);
+            panel.style.height = finalH + 'px';
+            document.body.style.paddingBottom = finalH + 'px';
+            document.querySelector('.table-container').style.height = 'calc(100vh - ' + finalH + 'px - 250px)';
+        }
+
+        // Reset for animation
+        panel.style.transform = '';
+        panel.style.visibility = '';
+        panel.offsetHeight; // reflow
+        panel.style.transition = '';
+    }
 
     panel.classList.add('visible');
     const headerH = document.querySelector('header').offsetHeight;
