@@ -690,8 +690,8 @@
 
 <div class="drop-zone" id="dropZone">
     <h2>Drop a CAT file here or click to browse</h2>
-    <p>Supports JSON and CSV format CAT data files (.json, .csv, .txt, .gz)</p>
-    <input type="file" id="fileInput" accept=".json,.csv,.txt,.gz" multiple>
+    <p>Supports JSON and CSV format CAT data files (.json, .csv, .txt, .gz, .zip)</p>
+    <input type="file" id="fileInput" accept=".json,.csv,.txt,.gz,.zip" multiple>
 </div>
 
 <div class="drag-overlay" id="dragOverlay"><h2>Drop to open &mdash; Hold Shift to add</h2></div>
@@ -1175,11 +1175,62 @@ function handleFiles(files, append) {
     }
 }
 
+async function handleZipFile(file, append) {
+    const buf = await file.arrayBuffer();
+    const view = new DataView(buf);
+    const entries = [];
+    // Parse local file headers (signature 0x04034b50)
+    let offset = 0;
+    while (offset + 30 <= buf.byteLength && view.getUint32(offset, true) === 0x04034b50) {
+        const method = view.getUint16(offset + 8, true);
+        const compSize = view.getUint32(offset + 18, true);
+        const uncompSize = view.getUint32(offset + 22, true);
+        const nameLen = view.getUint16(offset + 26, true);
+        const extraLen = view.getUint16(offset + 28, true);
+        const nameBytes = new Uint8Array(buf, offset + 30, nameLen);
+        const name = new TextDecoder().decode(nameBytes);
+        const dataStart = offset + 30 + nameLen + extraLen;
+        if (!name.endsWith('/') && !name.startsWith('__MACOSX') && /\.(json|csv|txt)$/i.test(name)) {
+            entries.push({ name, method, compSize, uncompSize, dataStart });
+        }
+        offset = dataStart + compSize;
+    }
+    if (!entries.length) {
+        showError('No supported files (.json, .csv, .txt) found in ZIP archive.');
+        return;
+    }
+    for (let i = 0; i < entries.length; i++) {
+        const e = entries[i];
+        const raw = new Uint8Array(buf, e.dataStart, e.compSize);
+        let text;
+        if (e.method === 0) {
+            // Stored (no compression)
+            text = new TextDecoder().decode(raw);
+        } else if (e.method === 8) {
+            // Deflate
+            const ds = new DecompressionStream('deflate-raw');
+            const writer = ds.writable.getWriter();
+            writer.write(raw);
+            writer.close();
+            text = await new Response(ds.readable).text();
+        } else {
+            showError(`Unsupported compression method (${e.method}) for ${e.name}`);
+            continue;
+        }
+        const virtualFile = { name: e.name, size: text.length };
+        processFileText(virtualFile, text, append || i > 0);
+    }
+}
+
 function handleFile(file, append) {
     clearError();
-    const isGz = file.name.toLowerCase().endsWith('.gz');
+    const lower = file.name.toLowerCase();
 
-    if (isGz) {
+    if (lower.endsWith('.zip')) {
+        handleZipFile(file, append).catch(err => {
+            showError('Error reading ZIP file: ' + err.message);
+        });
+    } else if (lower.endsWith('.gz')) {
         decompressGzip(file).then(text => processFileText(file, text, append)).catch(err => {
             showError('Error decompressing file: ' + err.message);
         });
