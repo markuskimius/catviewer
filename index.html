@@ -138,24 +138,12 @@
         .toolbar input[type="text"]:focus,
         .toolbar select:focus { border-color: var(--accent); }
         .toolbar select { cursor: pointer; }
-        .toolbar .btn {
-            background: var(--accent);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            padding: 8px 16px;
-            font-size: 14px;
-            cursor: pointer;
-            font-weight: 500;
-        }
-        .toolbar .btn:hover { background: var(--accent-hover); }
+        .toolbar-spacer { flex: 1; }
         .toolbar .btn-secondary {
-            background: var(--surface2);
-            color: var(--text);
+            background: var(--surface2); color: var(--text); border: none; border-radius: 6px;
+            padding: 8px 16px; font-size: 14px; cursor: pointer; font-weight: 500;
         }
         .toolbar .btn-secondary:hover { background: var(--border); }
-        .toolbar .spacer { flex: 1; }
-        .toolbar .record-count { color: var(--text-muted); font-size: 13px; }
 
         .tabs {
             margin: 0 24px;
@@ -180,7 +168,7 @@
         #tabTable { flex: 1; display: flex; flex-direction: column; min-height: 0; }
         #tabSummary, #tabRaw { flex: 1; }
         .table-container {
-            margin: 0 24px 24px;
+            margin: 0 24px 8px;
             overflow: auto;
             border: 1px solid var(--border);
             border-radius: 8px;
@@ -218,6 +206,65 @@
         .col-order-controls .btn { font-size: 12px; padding: 4px 10px; }
         .col-order-saved { color: var(--green); font-size: 12px; opacity: 0; transition: opacity 0.3s; }
         .col-order-saved.visible { opacity: 1; }
+
+        .filter-bar { display: contents; }
+        .filter-item { display: flex; align-items: center; gap: 0; }
+        .combo-box { position: relative; display: inline-block; }
+        .combo-box input {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+            padding: 6px 24px 6px 10px; color: var(--text); font-size: 13px; outline: none; cursor: text;
+            min-width: 100px; box-sizing: border-box;
+        }
+        .combo-box input::placeholder { color: var(--text-muted); }
+        .combo-box input:focus { border-color: var(--accent); }
+        .combo-box.has-value input { color: var(--text); }
+        .combo-box .combo-clear {
+            position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+            background: none; border: none; color: var(--text-muted); cursor: pointer;
+            font-size: 14px; padding: 0 4px; line-height: 1; display: none;
+        }
+        .combo-box.has-value .combo-clear { display: block; }
+        .combo-box .combo-clear:hover { color: var(--text); }
+        .combo-list {
+            position: absolute; z-index: 200; top: 100%; left: 0; right: 0; min-width: 100%;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+            max-height: 250px; overflow: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            display: none; margin-top: 2px;
+        }
+        .combo-list.visible { display: block; }
+        .combo-list .combo-option {
+            padding: 5px 10px; cursor: pointer; font-size: 13px; color: var(--text);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .combo-list .combo-option:hover, .combo-list .combo-option.highlighted {
+            background: var(--surface2);
+        }
+        .combo-list .combo-no-match {
+            padding: 5px 10px; font-size: 13px; color: var(--text-muted); font-style: italic;
+        }
+        .filter-remove {
+            background: none; border: none; color: var(--text-muted); cursor: pointer;
+            font-size: 16px; padding: 2px 4px; line-height: 1; border-radius: 4px;
+        }
+        .filter-remove:hover { color: var(--text); background: var(--surface2); }
+        .filter-add-btn {
+            background: var(--surface2); border: 1px dashed var(--border); border-radius: 6px;
+            padding: 5px 12px; color: var(--text-muted); font-size: 13px; cursor: pointer;
+        }
+        .filter-add-btn:hover { border-color: var(--accent); color: var(--text); }
+
+        .filter-range { display: flex; align-items: center; gap: 0; }
+        .filter-range .combo-box input { border-radius: 0; }
+        .filter-range .combo-box:first-of-type input { border-radius: 6px 0 0 6px; border-right: none; }
+        .filter-range .combo-box:last-of-type input { border-radius: 0 6px 6px 0; }
+        .filter-range .range-sep { background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 6px 4px; font-size: 11px; color: var(--text-muted); line-height: 1; }
+        .filter-mode-toggle {
+            background: none; border: 1px solid var(--border); border-radius: 4px;
+            color: var(--text-muted); font-size: 11px; padding: 2px 6px; cursor: pointer;
+            margin-right: 2px; white-space: nowrap;
+        }
+        .filter-mode-toggle:hover { border-color: var(--accent); color: var(--text); }
+        .filter-mode-toggle.active { border-color: var(--accent); color: var(--accent); }
         td {
             padding: 8px 12px;
             border-bottom: 1px solid rgba(71, 85, 105, 0.3);
@@ -441,7 +488,7 @@
         body.detail-open footer { display: none; }
         body.detail-open #app { overflow: visible; }
         body.detail-open .table-container { flex: none; height: calc(55vh - 250px); }
-        body.detail-open .pagination { margin-bottom: 8px; }
+        body.detail-open .bottom-bar { margin-bottom: 8px; }
         .detail-panel h3 {
             font-size: 15px;
             margin-bottom: 0;
@@ -540,13 +587,28 @@
             margin-top: 4px;
         }
 
-        .pagination {
+        .bottom-bar {
             margin: 0 24px 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+            transition: margin-bottom 0.3s ease;
+        }
+        .bottom-bar .record-count { color: var(--text-muted); font-size: 13px; }
+        .bottom-bar .spacer { flex: 1; }
+        .bottom-bar .btn {
+            background: var(--accent); color: white; border: none; border-radius: 6px;
+            padding: 8px 16px; font-size: 14px; cursor: pointer; font-weight: 500;
+        }
+        .bottom-bar .btn:hover { background: var(--accent-hover); }
+        .bottom-bar .btn-secondary { background: var(--surface2); color: var(--text); }
+        .bottom-bar .btn-secondary:hover { background: var(--border); }
+        .pagination {
             display: flex;
             align-items: center;
             gap: 8px;
             font-size: 14px;
-            transition: margin-bottom 0.3s ease;
         }
         .pagination select {
             background: var(--surface);
@@ -648,30 +710,13 @@
     <div id="tabTable">
         <div class="toolbar">
             <input type="text" id="searchInput" placeholder="Search all fields...">
-            <select id="eventFilter"><option value="">All Event Types</option></select>
-            <select id="actionFilter">
-                <option value="">All Actions</option>
-                <option value="NEW">NEW</option>
-                <option value="RPR">RPR (Repair)</option>
-                <option value="COR">COR (Correction)</option>
-                <option value="DEL">DEL (Delete)</option>
-            </select>
-            <select id="sideFilter">
-                <option value="">All Sides</option>
-                <option value="B">Buy</option>
-                <option value="S">Sell</option>
-                <option value="SL">Sell Long</option>
-                <option value="SS">Sell Short</option>
-                <option value="SX">Sell Short Exempt</option>
-            </select>
-            <span class="spacer"></span>
-            <span class="record-count" id="recordCount"></span>
+            <div class="filter-bar" id="filterBar"></div>
+            <span class="toolbar-spacer"></span>
             <div class="col-order-controls">
                 <span class="col-order-saved" id="colOrderSaved">Saved</span>
-                <button class="btn btn-secondary" id="saveColOrderBtn" title="Save current column order">Save Columns</button>
-                <button class="btn btn-secondary" id="resetColOrderBtn" title="Reset to default column order">Reset Columns</button>
+                <button class="btn btn-secondary" id="saveLayoutBtn" title="Save column order and filters">Save Layout</button>
+                <button class="btn btn-secondary" id="resetLayoutBtn" title="Reset columns and filters to defaults">Reset Layout</button>
             </div>
-            <button class="btn btn-secondary" id="exportBtn">Export CSV</button>
         </div>
         <div class="order-chain-bar" id="orderChainBar">
             <span class="chain-label">Order Chain:</span>
@@ -686,7 +731,12 @@
             <button class="clear-chain" id="clearChain" title="Clear order chain filter">&times;</button>
         </div>
         <div class="table-container" id="tableContainer"></div>
-        <div class="pagination" id="pagination"></div>
+        <div class="bottom-bar">
+            <span class="record-count" id="recordCount"></span>
+            <button class="btn btn-secondary" id="exportBtn">Export CSV</button>
+            <span class="spacer"></span>
+            <div class="pagination" id="pagination"></div>
+        </div>
     </div>
 
     <div id="tabSummary" style="display:none">
@@ -810,6 +860,8 @@ let orderChainDepth = Infinity;
 let chainDisplayData = null;
 let activeTab = 'table';
 let dragSrcColIdx = null;
+const DEFAULT_FILTERS = ['type', 'symbol'];
+let activeFilters = [...DEFAULT_FILTERS]; // column names currently shown as filter dropdowns
 
 // ── DOM ──
 const $ = id => document.getElementById(id);
@@ -1433,24 +1485,30 @@ function buildChainDisplay(rootID, maxDepth, records) {
 }
 
 function getFilterState() {
-    return {
+    const state = {
         search: $('searchInput').value,
-        eventType: $('eventFilter').value,
-        action: $('actionFilter').value,
-        side: $('sideFilter').value,
+        filters: getFilterValues(),
         chainRoot: orderChainRoot,
         chainDepth: orderChainDepth === Infinity ? 'Infinity' : orderChainDepth,
         tab: activeTab,
         detail: currentDetailRecord ? currentDetailRecord._idx : null,
     };
+    return state;
 }
 
 function buildFilterURL(state) {
     const params = new URLSearchParams();
     if (state.search) params.set('q', state.search);
-    if (state.eventType) params.set('type', state.eventType);
-    if (state.action) params.set('action', state.action);
-    if (state.side) params.set('side', state.side);
+    if (state.filters) {
+        for (const [col, val] of Object.entries(state.filters)) {
+            if (typeof val === 'object' && val.mode === 'range') {
+                if (val.min) params.set('f.' + col + '.min', val.min);
+                if (val.max) params.set('f.' + col + '.max', val.max);
+            } else if (val) {
+                params.set('f.' + col, val);
+            }
+        }
+    }
     if (state.chainRoot) params.set('chain', state.chainRoot);
     if (state.chainRoot && state.chainDepth !== 'Infinity') params.set('depth', state.chainDepth);
     if (state.tab && state.tab !== 'table') params.set('tab', state.tab);
@@ -1472,9 +1530,24 @@ function syncURL(push) {
 function restoreFilterState(state) {
     if (!state) state = {};
     $('searchInput').value = state.search || '';
-    $('eventFilter').value = state.eventType || '';
-    $('actionFilter').value = state.action || '';
-    $('sideFilter').value = state.side || '';
+
+    // Ensure filter columns from URL state are visible and set modes
+    const filters = state.filters || {};
+    for (const col of Object.keys(filters)) {
+        if (!activeFilters.includes(col)) activeFilters.push(col);
+        const fv = filters[col];
+        if (typeof fv === 'object' && fv.mode === 'range') filterModes[col] = 'range';
+    }
+    renderFilterBar();
+    // Set filter values
+    for (const [col, val] of Object.entries(filters)) {
+        if (typeof val === 'object' && val.mode === 'range') {
+            setComboBoxValue(col, val.min || '', 'min');
+            setComboBoxValue(col, val.max || '', 'max');
+        } else {
+            setComboBoxValue(col, val);
+        }
+    }
 
     orderChainRoot = state.chainRoot || null;
     orderChainDepth = (!state.chainDepth || state.chainDepth === 'Infinity') ? Infinity : Number(state.chainDepth);
@@ -1573,11 +1646,27 @@ function stateFromHash() {
     if (!hash) return null;
     const params = new URLSearchParams(hash);
     if (!params.toString()) return null;
+    const filters = {};
+    for (const [key, val] of params.entries()) {
+        if (key.startsWith('f.')) {
+            const rest = key.slice(2);
+            if (rest.endsWith('.min') || rest.endsWith('.max')) {
+                const col = rest.replace(/\.(min|max)$/, '');
+                const bound = rest.endsWith('.min') ? 'min' : 'max';
+                if (!filters[col] || typeof filters[col] !== 'object') filters[col] = { mode: 'range', min: '', max: '' };
+                filters[col][bound] = val;
+            } else {
+                filters[rest] = val;
+            }
+        }
+    }
+    // Backwards compat: support old type/action/side params
+    if (params.has('type') && !filters.type) filters.type = params.get('type');
+    if (params.has('action') && !filters.actionType) filters.actionType = params.get('action');
+    if (params.has('side') && !filters.side) filters.side = params.get('side');
     return {
         search: params.get('q') || '',
-        eventType: params.get('type') || '',
-        action: params.get('action') || '',
-        side: params.get('side') || '',
+        filters,
         chainRoot: params.get('chain') || null,
         chainDepth: params.get('depth') || 'Infinity',
         tab: params.get('tab') || 'table',
@@ -1590,9 +1679,23 @@ function loadFiltersFromURL() {
     if (!state) return;
 
     $('searchInput').value = state.search;
-    $('eventFilter').value = state.eventType;
-    $('actionFilter').value = state.action;
-    $('sideFilter').value = state.side;
+
+    // Ensure filter columns from URL are visible and set modes
+    const filters = state.filters || {};
+    for (const col of Object.keys(filters)) {
+        if (!activeFilters.includes(col)) activeFilters.push(col);
+        const fv = filters[col];
+        if (typeof fv === 'object' && fv.mode === 'range') filterModes[col] = 'range';
+    }
+    renderFilterBar();
+    for (const [col, val] of Object.entries(filters)) {
+        if (typeof val === 'object' && val.mode === 'range') {
+            setComboBoxValue(col, val.min || '', 'min');
+            setComboBoxValue(col, val.max || '', 'max');
+        } else {
+            setComboBoxValue(col, val);
+        }
+    }
 
     orderChainRoot = state.chainRoot;
     orderChainDepth = state.chainDepth === 'Infinity' ? Infinity : Number(state.chainDepth);
@@ -1687,8 +1790,10 @@ function initializeUI() {
     sortCol = null;
     sortAsc = true;
     $('searchInput').value = '';
-    $('actionFilter').value = '';
-    $('sideFilter').value = '';
+    // Restore saved filter columns or use defaults
+    const savedFilterCols = getSavedFilterColumns();
+    activeFilters = savedFilterCols ? [...savedFilterCols] : [...DEFAULT_FILTERS];
+    filterModes = {};
     $('detailPanel').classList.remove('visible');
     document.body.classList.remove('detail-open');
     $('detailPanel').style.height = '';
@@ -1766,14 +1871,8 @@ function initializeUI() {
         </div>
     `;
 
-    // Populate event type filter
-    const eventFilter = $('eventFilter');
-    eventFilter.innerHTML = '<option value="">All Event Types</option>';
-    Array.from(eventTypes).sort().forEach(t => {
-        const cat = EVENT_CATEGORIES[t] || 'other';
-        const label = CATEGORY_LABELS[cat] || 'Other';
-        eventFilter.innerHTML += `<option value="${t}">${t} (${label})</option>`;
-    });
+    // Render dynamic filter bar
+    renderFilterBar();
 
     // Summary cards
     renderSummaryCards();
@@ -1834,11 +1933,457 @@ function card(label, value, detail) {
     </div>`;
 }
 
+// ── Dynamic Filters ──
+const PRICE_FIELDS = new Set(['price', 'fillPrice', 'displayPrice', 'workingPrice', 'netPrice']);
+const QTY_FIELDS = new Set(['quantity', 'fillQty', 'leavesQty', 'minQty', 'displayQty', 'cancelQty']);
+const FLAG_FIELDS = new Set(['manualFlag', 'electronicDupFlag', 'negotiatedTradeFlag', 'cancelFlag', 'solicitationFlag', 'affiliateFlag', 'custDspIntrFlag', 'BFMMFlag']);
+let filterModes = {}; // col → 'exact' | 'range'
+
+// Plain-text translation of a raw value for display in filter dropdowns
+// Returns translated string, or null if no translation applies
+function translateFilterValue(col, rawValue) {
+    if (rawValue == null || rawValue === '') return null;
+    const s = String(rawValue);
+
+    // Event type: show "MENO (Order)" style
+    if (col === 'type') {
+        const cat = EVENT_CATEGORIES[s] || 'other';
+        const label = CATEGORY_LABELS[cat] || 'Other';
+        return `${s} (${label})`;
+    }
+    // Action type: show "RPR (Repair)" style
+    if (col === 'actionType') {
+        const labels = { NEW: 'NEW', RPR: 'RPR (Repair)', COR: 'COR (Correction)', DEL: 'DEL (Delete)' };
+        return labels[s] || null;
+    }
+    // FIELD_LABELS lookups (side, orderType, capacity, deptType, etc.)
+    if (FIELD_LABELS[col] && FIELD_LABELS[col][s]) {
+        return `${FIELD_LABELS[col][s]} (${s})`;
+    }
+    // Timestamps STRING format: YYYYMMDDTHHMMSS.fff → YYYY-MM-DD HH:MM:SS.fff
+    if (/Timestamp$|KeyDate$/.test(col) && /^\d{8}[T ]\d{6}(\.\d+)?$/.test(s)) {
+        const d = s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);
+        const t = s.slice(9,11)+':'+s.slice(11,13)+':'+s.slice(13);
+        return `${d} ${t}`;
+    }
+    // Timestamps NUMBER format: epoch nanos → ET string
+    if (/Timestamp$|KeyDate$/.test(col) && /^\d{13,19}$/.test(s)) {
+        const et = formatEpochNanosToET(rawValue);
+        if (et) return et;
+    }
+    // Dates: YYYYMMDD → YYYY-MM-DD
+    if (/Date$/.test(col) && /^\d{8}$/.test(s)) {
+        return s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);
+    }
+    // Prices: format with decimals
+    if (PRICE_FIELDS.has(col) && !isNaN(Number(s))) {
+        return Number(s).toFixed(s.includes('.') ? Math.max(2, (s.split('.')[1] || '').length) : 0);
+    }
+    // Quantities: format with thousands separators
+    if (QTY_FIELDS.has(col) && !isNaN(Number(s))) {
+        return Number(s).toLocaleString();
+    }
+    // Boolean flags: Y/N
+    if (FLAG_FIELDS.has(col)) {
+        return (s === 'true' || s === true) ? 'Yes' : 'No';
+    }
+    return null;
+}
+
+function getColumnType(col) {
+    if (/Timestamp$|KeyDate$/.test(col)) return 'timestamp';
+    if (/Date$/.test(col)) return 'date';
+    if (PRICE_FIELDS.has(col) || QTY_FIELDS.has(col)) return 'number';
+    // Check if all non-empty values in data are numeric
+    if (allRecords.length) {
+        let numCount = 0, total = 0;
+        for (const r of allRecords) {
+            const v = r[col];
+            if (v == null || v === '') continue;
+            total++;
+            if (!isNaN(Number(v))) numCount++;
+            if (total >= 100) break; // sample first 100
+        }
+        if (total > 0 && numCount === total) return 'number';
+    }
+    return 'text';
+}
+
+function isRangeableType(type) {
+    return type === 'timestamp' || type === 'date' || type === 'number';
+}
+
+function getFilterValues() {
+    const values = {};
+    for (const col of activeFilters) {
+        const mode = filterModes[col] || 'exact';
+        if (mode === 'range') {
+            const minBox = document.querySelector(`.filter-item .combo-box[data-col="${col}"][data-bound="min"]`);
+            const maxBox = document.querySelector(`.filter-item .combo-box[data-col="${col}"][data-bound="max"]`);
+            const min = minBox ? minBox.dataset.rawValue || '' : '';
+            const max = maxBox ? maxBox.dataset.rawValue || '' : '';
+            if (min || max) values[col] = { mode: 'range', min, max };
+        } else {
+            const box = document.querySelector(`.filter-item .combo-box[data-col="${col}"]:not([data-bound])`);
+            if (box && box.dataset.rawValue) values[col] = box.dataset.rawValue;
+        }
+    }
+    return values;
+}
+
+function getComparableValue(col, value, colType) {
+    if (value == null || value === '') return null;
+    const s = String(value);
+    if (colType === 'number') return Number(s);
+    if (colType === 'timestamp') {
+        // String format: YYYYMMDDTHHMMSS.ffffff → sortable as-is (strip T/ )
+        if (/^\d{8}[T ]\d{6}(\.\d+)?$/.test(s)) return s.replace(/[T ]/g, '');
+        // Epoch nanos
+        if (/^\d{13,19}$/.test(s)) return s;
+        return s;
+    }
+    if (colType === 'date') {
+        if (/^\d{8}$/.test(s)) return s;
+        return s;
+    }
+    return s;
+}
+
+
+function buildFilterOptions(col) {
+    const vals = new Set(allRecords.map(r => r[col]).filter(v => v != null && v !== ''));
+    const options = Array.from(vals).map(v => {
+        const raw = String(v);
+        const translated = translateFilterValue(col, v);
+        return { raw, display: translated || raw };
+    });
+    options.sort((a, b) => {
+        const na = Number(a.raw), nb = Number(b.raw);
+        if (!isNaN(na) && !isNaN(nb)) return na - nb;
+        return a.display.localeCompare(b.display);
+    });
+    return options;
+}
+
+// Shared canvas for measuring text width
+const _measureCtx = document.createElement('canvas').getContext('2d');
+function measureTextWidth(text, font) {
+    _measureCtx.font = font;
+    return _measureCtx.measureText(text).width;
+}
+
+function createComboBox(col, placeholder, bound) {
+    const options = buildFilterOptions(col);
+    const box = document.createElement('div');
+    box.className = 'combo-box';
+    box.dataset.col = col;
+    if (bound) box.dataset.bound = bound;
+    box.dataset.rawValue = '';
+
+    // Measure widest option to size the input
+    const font = '13px ' + getComputedStyle(document.body).fontFamily;
+    let maxW = measureTextWidth(placeholder, font);
+    for (const o of options) {
+        const w = measureTextWidth(o.display, font);
+        if (w > maxW) maxW = w;
+    }
+    // padding (10+24) + border (2) + small buffer
+    const inputWidth = Math.ceil(maxW) + 44;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = placeholder;
+    input.autocomplete = 'off';
+    input.style.width = inputWidth + 'px';
+    box.appendChild(input);
+
+    const clear = document.createElement('button');
+    clear.className = 'combo-clear';
+    clear.innerHTML = '&times;';
+    clear.tabIndex = -1;
+    box.appendChild(clear);
+
+    const list = document.createElement('div');
+    list.className = 'combo-list';
+    box.appendChild(list);
+
+    let highlighted = -1;
+
+    function renderOptions(filter) {
+        list.innerHTML = '';
+        highlighted = -1;
+        const lc = (filter || '').toLowerCase();
+        const matched = lc ? options.filter(o =>
+            o.display.toLowerCase().includes(lc) || o.raw.toLowerCase().includes(lc)
+        ) : options;
+        if (!matched.length) {
+            const noMatch = document.createElement('div');
+            noMatch.className = 'combo-no-match';
+            noMatch.textContent = 'No matches';
+            list.appendChild(noMatch);
+            return;
+        }
+        matched.forEach((o, i) => {
+            const item = document.createElement('div');
+            item.className = 'combo-option';
+            item.textContent = o.display;
+            item.dataset.raw = o.raw;
+            item.dataset.display = o.display;
+            item.dataset.idx = i;
+            item.addEventListener('mousedown', e => {
+                e.preventDefault(); // prevent blur
+                selectOption(o.raw, o.display);
+            });
+            list.appendChild(item);
+        });
+    }
+
+    function selectOption(raw, display) {
+        box.dataset.rawValue = raw;
+        input.value = display;
+        box.classList.toggle('has-value', !!raw);
+        list.classList.remove('visible');
+        applyFilters();
+    }
+
+    function clearValue() {
+        box.dataset.rawValue = '';
+        input.value = '';
+        box.classList.remove('has-value');
+        applyFilters();
+    }
+
+    function highlightAt(idx) {
+        const items = list.querySelectorAll('.combo-option');
+        items.forEach(it => it.classList.remove('highlighted'));
+        if (idx >= 0 && idx < items.length) {
+            highlighted = idx;
+            items[idx].classList.add('highlighted');
+            items[idx].scrollIntoView({ block: 'nearest' });
+        }
+    }
+
+    input.addEventListener('focus', () => {
+        renderOptions(box.dataset.rawValue ? '' : input.value);
+        list.classList.add('visible');
+    });
+
+    input.addEventListener('input', () => {
+        // When typing, clear the selected raw value so it acts as a search
+        if (box.dataset.rawValue) {
+            box.dataset.rawValue = '';
+            box.classList.remove('has-value');
+        }
+        renderOptions(input.value);
+        list.classList.add('visible');
+    });
+
+    input.addEventListener('blur', () => {
+        // Delay to allow mousedown on option to fire
+        setTimeout(() => {
+            list.classList.remove('visible');
+            // If no value selected and input has text, try to match
+            if (!box.dataset.rawValue && input.value) {
+                const lc = input.value.toLowerCase();
+                const match = options.find(o =>
+                    o.display.toLowerCase() === lc || o.raw.toLowerCase() === lc
+                );
+                if (match) {
+                    selectOption(match.raw, match.display);
+                } else {
+                    input.value = '';
+                }
+            }
+        }, 150);
+    });
+
+    input.addEventListener('keydown', e => {
+        const items = list.querySelectorAll('.combo-option');
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!list.classList.contains('visible')) {
+                renderOptions(input.value);
+                list.classList.add('visible');
+            }
+            highlightAt(Math.min(highlighted + 1, items.length - 1));
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            highlightAt(Math.max(highlighted - 1, 0));
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (highlighted >= 0 && items[highlighted]) {
+                selectOption(items[highlighted].dataset.raw, items[highlighted].dataset.display);
+                input.blur();
+            }
+        } else if (e.key === 'Escape') {
+            list.classList.remove('visible');
+            input.blur();
+        }
+    });
+
+    clear.addEventListener('mousedown', e => {
+        e.preventDefault();
+        clearValue();
+        input.focus();
+    });
+
+    return box;
+}
+
+function setComboBoxValue(col, rawValue, bound) {
+    const selector = bound
+        ? `.filter-item .combo-box[data-col="${col}"][data-bound="${bound}"]`
+        : `.filter-item .combo-box[data-col="${col}"]:not([data-bound])`;
+    const box = document.querySelector(selector);
+    if (!box) return;
+    if (!rawValue) {
+        box.dataset.rawValue = '';
+        box.querySelector('input').value = '';
+        box.classList.remove('has-value');
+        return;
+    }
+    box.dataset.rawValue = rawValue;
+    const translated = translateFilterValue(col, rawValue);
+    box.querySelector('input').value = translated || rawValue;
+    box.classList.add('has-value');
+}
+
+function renderFilterBar() {
+    const bar = $('filterBar');
+    bar.innerHTML = '';
+
+    for (const col of activeFilters) {
+        const colType = getColumnType(col);
+        const rangeable = isRangeableType(colType);
+        const mode = filterModes[col] || 'exact';
+
+        const item = document.createElement('div');
+        item.className = 'filter-item';
+
+        if (rangeable) {
+            const toggle = document.createElement('button');
+            toggle.className = 'filter-mode-toggle' + (mode === 'range' ? ' active' : '');
+            toggle.dataset.col = col;
+            toggle.title = 'Toggle between exact and range filter';
+            toggle.textContent = mode === 'range' ? 'Range' : 'Exact';
+            toggle.addEventListener('click', () => {
+                filterModes[col] = (filterModes[col] || 'exact') === 'exact' ? 'range' : 'exact';
+                renderFilterBar();
+                applyFilters();
+            });
+            item.appendChild(toggle);
+        }
+
+        if (rangeable && mode === 'range') {
+            const rangeDiv = document.createElement('div');
+            rangeDiv.className = 'filter-range';
+            rangeDiv.appendChild(createComboBox(col, 'Min', 'min'));
+            const sep = document.createElement('span');
+            sep.className = 'range-sep';
+            sep.textContent = '–';
+            rangeDiv.appendChild(sep);
+            rangeDiv.appendChild(createComboBox(col, 'Max', 'max'));
+            item.appendChild(rangeDiv);
+        } else {
+            item.appendChild(createComboBox(col, 'All ' + col, null));
+        }
+
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'filter-remove';
+        removeBtn.dataset.col = col;
+        removeBtn.title = 'Remove filter';
+        removeBtn.innerHTML = '&times;';
+        removeBtn.addEventListener('click', () => {
+            activeFilters = activeFilters.filter(c => c !== col);
+            delete filterModes[col];
+            renderFilterBar();
+            applyFilters();
+        });
+        item.appendChild(removeBtn);
+
+        bar.appendChild(item);
+    }
+
+    // "Add filter" button
+    const addBtn = document.createElement('button');
+    addBtn.className = 'filter-add-btn';
+    addBtn.id = 'addFilterBtn';
+    addBtn.textContent = '+ Filter';
+    addBtn.addEventListener('click', showAddFilterMenu);
+    bar.appendChild(addBtn);
+
+}
+
+function showAddFilterMenu(e) {
+    // Remove existing menu if any
+    const existing = document.querySelector('.filter-add-menu');
+    if (existing) { existing.remove(); return; }
+
+    const allCols = new Set();
+    allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx') allCols.add(k); }));
+    const available = Array.from(allCols).sort().filter(c => !activeFilters.includes(c));
+    if (!available.length) return;
+
+    const menu = document.createElement('div');
+    menu.className = 'filter-add-menu';
+    menu.style.cssText = 'position:absolute;z-index:100;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:300px;overflow:auto;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
+
+    const search = document.createElement('input');
+    search.type = 'text';
+    search.placeholder = 'Search columns...';
+    search.style.cssText = 'width:100%;padding:8px 10px;border:none;border-bottom:1px solid var(--border);background:transparent;color:var(--text);font-size:13px;outline:none;box-sizing:border-box;';
+    menu.appendChild(search);
+
+    const list = document.createElement('div');
+    function renderList(filter) {
+        list.innerHTML = '';
+        const filtered = filter ? available.filter(c => c.toLowerCase().includes(filter.toLowerCase())) : available;
+        for (const col of filtered) {
+            const item = document.createElement('div');
+            item.textContent = col;
+            item.style.cssText = 'padding:6px 12px;cursor:pointer;font-size:13px;color:var(--text);';
+            item.addEventListener('mouseenter', () => item.style.background = 'var(--surface2)');
+            item.addEventListener('mouseleave', () => item.style.background = '');
+            item.addEventListener('click', () => {
+                activeFilters.push(col);
+                menu.remove();
+                renderFilterBar();
+                applyFilters();
+            });
+            list.appendChild(item);
+        }
+    }
+    renderList('');
+    search.addEventListener('input', () => renderList(search.value));
+    menu.appendChild(list);
+
+    const btn = e.target;
+    const rect = btn.getBoundingClientRect();
+    menu.style.left = rect.left + 'px';
+    menu.style.top = (rect.bottom + 4) + 'px';
+    menu.style.minWidth = '180px';
+    document.body.appendChild(menu);
+    search.focus();
+
+    const closeMenu = (ev) => {
+        if (!menu.contains(ev.target) && ev.target !== btn) {
+            menu.remove();
+            document.removeEventListener('mousedown', closeMenu);
+        }
+    };
+    setTimeout(() => document.addEventListener('mousedown', closeMenu), 0);
+}
+
+function getSavedFilterColumns() {
+    try {
+        const saved = localStorage.getItem('catViewer_filterColumns');
+        return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+}
+
 function applyFilters(skipSync) {
     const search = $('searchInput').value.toLowerCase();
-    const eventType = $('eventFilter').value;
-    const action = $('actionFilter').value;
-    const side = $('sideFilter').value;
+    const filterValues = getFilterValues();
 
     let pool = allRecords;
     if (orderChainRoot) {
@@ -1847,9 +2392,20 @@ function applyFilters(skipSync) {
     }
 
     filteredRecords = pool.filter(r => {
-        if (eventType && r.type !== eventType) return false;
-        if (action && r.actionType !== action) return false;
-        if (side && r.side !== side) return false;
+        for (const col in filterValues) {
+            const fv = filterValues[col];
+            if (typeof fv === 'object' && fv.mode === 'range') {
+                const colType = getColumnType(col);
+                const val = getComparableValue(col, r[col], colType);
+                if (val === null) return false;
+                const minB = fv.min ? getComparableValue(col, fv.min, colType) : null;
+                const maxB = fv.max ? getComparableValue(col, fv.max, colType) : null;
+                if (minB !== null && val < minB) return false;
+                if (maxB !== null && val > maxB) return false;
+            } else {
+                if (String(r[col] ?? '') !== fv) return false;
+            }
+        }
         if (search) {
             const match = Object.values(r).some(v =>
                 String(v).toLowerCase().includes(search)
@@ -2385,9 +2941,6 @@ $('tabBar').addEventListener('click', e => {
 
 // ── Filter listeners ──
 $('searchInput').addEventListener('input', debounce(applyFilters, 200));
-$('eventFilter').addEventListener('change', applyFilters);
-$('actionFilter').addEventListener('change', applyFilters);
-$('sideFilter').addEventListener('change', applyFilters);
 
 // ── Order chain controls ──
 $('clearChain').addEventListener('click', clearOrderChain);
@@ -2506,15 +3059,17 @@ function getSavedColumnOrder() {
     } catch { return null; }
 }
 
-$('saveColOrderBtn').addEventListener('click', () => {
+$('saveLayoutBtn').addEventListener('click', () => {
     localStorage.setItem('catViewer_columnOrder', JSON.stringify(columns));
+    localStorage.setItem('catViewer_filterColumns', JSON.stringify(activeFilters));
     const msg = $('colOrderSaved');
     msg.classList.add('visible');
     setTimeout(() => msg.classList.remove('visible'), 1500);
 });
 
-$('resetColOrderBtn').addEventListener('click', () => {
+$('resetLayoutBtn').addEventListener('click', () => {
     localStorage.removeItem('catViewer_columnOrder');
+    localStorage.removeItem('catViewer_filterColumns');
     if (!allRecords.length) return;
     const colSet = new Set();
     allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx') colSet.add(k); }));
@@ -2526,7 +3081,10 @@ $('resetColOrderBtn').addEventListener('click', () => {
     for (const col of allCols.sort()) {
         if (!columns.includes(col)) columns.push(col);
     }
-    renderTable();
+    activeFilters = [...DEFAULT_FILTERS];
+    filterModes = {};
+    renderFilterBar();
+    applyFilters();
 });
 
 // ── Export ──
