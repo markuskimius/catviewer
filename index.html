@@ -687,23 +687,6 @@
         </div>
         <div class="table-container" id="tableContainer"></div>
         <div class="pagination" id="pagination"></div>
-        <div class="detail-panel" id="detailPanel">
-            <div class="detail-resize-handle" id="detailResizeHandle"></div>
-            <div class="detail-panel-content">
-                <h3>
-                    <span id="detailTitle">Record Detail</span>
-                    <button class="close-btn" id="closeDetail">&times;</button>
-                </h3>
-                <div class="detail-toolbar">
-                    <button class="detail-tab active" data-detail-tab="translated">Translated</button>
-                    <button class="detail-tab" data-detail-tab="original">Original</button>
-                    <label class="detail-toggle">
-                        <input type="checkbox" id="showAllFields"> Show all fields
-                    </label>
-                </div>
-                <div class="detail-grid" id="detailGrid"></div>
-            </div>
-        </div>
     </div>
 
     <div id="tabSummary" style="display:none">
@@ -712,6 +695,24 @@
 
     <div id="tabRaw" style="display:none">
         <div class="raw-json visible" id="rawContent" style="margin:16px 24px"></div>
+    </div>
+
+    <div class="detail-panel" id="detailPanel">
+        <div class="detail-resize-handle" id="detailResizeHandle"></div>
+        <div class="detail-panel-content">
+            <h3>
+                <span id="detailTitle">Record Detail</span>
+                <button class="close-btn" id="closeDetail">&times;</button>
+            </h3>
+            <div class="detail-toolbar">
+                <button class="detail-tab active" data-detail-tab="translated">Translated</button>
+                <button class="detail-tab" data-detail-tab="original">Original</button>
+                <label class="detail-toggle">
+                    <input type="checkbox" id="showAllFields"> Show all fields
+                </label>
+            </div>
+            <div class="detail-grid" id="detailGrid"></div>
+        </div>
     </div>
 </div>
 
@@ -1505,6 +1506,33 @@ function switchTab(name, push) {
     $('tabTable').style.display = name === 'table' ? '' : 'none';
     $('tabSummary').style.display = name === 'summary' ? '' : 'none';
     $('tabRaw').style.display = name === 'raw' ? '' : 'none';
+    // Animate detail panel when switching tabs
+    const panel = $('detailPanel');
+    if (name === 'table' && currentDetailRecord) {
+        document.body.style.transition = 'none';
+        document.body.classList.add('detail-open');
+        // Recalculate padding and table height from current panel height
+        const panelH = panel.offsetHeight;
+        document.body.style.paddingBottom = panelH + 'px';
+        const tc = document.querySelector('.table-container');
+        if (tc) tc.style.height = 'calc(100vh - ' + panelH + 'px - 250px)';
+        document.body.offsetHeight; // force reflow
+        document.body.style.transition = '';
+        panel.classList.add('visible');
+        // Scroll so tab bar is flush with top of viewport
+        const headerH = document.querySelector('header').offsetHeight;
+        const tabBarTop = $('tabBar').getBoundingClientRect().top + window.scrollY - headerH;
+        window.scrollTo({ top: tabBarTop });
+    } else if (name !== 'table' && currentDetailRecord) {
+        document.body.style.transition = 'none';
+        document.body.classList.remove('detail-open');
+        document.body.style.paddingBottom = '';
+        const tc = document.querySelector('.table-container');
+        if (tc) tc.style.height = '';
+        document.body.offsetHeight; // force reflow
+        document.body.style.transition = '';
+        panel.classList.remove('visible');
+    }
     if (name === 'summary') renderEventSummary();
     if (push) syncURL(true);
 }
