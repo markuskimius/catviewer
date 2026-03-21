@@ -207,7 +207,16 @@
             user-select: none;
         }
         th:hover { color: var(--text); }
+        th[draggable="true"] { cursor: grab; }
+        th[draggable="true"]:active { cursor: grabbing; }
+        th.drag-over-left { box-shadow: inset 3px 0 0 var(--accent); }
+        th.drag-over-right { box-shadow: inset -3px 0 0 var(--accent); }
+        th.dragging { opacity: 0.4; }
         th .sort-arrow { margin-left: 4px; font-size: 10px; }
+        .col-order-controls { display: flex; gap: 6px; align-items: center; }
+        .col-order-controls .btn { font-size: 12px; padding: 4px 10px; }
+        .col-order-saved { color: var(--green); font-size: 12px; opacity: 0; transition: opacity 0.3s; }
+        .col-order-saved.visible { opacity: 1; }
         td {
             padding: 8px 12px;
             border-bottom: 1px solid rgba(71, 85, 105, 0.3);
@@ -648,6 +657,11 @@
             </select>
             <span class="spacer"></span>
             <span class="record-count" id="recordCount"></span>
+            <div class="col-order-controls">
+                <span class="col-order-saved" id="colOrderSaved">Saved</span>
+                <button class="btn btn-secondary" id="saveColOrderBtn" title="Save current column order">Save Columns</button>
+                <button class="btn btn-secondary" id="resetColOrderBtn" title="Reset to default column order">Reset Columns</button>
+            </div>
             <button class="btn btn-secondary" id="exportBtn">Export CSV</button>
         </div>
         <div class="order-chain-bar" id="orderChainBar">
@@ -758,7 +772,7 @@ const CATEGORY_LABELS = {
 
 // Key columns to show in the table (in order of importance)
 const PRIORITY_COLUMNS = [
-    'type', 'actionType', 'firmROEID', 'symbol', 'eventTimestamp',
+    'type', 'actionType', 'firmROEID', 'symbol', 'optionID', 'eventTimestamp',
     'orderKeyDate', 'orderID', 'side', 'price', 'quantity',
     'orderType', 'timeInForce', 'deptType', 'manualFlag',
     'CATReporterIMID', 'firmDesignatedID', 'accountHolderType',
@@ -782,6 +796,7 @@ let orderIndex = {};
 let orderChainRoot = null;
 let orderChainDepth = Infinity;
 let chainDisplayData = null;
+let dragSrcColIdx = null;
 
 // ── DOM ──
 const $ = id => document.getElementById(id);
@@ -797,19 +812,23 @@ let dragCounter = 0;
 dropZone.addEventListener('click', () => fileInput.click());
 
 document.addEventListener('dragenter', e => {
+    if (dragSrcColIdx !== null) return;
     e.preventDefault();
     dragCounter++;
     dragOverlay.classList.add('visible');
 });
 document.addEventListener('dragover', e => {
+    if (dragSrcColIdx !== null) return;
     e.preventDefault();
 });
 document.addEventListener('dragleave', e => {
+    if (dragSrcColIdx !== null) return;
     e.preventDefault();
     dragCounter--;
     if (dragCounter <= 0) { dragCounter = 0; dragOverlay.classList.remove('visible'); }
 });
 document.addEventListener('drop', e => {
+    if (dragSrcColIdx !== null) return;
     e.preventDefault();
     dragCounter = 0;
     dragOverlay.classList.remove('visible');
@@ -1555,13 +1574,29 @@ function initializeUI() {
     allRecords.forEach(r => Object.keys(r).forEach(k => colSet.add(k)));
     const allCols = Array.from(colSet);
 
-    // Sort columns: priority columns first, then alphabetical
-    columns = [];
-    for (const col of PRIORITY_COLUMNS) {
-        if (allCols.includes(col)) columns.push(col);
-    }
-    for (const col of allCols.sort()) {
-        if (!columns.includes(col)) columns.push(col);
+    // Apply saved column order if available, then append any new columns
+    const savedOrder = getSavedColumnOrder();
+    if (savedOrder && savedOrder.length) {
+        columns = [];
+        for (const col of savedOrder) {
+            if (allCols.includes(col)) columns.push(col);
+        }
+        // Append columns not in saved order (new fields from loaded file)
+        for (const col of PRIORITY_COLUMNS) {
+            if (allCols.includes(col) && !columns.includes(col)) columns.push(col);
+        }
+        for (const col of allCols.sort()) {
+            if (!columns.includes(col)) columns.push(col);
+        }
+    } else {
+        // Default: priority columns first, then alphabetical
+        columns = [];
+        for (const col of PRIORITY_COLUMNS) {
+            if (allCols.includes(col)) columns.push(col);
+        }
+        for (const col of allCols.sort()) {
+            if (!columns.includes(col)) columns.push(col);
+        }
     }
 
     // File info bar
@@ -1721,9 +1756,10 @@ function renderTable() {
     let html = '<table><thead><tr>';
     html += '<th>#</th>';
     if (chainDisplayData) html += '<th style="width:1px;padding:0 8px"></th>';
-    for (const col of columns) {
+    for (let ci = 0; ci < columns.length; ci++) {
+        const col = columns[ci];
         const arrow = sortCol === col ? (sortAsc ? ' \u25B2' : ' \u25BC') : '';
-        html += `<th data-col="${escapeHtml(col)}">${escapeHtml(col)}<span class="sort-arrow">${arrow}</span></th>`;
+        html += `<th data-col="${escapeHtml(col)}" data-col-idx="${ci}" draggable="true">${escapeHtml(col)}<span class="sort-arrow">${arrow}</span></th>`;
     }
     html += '</tr></thead><tbody>';
 
@@ -1799,6 +1835,7 @@ function renderTable() {
     // Column sort handlers
     $('tableContainer').querySelectorAll('th[data-col]').forEach(th => {
         th.addEventListener('click', () => {
+            if (th._wasDragged) { th._wasDragged = false; return; }
             const col = th.dataset.col;
             if (sortCol === col) {
                 sortAsc = !sortAsc;
@@ -1807,6 +1844,48 @@ function renderTable() {
                 sortAsc = true;
             }
             applyFilters();
+        });
+    });
+
+    // Column drag-to-reorder handlers
+    $('tableContainer').querySelectorAll('th[draggable="true"]').forEach(th => {
+        th.addEventListener('dragstart', e => {
+            dragSrcColIdx = parseInt(th.dataset.colIdx);
+            th.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', th.dataset.colIdx);
+        });
+        th.addEventListener('dragend', () => {
+            th.classList.remove('dragging');
+            $('tableContainer').querySelectorAll('th').forEach(h => {
+                h.classList.remove('drag-over-left', 'drag-over-right');
+            });
+            dragSrcColIdx = null;
+        });
+        th.addEventListener('dragover', e => {
+            if (dragSrcColIdx === null) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const targetIdx = parseInt(th.dataset.colIdx);
+            $('tableContainer').querySelectorAll('th').forEach(h => {
+                h.classList.remove('drag-over-left', 'drag-over-right');
+            });
+            if (targetIdx !== dragSrcColIdx) {
+                th.classList.add(targetIdx < dragSrcColIdx ? 'drag-over-left' : 'drag-over-right');
+            }
+        });
+        th.addEventListener('dragleave', () => {
+            th.classList.remove('drag-over-left', 'drag-over-right');
+        });
+        th.addEventListener('drop', e => {
+            e.preventDefault();
+            const fromIdx = dragSrcColIdx;
+            const toIdx = parseInt(th.dataset.colIdx);
+            if (fromIdx === null || fromIdx === toIdx) return;
+            const moved = columns.splice(fromIdx, 1)[0];
+            columns.splice(toIdx, 0, moved);
+            th._wasDragged = true;
+            renderTable();
         });
     });
 }
@@ -2196,6 +2275,37 @@ $('detailGrid').addEventListener('click', e => {
     const link = e.target.closest('.order-link');
     if (!link) return;
     handleLinkClick(link);
+});
+
+// ── Column Order Persistence ──
+function getSavedColumnOrder() {
+    try {
+        const saved = localStorage.getItem('catViewer_columnOrder');
+        return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+}
+
+$('saveColOrderBtn').addEventListener('click', () => {
+    localStorage.setItem('catViewer_columnOrder', JSON.stringify(columns));
+    const msg = $('colOrderSaved');
+    msg.classList.add('visible');
+    setTimeout(() => msg.classList.remove('visible'), 1500);
+});
+
+$('resetColOrderBtn').addEventListener('click', () => {
+    localStorage.removeItem('catViewer_columnOrder');
+    if (!allRecords.length) return;
+    const colSet = new Set();
+    allRecords.forEach(r => Object.keys(r).forEach(k => colSet.add(k)));
+    const allCols = Array.from(colSet);
+    columns = [];
+    for (const col of PRIORITY_COLUMNS) {
+        if (allCols.includes(col)) columns.push(col);
+    }
+    for (const col of allCols.sort()) {
+        if (!columns.includes(col)) columns.push(col);
+    }
+    renderTable();
 });
 
 // ── Export ──
