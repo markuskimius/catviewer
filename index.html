@@ -29,9 +29,10 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: var(--bg);
             color: var(--text);
-            min-height: 100vh;
+            height: 100vh;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
         }
         header {
             background: var(--surface);
@@ -74,7 +75,7 @@
             font-size: 14px;
         }
         .drop-zone input { display: none; }
-        #app { display: none; flex: 1; flex-direction: column; }
+        #app { display: none; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; }
         #app.visible { display: flex; }
 
         .drag-overlay {
@@ -372,8 +373,9 @@
             transition: transform 0.3s ease, opacity 0.3s ease, visibility 0s 0s;
         }
         body { transition: padding-bottom 0.3s ease; }
-        body.detail-open { padding-bottom: 45vh; }
+        body.detail-open { padding-bottom: 45vh; height: auto; min-height: 100vh; overflow: visible; }
         body.detail-open footer { display: none; }
+        body.detail-open #app { overflow: visible; }
         body.detail-open .table-container { flex: none; height: calc(55vh - 250px); }
         body.detail-open .pagination { margin-bottom: 8px; }
         .detail-panel h3 {
