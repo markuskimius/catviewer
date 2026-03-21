@@ -1903,9 +1903,11 @@ function renderTable() {
         renderTable();
     });
 
-    // Row click handlers
+    // Row click handlers — skip if user is selecting text
     $('tableContainer').querySelectorAll('tr[data-idx]').forEach(tr => {
         tr.addEventListener('click', () => {
+            const sel = window.getSelection();
+            if (sel && sel.toString().length > 0) return;
             selectedRow = parseInt(tr.dataset.idx);
             showDetail(filteredRecords[selectedRow]);
             renderTable();
