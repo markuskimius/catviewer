@@ -134,7 +134,7 @@
             font-size: 14px;
             outline: none;
         }
-        .toolbar input[type="text"] { width: 300px; }
+        .toolbar input[type="text"] { width: 240px; }
         .toolbar input[type="text"]:focus,
         .toolbar select:focus { border-color: var(--accent); }
         .toolbar select { cursor: pointer; }
@@ -2359,8 +2359,8 @@ function showAddFilterMenu(e) {
 
     const btn = e.target;
     const rect = btn.getBoundingClientRect();
-    menu.style.left = rect.left + 'px';
-    menu.style.top = (rect.bottom + 4) + 'px';
+    menu.style.left = (rect.left + window.scrollX) + 'px';
+    menu.style.top = (rect.bottom + window.scrollY + 4) + 'px';
     menu.style.minWidth = '180px';
     document.body.appendChild(menu);
     search.focus();
