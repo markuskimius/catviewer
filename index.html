@@ -372,6 +372,37 @@
             visibility: visible;
             transition: transform 0.3s ease, opacity 0.3s ease, visibility 0s 0s;
         }
+        .detail-panel.resizing {
+            transition: none;
+            user-select: none;
+        }
+        .detail-resize-handle {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 6px;
+            cursor: ns-resize;
+            background: transparent;
+            z-index: 101;
+        }
+        .detail-resize-handle::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 40px;
+            height: 3px;
+            border-radius: 2px;
+            background: var(--text-muted);
+            opacity: 0.4;
+            transition: opacity 0.2s;
+        }
+        .detail-resize-handle:hover::after,
+        .detail-resize-handle:active::after {
+            opacity: 0.8;
+        }
         body { transition: padding-bottom 0.3s ease; }
         body.detail-open { padding-bottom: 45vh; height: auto; min-height: 100vh; overflow: visible; }
         body.detail-open footer { display: none; }
@@ -619,6 +650,7 @@
         <div class="table-container" id="tableContainer"></div>
         <div class="pagination" id="pagination"></div>
         <div class="detail-panel" id="detailPanel">
+            <div class="detail-resize-handle" id="detailResizeHandle"></div>
             <h3>
                 <span id="detailTitle">Record Detail</span>
                 <button class="close-btn" id="closeDetail">&times;</button>
@@ -2062,6 +2094,10 @@ window.addEventListener('popstate', e => {
 $('closeDetail').addEventListener('click', () => {
     $('detailPanel').classList.remove('visible');
     document.body.classList.remove('detail-open');
+    // Clear any resize overrides
+    $('detailPanel').style.height = '';
+    document.body.style.paddingBottom = '';
+    document.querySelector('.table-container').style.height = '';
     // Delay cleanup until slide-down animation finishes
     setTimeout(() => {
         selectedRow = -1;
@@ -2069,6 +2105,38 @@ $('closeDetail').addEventListener('click', () => {
         renderTable();
     }, 300);
 });
+
+// ── Detail panel resize ──
+(function() {
+    const handle = $('detailResizeHandle');
+    const panel = $('detailPanel');
+    let startY, startH;
+
+    function onMouseMove(e) {
+        const newH = Math.max(150, Math.min(window.innerHeight - 50, startH + (startY - e.clientY)));
+        const vh = (newH / window.innerHeight * 100);
+        panel.style.height = vh + 'vh';
+        document.body.style.paddingBottom = vh + 'vh';
+        document.querySelector('.table-container').style.height = 'calc(' + (100 - vh) + 'vh - 250px)';
+    }
+
+    function onMouseUp() {
+        panel.classList.remove('resizing');
+        document.body.style.userSelect = '';
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+    }
+
+    handle.addEventListener('mousedown', e => {
+        e.preventDefault();
+        startY = e.clientY;
+        startH = panel.getBoundingClientRect().height;
+        panel.classList.add('resizing');
+        document.body.style.userSelect = 'none';
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    });
+})();
 
 document.querySelector('.detail-toolbar').addEventListener('click', e => {
     const tab = e.target.closest('.detail-tab');
