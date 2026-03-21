@@ -836,7 +836,7 @@ document.querySelector('header h1').addEventListener('click', () => {
     app.classList.remove('visible');
     dropZone.style.display = '';
     document.title = 'CAT File Viewer';
-    history.pushState({root: true}, '', location.pathname);
+    history.pushState(null, '', location.pathname + location.search);
 });
 
 document.addEventListener('dragenter', e => {
@@ -1455,7 +1455,7 @@ function buildFilterURL(state) {
     if (state.tab && state.tab !== 'table') params.set('tab', state.tab);
     if (state.detail != null) params.set('detail', state.detail);
     const qs = params.toString();
-    return qs ? '?' + qs : location.pathname;
+    return qs ? '#' + qs : location.pathname + location.search;
 }
 
 function syncURL(push) {
@@ -1525,10 +1525,12 @@ function closeDetail(push) {
     }, 300);
 }
 
-function loadFiltersFromURL() {
-    const params = new URLSearchParams(location.search);
-    if (!params.toString()) return;
-    const state = {
+function stateFromHash() {
+    const hash = location.hash.replace(/^#/, '');
+    if (!hash) return null;
+    const params = new URLSearchParams(hash);
+    if (!params.toString()) return null;
+    return {
         search: params.get('q') || '',
         eventType: params.get('type') || '',
         action: params.get('action') || '',
@@ -1538,6 +1540,12 @@ function loadFiltersFromURL() {
         tab: params.get('tab') || 'table',
         detail: params.has('detail') ? parseInt(params.get('detail')) : null,
     };
+}
+
+function loadFiltersFromURL() {
+    const state = stateFromHash();
+    if (!state) return;
+
     $('searchInput').value = state.search;
     $('eventFilter').value = state.eventType;
     $('actionFilter').value = state.action;
@@ -1651,7 +1659,7 @@ function initializeUI() {
     orderChainDepth = Infinity;
     chainDisplayData = null;
     $('orderChainBar').classList.remove('visible');
-    history.replaceState({}, '', location.pathname);
+    history.replaceState({}, '', location.pathname + location.search);
 
     // Determine columns
     const colSet = new Set();
@@ -2247,6 +2255,32 @@ function showDetail(record, push) {
     }
 
     panel.classList.add('visible');
+
+    // Select the corresponding row in the table
+    const filteredIdx = filteredRecords.indexOf(record);
+    if (filteredIdx !== -1 && filteredIdx !== selectedRow) {
+        selectedRow = filteredIdx;
+        // Navigate to the page containing this row
+        const page = Math.floor(filteredIdx / PAGE_SIZE);
+        if (page !== currentPage) currentPage = page;
+        renderTable();
+        // Scroll the selected row into view within the table container
+        const selectedTr = $('tableContainer').querySelector('tr.selected');
+        if (selectedTr) {
+            const container = $('tableContainer');
+            const stickyH = container.querySelector('thead') ? container.querySelector('thead').offsetHeight : 0;
+            const rowTop = selectedTr.offsetTop - stickyH;
+            const rowBottom = selectedTr.offsetTop + selectedTr.offsetHeight;
+            const viewTop = container.scrollTop + stickyH;
+            const viewBottom = container.scrollTop + container.clientHeight;
+            if (rowTop < viewTop) {
+                container.scrollTop = rowTop - stickyH;
+            } else if (rowBottom > viewBottom) {
+                container.scrollTop = rowBottom - container.clientHeight;
+            }
+        }
+    }
+
     const headerH = document.querySelector('header').offsetHeight;
     const tabBarTop = $('tabBar').getBoundingClientRect().top + window.scrollY - headerH;
     window.scrollTo({ top: tabBarTop, behavior: 'smooth' });
@@ -2321,12 +2355,17 @@ $('depthControls').addEventListener('click', e => {
     applyFilters();
 });
 
-// ── History (back button) ──
+// ── History (back/forward button) ──
+let _ignoreHashChange = false;
 window.addEventListener('popstate', e => {
-    const state = e.state || {};
+    _ignoreHashChange = true;
+    setTimeout(() => _ignoreHashChange = false, 0);
 
-    // Navigate to root: hide app, show drop zone (data retained for back navigation)
-    if (state.root) {
+    const state = stateFromHash();
+
+    // No hash = root state: show drop zone (data retained for back navigation)
+    if (!state) {
+        if (!allRecords.length) return;
         $('detailPanel').classList.remove('visible');
         document.body.classList.remove('detail-open');
         currentDetailRecord = null;
@@ -2347,6 +2386,14 @@ window.addEventListener('popstate', e => {
     }
 
     restoreFilterState(state);
+});
+
+// ── Hash change (manual URL editing) ──
+window.addEventListener('hashchange', () => {
+    if (_ignoreHashChange) return;
+    if (!allRecords.length) return;
+    const state = stateFromHash();
+    if (state) restoreFilterState(state);
 });
 
 // ── Detail panel controls ──
