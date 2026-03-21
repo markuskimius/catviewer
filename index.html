@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.03.20
+  CAT File Viewer v2026.03.21
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -48,6 +48,7 @@
         header h1 {
             font-size: 20px;
             font-weight: 600;
+            cursor: pointer;
         }
         header .subtitle {
             color: var(--text-muted);
@@ -614,7 +615,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.03.20</span>
+    <span class="subtitle">v2026.03.21</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -796,6 +797,7 @@ let orderIndex = {};
 let orderChainRoot = null;
 let orderChainDepth = Infinity;
 let chainDisplayData = null;
+let activeTab = 'table';
 let dragSrcColIdx = null;
 
 // ── DOM ──
@@ -810,6 +812,20 @@ const dragOverlay = $('dragOverlay');
 let dragCounter = 0;
 
 dropZone.addEventListener('click', () => fileInput.click());
+
+// ── Header title click → reset to drop zone ──
+document.querySelector('header h1').addEventListener('click', () => {
+    if (!allRecords.length) return;
+    $('detailPanel').classList.remove('visible');
+    document.body.classList.remove('detail-open');
+    $('detailPanel').style.height = '';
+    document.body.style.paddingBottom = '';
+    currentDetailRecord = null;
+    app.classList.remove('visible');
+    dropZone.style.display = '';
+    document.title = 'CAT File Viewer';
+    history.pushState({root: true}, '', location.pathname);
+});
 
 document.addEventListener('dragenter', e => {
     if (dragSrcColIdx !== null) return;
@@ -1142,6 +1158,7 @@ function processFileText(file, text, append) {
         }
         loadedFiles.push({ name: file.name, format: fmt, size: file.size, count: newRecords.length });
         fileFormat = fmt;
+        allRecords.forEach((r, i) => r._idx = i);
         buildOrderIndex();
 
         initializeUI();
@@ -1410,6 +1427,8 @@ function getFilterState() {
         side: $('sideFilter').value,
         chainRoot: orderChainRoot,
         chainDepth: orderChainDepth === Infinity ? 'Infinity' : orderChainDepth,
+        tab: activeTab,
+        detail: currentDetailRecord ? currentDetailRecord._idx : null,
     };
 }
 
@@ -1421,6 +1440,8 @@ function buildFilterURL(state) {
     if (state.side) params.set('side', state.side);
     if (state.chainRoot) params.set('chain', state.chainRoot);
     if (state.chainRoot && state.chainDepth !== 'Infinity') params.set('depth', state.chainDepth);
+    if (state.tab && state.tab !== 'table') params.set('tab', state.tab);
+    if (state.detail != null) params.set('detail', state.detail);
     const qs = params.toString();
     return qs ? '?' + qs : location.pathname;
 }
@@ -1451,7 +1472,45 @@ function restoreFilterState(state) {
     } else {
         $('orderChainBar').classList.remove('visible');
     }
+
+    // Restore tab
+    switchTab(state.tab || 'table', false);
+
+    // Restore detail
+    if (state.detail != null && allRecords[state.detail]) {
+        showDetail(allRecords[state.detail], false);
+    } else {
+        closeDetail(false);
+    }
+
     applyFilters();
+}
+
+function switchTab(name, push) {
+    activeTab = name;
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+    $('tabTable').style.display = name === 'table' ? '' : 'none';
+    $('tabSummary').style.display = name === 'summary' ? '' : 'none';
+    $('tabRaw').style.display = name === 'raw' ? '' : 'none';
+    if (name === 'summary') renderEventSummary();
+    if (push) syncURL(true);
+}
+
+function closeDetail(push) {
+    const panel = $('detailPanel');
+    if (!panel.classList.contains('visible')) return;
+    panel.classList.remove('visible');
+    document.body.classList.remove('detail-open');
+    panel.style.height = '';
+    document.body.style.paddingBottom = '';
+    const tc = document.querySelector('.table-container');
+    if (tc) tc.style.height = '';
+    currentDetailRecord = null;
+    if (push !== false) syncURL(true);
+    setTimeout(() => {
+        selectedRow = -1;
+        renderTable();
+    }, 300);
 }
 
 function loadFiltersFromURL() {
@@ -1464,6 +1523,8 @@ function loadFiltersFromURL() {
         side: params.get('side') || '',
         chainRoot: params.get('chain') || null,
         chainDepth: params.get('depth') || 'Infinity',
+        tab: params.get('tab') || 'table',
+        detail: params.has('detail') ? parseInt(params.get('detail')) : null,
     };
     $('searchInput').value = state.search;
     $('eventFilter').value = state.eventType;
@@ -1474,6 +1535,15 @@ function loadFiltersFromURL() {
     orderChainDepth = state.chainDepth === 'Infinity' ? Infinity : Number(state.chainDepth);
 
     if (orderChainRoot) updateChainBar();
+
+    // Restore tab
+    if (state.tab && state.tab !== 'table') switchTab(state.tab, false);
+
+    // Restore detail after table renders
+    if (state.detail != null && allRecords[state.detail]) {
+        setTimeout(() => showDetail(allRecords[state.detail], false), 0);
+    }
+
     history.replaceState(state, '', location.href);
 }
 
@@ -1558,8 +1628,11 @@ function initializeUI() {
     $('sideFilter').value = '';
     $('detailPanel').classList.remove('visible');
     document.body.classList.remove('detail-open');
+    $('detailPanel').style.height = '';
+    document.body.style.paddingBottom = '';
     currentDetailRecord = null;
     detailMode = 'translated';
+    switchTab('table', false);
     $('showAllFields').checked = false;
     document.querySelectorAll('.detail-tab').forEach(t => t.classList.toggle('active', t.dataset.detailTab === 'translated'));
     showDetail._measured = false;
@@ -1571,7 +1644,7 @@ function initializeUI() {
 
     // Determine columns
     const colSet = new Set();
-    allRecords.forEach(r => Object.keys(r).forEach(k => colSet.add(k)));
+    allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx') colSet.add(k); }));
     const allCols = Array.from(colSet);
 
     // Apply saved column order if available, then append any new columns
@@ -2055,6 +2128,7 @@ function renderDetailGrid(record, mode, showAll) {
 
     let html = '';
     for (const key of keys) {
+        if (key === '_idx') continue;
         const value = record[key];
         const isEmpty = value === undefined || value === null || value === '';
 
@@ -2107,7 +2181,7 @@ function renderDetailGrid(record, mode, showAll) {
     grid.innerHTML = html;
 }
 
-function showDetail(record) {
+function showDetail(record, push) {
     const panel = $('detailPanel');
     const cat = EVENT_CATEGORIES[record.type] || 'other';
     const cls = CATEGORY_CLASS[cat] || 'et-other';
@@ -2127,6 +2201,8 @@ function showDetail(record) {
     const headerH = document.querySelector('header').offsetHeight;
     const tabBarTop = $('tabBar').getBoundingClientRect().top + window.scrollY - headerH;
     window.scrollTo({ top: tabBarTop, behavior: 'smooth' });
+
+    if (push !== false) syncURL(true);
 }
 
 function renderEventSummary() {
@@ -2165,7 +2241,8 @@ function renderEventSummary() {
 function renderRawTab() {
     const maxShow = 50;
     const sample = allRecords.slice(0, maxShow);
-    $('rawContent').textContent = JSON.stringify(sample, null, 2) +
+    const replacer = (k, v) => k === '_idx' ? undefined : v;
+    $('rawContent').textContent = JSON.stringify(sample, replacer, 2) +
         (allRecords.length > maxShow ? `\n\n... (${allRecords.length - maxShow} more records)` : '');
 }
 
@@ -2173,15 +2250,9 @@ function renderRawTab() {
 $('tabBar').addEventListener('click', e => {
     const tab = e.target.closest('.tab');
     if (!tab) return;
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-
     const name = tab.dataset.tab;
-    $('tabTable').style.display = name === 'table' ? '' : 'none';
-    $('tabSummary').style.display = name === 'summary' ? '' : 'none';
-    $('tabRaw').style.display = name === 'raw' ? '' : 'none';
-
-    if (name === 'summary') renderEventSummary();
+    if (name === activeTab) return;
+    switchTab(name, true);
 });
 
 // ── Filter listeners ──
@@ -2203,25 +2274,34 @@ $('depthControls').addEventListener('click', e => {
 
 // ── History (back button) ──
 window.addEventListener('popstate', e => {
+    const state = e.state || {};
+
+    // Navigate to root: hide app, show drop zone (data retained for back navigation)
+    if (state.root) {
+        $('detailPanel').classList.remove('visible');
+        document.body.classList.remove('detail-open');
+        currentDetailRecord = null;
+        app.classList.remove('visible');
+        dropZone.style.display = '';
+        document.title = 'CAT File Viewer';
+        return;
+    }
+
     if (!allRecords.length) return;
-    restoreFilterState(e.state);
+
+    // Restore app view if coming back from root
+    if (!app.classList.contains('visible')) {
+        dropZone.style.display = 'none';
+        app.classList.add('visible');
+        const fileNames = loadedFiles.map(f => f.name);
+        document.title = `${fileNames.join(', ')} — CAT File Viewer`;
+    }
+
+    restoreFilterState(state);
 });
 
 // ── Detail panel controls ──
-$('closeDetail').addEventListener('click', () => {
-    $('detailPanel').classList.remove('visible');
-    document.body.classList.remove('detail-open');
-    // Clear any resize overrides
-    $('detailPanel').style.height = '';
-    document.body.style.paddingBottom = '';
-    document.querySelector('.table-container').style.height = '';
-    // Delay cleanup until slide-down animation finishes
-    setTimeout(() => {
-        selectedRow = -1;
-        currentDetailRecord = null;
-        renderTable();
-    }, 300);
-});
+$('closeDetail').addEventListener('click', () => closeDetail(true));
 
 // ── Detail panel resize ──
 (function() {
@@ -2296,7 +2376,7 @@ $('resetColOrderBtn').addEventListener('click', () => {
     localStorage.removeItem('catViewer_columnOrder');
     if (!allRecords.length) return;
     const colSet = new Set();
-    allRecords.forEach(r => Object.keys(r).forEach(k => colSet.add(k)));
+    allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx') colSet.add(k); }));
     const allCols = Array.from(colSet);
     columns = [];
     for (const col of PRIORITY_COLUMNS) {
@@ -2352,7 +2432,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.03.20 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.03.21 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
