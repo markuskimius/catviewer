@@ -1453,7 +1453,7 @@ function buildFilterURL(state) {
     if (state.chainRoot) params.set('chain', state.chainRoot);
     if (state.chainRoot && state.chainDepth !== 'Infinity') params.set('depth', state.chainDepth);
     if (state.tab && state.tab !== 'table') params.set('tab', state.tab);
-    if (state.detail != null) params.set('detail', state.detail);
+    if (state.detail != null) params.set('detail', state.detail + 1);
     const qs = params.toString();
     return qs ? '#' + qs : location.pathname + location.search;
 }
@@ -1539,7 +1539,7 @@ function stateFromHash() {
         chainRoot: params.get('chain') || null,
         chainDepth: params.get('depth') || 'Infinity',
         tab: params.get('tab') || 'table',
-        detail: params.has('detail') ? parseInt(params.get('detail')) : null,
+        detail: params.has('detail') ? parseInt(params.get('detail')) - 1 : null,
     };
 }
 
