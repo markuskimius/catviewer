@@ -1488,14 +1488,15 @@ function restoreFilterState(state) {
     // Restore tab
     switchTab(state.tab || 'table', false);
 
-    // Restore detail
+    // Apply filters first so filteredRecords is populated before showDetail
+    applyFilters(true);
+
+    // Restore detail (after applyFilters so page navigation works)
     if (state.detail != null && allRecords[state.detail]) {
         showDetail(allRecords[state.detail], false);
     } else {
         closeDetail(false);
     }
-
-    applyFilters();
 }
 
 function switchTab(name, push) {
@@ -1791,7 +1792,7 @@ function card(label, value, detail) {
     </div>`;
 }
 
-function applyFilters() {
+function applyFilters(skipSync) {
     const search = $('searchInput').value.toLowerCase();
     const eventType = $('eventFilter').value;
     const action = $('actionFilter').value;
@@ -1838,7 +1839,7 @@ function applyFilters() {
     currentPage = 0;
     renderTable();
     $('recordCount').textContent = `${filteredRecords.length.toLocaleString()} of ${allRecords.length.toLocaleString()} records`;
-    syncURL(false);
+    if (!skipSync) syncURL(false);
 }
 
 function renderTable() {
