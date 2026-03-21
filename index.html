@@ -1509,20 +1509,34 @@ function switchTab(name, push) {
     // Animate detail panel when switching tabs
     const panel = $('detailPanel');
     if (name === 'table' && currentDetailRecord) {
-        document.body.style.transition = 'none';
+        // Capture current scroll before layout change
+        const scrollBefore = window.scrollY;
         document.body.classList.add('detail-open');
         // Recalculate padding and table height from current panel height
         const panelH = panel.offsetHeight;
         document.body.style.paddingBottom = panelH + 'px';
         const tc = document.querySelector('.table-container');
         if (tc) tc.style.height = 'calc(100vh - ' + panelH + 'px - 250px)';
-        document.body.offsetHeight; // force reflow
-        document.body.style.transition = '';
         panel.classList.add('visible');
-        // Scroll so tab bar is flush with top of viewport
+        // Animate scroll so tab bar ends up flush below sticky header
         const headerH = document.querySelector('header').offsetHeight;
         const tabBarTop = $('tabBar').getBoundingClientRect().top + window.scrollY - headerH;
-        window.scrollTo({ top: tabBarTop });
+        // Start from current visual position, animate to target
+        window.scrollTo({ top: scrollBefore });
+        const startScroll = scrollBefore;
+        const distance = tabBarTop - startScroll;
+        if (Math.abs(distance) > 1) {
+            const duration = 300;
+            const startTime = performance.now();
+            function animateScroll(now) {
+                const elapsed = now - startTime;
+                const t = Math.min(elapsed / duration, 1);
+                const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+                window.scrollTo({ top: startScroll + distance * ease });
+                if (t < 1) requestAnimationFrame(animateScroll);
+            }
+            requestAnimationFrame(animateScroll);
+        }
     } else if (name !== 'table' && currentDetailRecord) {
         document.body.style.transition = 'none';
         document.body.classList.remove('detail-open');
