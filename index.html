@@ -827,6 +827,9 @@
                 <button class="btn btn-secondary" id="colMgrBtn" title="Show, hide, and reorder columns">Columns...</button>
                 <button class="btn btn-secondary" id="saveLayoutBtn" title="Save column order and filters">Save Layout</button>
                 <button class="btn btn-secondary" id="resetLayoutBtn" title="Reset columns and filters to defaults">Reset Layout</button>
+                <button class="btn btn-secondary" id="exportLayoutBtn" title="Export layout to file">Export Layout</button>
+                <button class="btn btn-secondary" id="importLayoutBtn" title="Import layout from file">Import Layout</button>
+                <input type="file" id="importLayoutInput" accept=".json" style="display:none">
             </div>
         </div>
         <div class="order-chain-bar" id="orderChainBar">
@@ -3531,6 +3534,77 @@ $('resetLayoutBtn').addEventListener('click', () => {
     filterModes = {};
     renderFilterBar();
     applyFilters();
+});
+
+$('exportLayoutBtn').addEventListener('click', () => {
+    const layout = {
+        version: 1,
+        columnOrder: columns,
+        hiddenColumns: [...hiddenColumns],
+        filterColumns: activeFilters,
+    };
+    const blob = new Blob([JSON.stringify(layout, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'catviewer_layout.json';
+    a.click();
+    URL.revokeObjectURL(url);
+});
+
+$('importLayoutBtn').addEventListener('click', () => $('importLayoutInput').click());
+$('importLayoutInput').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+        try {
+            const layout = JSON.parse(reader.result);
+            if (!layout.columnOrder || !Array.isArray(layout.columnOrder)) {
+                showError('Invalid layout file: missing columnOrder');
+                return;
+            }
+            // Apply column order — keep any columns from current data that aren't in the file
+            if (allRecords.length) {
+                const colSet = new Set();
+                allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx') colSet.add(k); }));
+                const allCols = Array.from(colSet);
+                columns = [];
+                for (const col of layout.columnOrder) {
+                    if (allCols.includes(col)) columns.push(col);
+                }
+                for (const col of allCols.sort()) {
+                    if (!columns.includes(col)) columns.push(col);
+                }
+            } else {
+                columns = layout.columnOrder;
+            }
+            // Apply hidden columns
+            hiddenColumns.clear();
+            if (Array.isArray(layout.hiddenColumns)) {
+                for (const col of layout.hiddenColumns) hiddenColumns.add(col);
+            }
+            // Apply filter columns
+            if (Array.isArray(layout.filterColumns)) {
+                activeFilters = layout.filterColumns;
+            }
+            filterModes = {};
+            // Save to localStorage so it persists
+            localStorage.setItem('catViewer_columnOrder', JSON.stringify(columns));
+            localStorage.setItem('catViewer_hiddenColumns', JSON.stringify([...hiddenColumns]));
+            localStorage.setItem('catViewer_filterColumns', JSON.stringify(activeFilters));
+            renderFilterBar();
+            applyFilters();
+            const msg = $('colOrderSaved');
+            msg.textContent = 'Imported';
+            msg.classList.add('visible');
+            setTimeout(() => { msg.classList.remove('visible'); msg.textContent = 'Saved'; }, 1500);
+        } catch (err) {
+            showError('Failed to parse layout file: ' + err.message);
+        }
+    };
+    reader.readAsText(file);
+    $('importLayoutInput').value = '';
 });
 
 // ── Column Manager ──
