@@ -457,7 +457,7 @@
             border-top: 1px solid var(--border);
             padding: 0;
             overflow: hidden;
-            height: 45vh; /* default; overridden dynamically on first open */
+            height: var(--detail-h, 45vh);
             display: flex;
             flex-direction: column;
             box-shadow: 0 -2px 12px rgba(0,0,0,0.15);
@@ -510,10 +510,10 @@
             padding: 16px 20px;
         }
         body { transition: padding-bottom 0.3s ease; }
-        body.detail-open { padding-bottom: 45vh; height: auto; min-height: 100vh; overflow: visible; }
+        body.detail-open { padding-bottom: var(--detail-h, 45vh); height: auto; min-height: 100vh; overflow: visible; }
         body.detail-open footer { display: none; }
         body.detail-open #app { overflow: visible; }
-        body.detail-open .table-container { flex: none; height: calc(55vh - 250px); }
+        body.detail-open .table-container { flex: none; height: calc(100vh - var(--detail-h, 45vh) - 250px); }
         body.detail-open .bottom-bar { margin-bottom: 8px; }
         .detail-panel h3 {
             font-size: 15px;
@@ -908,6 +908,7 @@ document.querySelector('header h1').addEventListener('click', () => {
     if (!allRecords.length) return;
     $('detailPanel').classList.remove('visible');
     document.body.classList.remove('detail-open');
+    document.documentElement.style.removeProperty('--detail-h');
     $('detailPanel').style.height = '';
     document.body.style.paddingBottom = '';
     const tc = document.querySelector('.table-container');
@@ -1667,11 +1668,9 @@ function switchTab(name, push) {
         // Capture current scroll before layout change
         const scrollBefore = window.scrollY;
         document.body.classList.add('detail-open');
-        // Recalculate padding and table height from current panel height
+        // Recalculate layout from current panel height
         const panelH = panel.offsetHeight;
-        document.body.style.paddingBottom = panelH + 'px';
-        const tc = document.querySelector('.table-container');
-        if (tc) tc.style.height = 'calc(100vh - ' + panelH + 'px - 250px)';
+        document.documentElement.style.setProperty('--detail-h', panelH + 'px');
         panel.classList.add('visible');
         // Animate scroll so tab bar ends up flush below sticky header
         const headerH = document.querySelector('header').offsetHeight;
@@ -1695,9 +1694,7 @@ function switchTab(name, push) {
     } else if (name !== 'table' && currentDetailRecord) {
         document.body.style.transition = 'none';
         document.body.classList.remove('detail-open');
-        document.body.style.paddingBottom = '';
-        const tc = document.querySelector('.table-container');
-        if (tc) tc.style.height = '';
+        document.documentElement.style.removeProperty('--detail-h');
         document.body.offsetHeight; // force reflow
         document.body.style.transition = '';
         panel.classList.remove('visible');
@@ -1711,6 +1708,7 @@ function closeDetail(push) {
     if (!panel.classList.contains('visible')) return;
     panel.classList.remove('visible');
     document.body.classList.remove('detail-open');
+    document.documentElement.style.removeProperty('--detail-h');
     panel.style.height = '';
     document.body.style.paddingBottom = '';
     const tc = document.querySelector('.table-container');
@@ -1879,6 +1877,7 @@ function initializeUI() {
     filterModes = {};
     $('detailPanel').classList.remove('visible');
     document.body.classList.remove('detail-open');
+    document.documentElement.style.removeProperty('--detail-h');
     $('detailPanel').style.height = '';
     document.body.style.paddingBottom = '';
     currentDetailRecord = null;
@@ -3093,7 +3092,7 @@ function showDetail(record, push) {
     document.body.style.transition = '';
 
     // Calculate initial height: enough for 30 fields or 50vh, whichever is smaller
-    if (!panel.style.height) {
+    if (!document.documentElement.style.getPropertyValue('--detail-h')) {
         // Force visible to measure layout
         panel.style.transition = 'none';
         panel.style.transform = 'translateY(0)';
@@ -3118,9 +3117,7 @@ function showDetail(record, push) {
             const idealH = gridHeight + overhead;
             const maxH = window.innerHeight * 0.5;
             const finalH = Math.min(idealH, maxH);
-            panel.style.height = finalH + 'px';
-            document.body.style.paddingBottom = finalH + 'px';
-            document.querySelector('.table-container').style.height = 'calc(100vh - ' + finalH + 'px - 250px)';
+            document.documentElement.style.setProperty('--detail-h', finalH + 'px');
         }
 
         // Reset for animation
@@ -3281,14 +3278,14 @@ $('closeDetail').addEventListener('click', () => closeDetail(true));
     function onMouseMove(e) {
         const newH = Math.max(150, Math.min(window.innerHeight - 50, startH + (startY - e.clientY)));
         const vh = (newH / window.innerHeight * 100);
-        panel.style.height = vh + 'vh';
-        document.body.style.paddingBottom = vh + 'vh';
-        document.querySelector('.table-container').style.height = 'calc(' + (100 - vh) + 'vh - 250px)';
+        // Single property drives panel height, body padding, and table height atomically via CSS
+        document.documentElement.style.setProperty('--detail-h', vh + 'vh');
     }
 
     function onMouseUp() {
         panel.classList.remove('resizing');
         document.body.style.userSelect = '';
+        document.body.style.transition = '';
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
     }
@@ -3299,6 +3296,7 @@ $('closeDetail').addEventListener('click', () => closeDetail(true));
         startH = panel.getBoundingClientRect().height;
         panel.classList.add('resizing');
         document.body.style.userSelect = 'none';
+        document.body.style.transition = 'none';
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', onMouseUp);
     });
