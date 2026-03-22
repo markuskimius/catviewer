@@ -1014,7 +1014,7 @@ const CATEGORY_LABELS = {
 const PRIORITY_COLUMNS = [
     'type', 'actionType', 'firmROEID', 'symbol', 'underlying', 'optionID', 'eventTimestamp',
     'orderKeyDate', 'orderID', 'side', 'price', 'quantity',
-    'orderType', 'timeInForce', 'deptType', 'manualFlag',
+    'orderType', 'timeInForce.type', 'timeInForce.value', 'deptType', 'manualFlag',
     'CATReporterIMID', 'firmDesignatedID', 'accountHolderType',
     'destination', 'routedOrderID', 'senderIMID',
     'tradeKeyDate', 'tradeID', 'fillPrice', 'fillQty',
@@ -1507,7 +1507,30 @@ const TRADE_SIDE_FIELDS_SUPP = ['orderKeyDate', 'orderID', 'side', 'quantity', '
 function flattenRecord(record) {
     const flat = {};
     for (const [key, value] of Object.entries(record)) {
-        if (COMPOUND_FIELDS.has(key)) {
+        if (key === 'timeInForce') {
+            // timeInForce: extract single name/value pair into .type and .value
+            if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+                // JSON format: {"DAY": 20190528} or {"IOC": true}
+                flat._timeInForce_original = JSON.stringify(value);
+                const keys = Object.keys(value);
+                if (keys.length > 0) {
+                    flat['timeInForce.type'] = keys[0];
+                    flat['timeInForce.value'] = value[keys[0]] === true ? '' : String(value[keys[0]]);
+                }
+            } else {
+                // CSV format string: "DAY=20190528" or "IOC"
+                flat._timeInForce_original = value;
+                const str = String(value || '');
+                const eqIdx = str.indexOf('=');
+                if (eqIdx >= 0) {
+                    flat['timeInForce.type'] = str.slice(0, eqIdx);
+                    flat['timeInForce.value'] = str.slice(eqIdx + 1);
+                } else if (str) {
+                    flat['timeInForce.type'] = str;
+                    flat['timeInForce.value'] = '';
+                }
+            }
+        } else if (COMPOUND_FIELDS.has(key)) {
             // Keep compound fields as-is (array or CSV string)
             flat[key] = value;
         } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
@@ -2081,7 +2104,7 @@ function initializeUI() {
 
     // Determine columns
     const colSet = new Set();
-    allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx') colSet.add(k); }));
+    allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx' && k !== '_timeInForce_original') colSet.add(k); }));
     const allCols = Array.from(colSet);
 
     // Apply saved column order if available, then append any new columns
@@ -2255,6 +2278,15 @@ function translateFilterValue(col, rawValue) {
     // Dates: YYYYMMDD → YYYY-MM-DD
     if (/Date$/.test(col) && /^\d{8}$/.test(s)) {
         return s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);
+    }
+    // timeInForce.value: date or timestamp
+    if (col === 'timeInForce.value' && s) {
+        if (/^\d{8}$/.test(s)) return s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);
+        if (/^\d{8}[T ]\d{6}(\.\d+)?$/.test(s)) {
+            const d = s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);
+            const t = s.slice(9,11)+':'+s.slice(11,13)+':'+s.slice(13);
+            return `${d} ${t}`;
+        }
     }
     // Prices: format with decimals
     if (PRICE_FIELDS.has(col) && !isNaN(Number(s))) {
@@ -3207,6 +3239,18 @@ function formatCell(col, value) {
         const d = s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);
         return `<span title="${escapeHtml(s)}">${d}</span>`;
     }
+    // timeInForce.value: format as date (YYYYMMDD) or timestamp (YYYYMMDDTHHMMSS...)
+    if (col === 'timeInForce.value' && s) {
+        if (/^\d{8}$/.test(s)) {
+            const d = s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);
+            return `<span title="${escapeHtml(s)}">${d}</span>`;
+        }
+        if (/^\d{8}[T ]\d{6}(\.\d+)?$/.test(s)) {
+            const d = s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);
+            const t = s.slice(9,11)+':'+s.slice(11,13)+':'+s.slice(13);
+            return `<span title="${escapeHtml(s)}">${d} ${t}</span>`;
+        }
+    }
     if ((col === 'price' || col === 'fillPrice' || col === 'displayPrice' || col === 'workingPrice' || col === 'netPrice') && !isNaN(Number(s))) {
         return Number(s).toFixed(s.includes('.') ? Math.max(2, (s.split('.')[1] || '').length) : 0);
     }
@@ -3250,17 +3294,85 @@ function renderDetailGrid(record, mode, showAll) {
         keys = Object.keys(record);
     }
 
+    // In original mode, replace timeInForce.type/.value with the raw timeInForce
+    // In translated mode, replace timeInForce with timeInForce.type/.value
+    if (mode === 'original' && record._timeInForce_original !== undefined) {
+        // Replace timeInForce (or timeInForce.type) position with the original value
+        // Add a placeholder only when timeInForce.value would be visible in translated mode
+        const needPlaceholder = showAll || (record['timeInForce.value'] !== undefined && record['timeInForce.value'] !== null && record['timeInForce.value'] !== '');
+        const newKeys = [];
+        let inserted = false;
+        for (const k of keys) {
+            if (k === 'timeInForce.type' || k === 'timeInForce.value' || k === '_timeInForce_original') continue;
+            if (k === 'timeInForce' && !inserted) {
+                newKeys.push('_timeInForce_original');
+                if (needPlaceholder) newKeys.push('_placeholder');
+                inserted = true;
+            } else {
+                newKeys.push(k);
+            }
+        }
+        if (!inserted) {
+            // timeInForce wasn't in schema keys; find position of timeInForce.type
+            const finalKeys = [...newKeys];
+            const idx = keys.indexOf('timeInForce.type');
+            if (idx >= 0) {
+                let pos = 0;
+                for (let i = 0; i < idx; i++) {
+                    if (keys[i] !== '_timeInForce_original' && keys[i] !== 'timeInForce.value') pos++;
+                }
+                finalKeys.splice(pos, 0, '_timeInForce_original');
+                if (needPlaceholder) finalKeys.splice(pos + 1, 0, '_placeholder');
+                keys = finalKeys;
+            } else {
+                newKeys.push('_timeInForce_original');
+                if (needPlaceholder) newKeys.push('_placeholder');
+                keys = newKeys;
+            }
+        } else {
+            keys = newKeys;
+        }
+    } else {
+        // Translated mode or no timeInForce: filter out internal fields, expand timeInForce
+        const newKeys = [];
+        const added = new Set();
+        for (const k of keys) {
+            if (k === '_timeInForce_original') continue;
+            if (k === 'timeInForce') {
+                // Replace schema's timeInForce with the split fields
+                if (!added.has('timeInForce.type')) {
+                    newKeys.push('timeInForce.type');
+                    newKeys.push('timeInForce.value');
+                    added.add('timeInForce.type');
+                    added.add('timeInForce.value');
+                }
+            } else if (added.has(k)) {
+                continue; // skip duplicate
+            } else {
+                newKeys.push(k);
+                added.add(k);
+            }
+        }
+        keys = newKeys;
+    }
+
     let html = '';
     for (const key of keys) {
         if (key === '_idx') continue;
+        if (key === '_placeholder') {
+            html += '<div class="detail-field" style="visibility:hidden"></div>';
+            continue;
+        }
         const value = record[key];
         const isEmpty = value === undefined || value === null || value === '';
 
         if (!showAll && isEmpty) continue;
 
+        const displayKey = key === '_timeInForce_original' ? 'timeInForce' : key;
+
         if (isEmpty) {
             html += `<div class="detail-field">
-                <span class="field-name">${escapeHtml(key)}</span>
+                <span class="field-name">${escapeHtml(displayKey)}</span>
                 <span class="field-value"><span style="color:var(--surface2)">&mdash;</span></span>
             </div>`;
             continue;
@@ -3298,7 +3410,7 @@ function renderDetailGrid(record, mode, showAll) {
             display = escapeHtml(raw);
         }
         html += `<div class="detail-field">
-            <span class="field-name">${escapeHtml(key)}</span>
+            <span class="field-name">${escapeHtml(displayKey)}</span>
             <span class="field-value">${display}</span>
         </div>`;
     }
@@ -3427,7 +3539,7 @@ function renderEventSummary() {
 function renderRawTab() {
     const maxShow = 50;
     const sample = allRecords.slice(0, maxShow);
-    const replacer = (k, v) => k === '_idx' ? undefined : v;
+    const replacer = (k, v) => (k === '_idx' || k === '_timeInForce_original') ? undefined : v;
     $('rawContent').textContent = JSON.stringify(sample, replacer, 2) +
         (allRecords.length > maxShow ? `\n\n... (${allRecords.length - maxShow} more records)` : '');
 }
@@ -3630,7 +3742,7 @@ $('resetLayoutBtn').addEventListener('click', () => {
     hiddenColumns.clear();
     if (!allRecords.length) return;
     const colSet = new Set();
-    allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx') colSet.add(k); }));
+    allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx' && k !== '_timeInForce_original') colSet.add(k); }));
     const allCols = Array.from(colSet);
     columns = [];
     for (const col of PRIORITY_COLUMNS) {
@@ -3674,7 +3786,7 @@ function applyLayout(layout) {
     // Apply column order — keep any columns from current data that aren't in the file
     if (allRecords.length) {
         const colSet = new Set();
-        allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx') colSet.add(k); }));
+        allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx' && k !== '_timeInForce_original') colSet.add(k); }));
         const allCols = Array.from(colSet);
         columns = [];
         for (const col of layout.columnOrder) {
