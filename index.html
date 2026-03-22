@@ -129,15 +129,18 @@
             flex-wrap: wrap;
             align-items: center;
         }
+        .toolbar input, .toolbar button, .toolbar select { font-family: inherit; }
         .toolbar input[type="text"],
         .toolbar select {
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 6px;
-            padding: 8px 12px;
+            padding: 6px 12px;
             color: var(--text);
-            font-size: 14px;
+            font-size: 13px;
             outline: none;
+            height: 32px;
+            box-sizing: border-box;
         }
         .toolbar input[type="text"] { width: 240px; }
         .toolbar input[type="text"]:focus,
@@ -171,8 +174,8 @@
         .toolbar .btn-secondary:hover { background: var(--border); }
         .btn-clear-all {
             background: none; border: 1px solid var(--border); border-radius: 6px;
-            color: var(--muted); padding: 4px 10px; font-size: 12px; cursor: pointer;
-            white-space: nowrap; display: none;
+            color: var(--muted); padding: 4px 10px; font-size: 13px; cursor: pointer;
+            white-space: nowrap; display: none; height: 32px; box-sizing: border-box;
         }
         .btn-clear-all:hover { color: var(--text); border-color: var(--text); }
         .btn-clear-all.visible { display: inline-block; }
@@ -245,9 +248,10 @@
         .tools-menu-wrap { position: relative; }
         .tools-menu-btn {
             display: flex; align-items: center; gap: 5px;
-            font-size: 12px; padding: 4px 10px;
+            font-size: 13px; padding: 4px 10px;
             background: var(--surface2); color: var(--text); border: 1px solid var(--border);
             border-radius: 6px; cursor: pointer; font-weight: 500;
+            height: 32px; box-sizing: border-box;
         }
         .tools-menu-btn:hover { background: var(--border); }
         .tools-menu-btn .arrow { font-size: 8px; }
@@ -354,6 +358,7 @@
             display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap;
             background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
             padding: 4px 8px; font-size: 13px; color: var(--text-muted); cursor: pointer;
+            height: 32px; box-sizing: border-box;
             user-select: none;
         }
         .filter-label:hover { border-color: var(--accent); color: var(--text); }
@@ -364,7 +369,7 @@
         .filter-item:not(.expanded) .filter-range { display: none; }
         .combo-box { position: relative; display: inline-flex; align-items: center; flex-wrap: wrap; gap: 3px;
             background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
-            padding: 3px 24px 3px 6px; min-width: 100px; box-sizing: border-box; cursor: text;
+            padding: 3px 24px 3px 6px; min-width: 100px; min-height: 32px; box-sizing: border-box; cursor: text;
         }
         .combo-box:focus-within { border-color: var(--accent); }
         .combo-box input {
@@ -417,6 +422,7 @@
         .filter-add-btn {
             background: var(--surface2); border: 1px dashed var(--border); border-radius: 6px;
             padding: 5px 12px; color: var(--text-muted); font-size: 13px; cursor: pointer;
+            height: 32px; box-sizing: border-box;
         }
         .filter-add-btn:hover { border-color: var(--accent); color: var(--text); }
 
@@ -480,7 +486,7 @@
         .val-badge-warn  { background: var(--orange); color: #000; }
         .val-stat-error { color: var(--orange); }
         .val-stat-ok { color: var(--green); }
-        .errors-toggle { font-size: 12px; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; }
+        .errors-toggle { font-size: 13px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; height: 32px; box-sizing: border-box; }
         .errors-toggle.active { background: rgba(245,158,11,0.15); border-color: var(--orange); color: var(--orange); }
 
         .cat-tooltip {
