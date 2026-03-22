@@ -3201,6 +3201,7 @@ let filterModes = {}; // col → 'exact' | 'range'
 // Plain-text translation of a raw value for display in filter dropdowns
 // Returns translated string, or null if no translation applies
 function translateFilterValue(col, rawValue) {
+    if (rawValue === '__EMPTY__') return '(no value)';
     if (rawValue == null || rawValue === '') return null;
     const s = String(rawValue);
 
@@ -3317,7 +3318,13 @@ function getComparableValue(col, value, colType) {
 
 
 function buildFilterOptions(col) {
-    const vals = new Set(allRecords.map(r => r[col]).filter(v => v != null && v !== ''));
+    let hasEmpty = false;
+    const vals = new Set();
+    for (const r of allRecords) {
+        const v = r[col];
+        if (v == null || v === '') hasEmpty = true;
+        else vals.add(v);
+    }
     const options = Array.from(vals).map(v => {
         const raw = String(v);
         const translated = translateFilterValue(col, v);
@@ -3328,6 +3335,7 @@ function buildFilterOptions(col) {
         if (!isNaN(na) && !isNaN(nb)) return na - nb;
         return a.display.localeCompare(b.display);
     });
+    if (hasEmpty) options.unshift({ raw: '__EMPTY__', display: '(no value)' });
     return options;
 }
 
@@ -3882,9 +3890,13 @@ function applyFilters(skipSync) {
                 if (minB !== null && val < minB) return false;
                 if (maxB !== null && val > maxB) return false;
             } else if (Array.isArray(fv)) {
-                if (!fv.includes(String(r[col] ?? ''))) return false;
+                const rv = r[col];
+                const sv = (rv == null || rv === '') ? '__EMPTY__' : String(rv);
+                if (!fv.includes(sv)) return false;
             } else {
-                if (String(r[col] ?? '') !== fv) return false;
+                const rv = r[col];
+                const sv = (rv == null || rv === '') ? '__EMPTY__' : String(rv);
+                if (sv !== fv) return false;
             }
         }
         if (search) {
@@ -3905,10 +3917,14 @@ function applyFilters(skipSync) {
         if (sortKeys.length) {
             filteredRecords.sort((a, b) => {
                 for (const {col, asc} of sortKeys) {
-                    let va = a[col] ?? '';
-                    let vb = b[col] ?? '';
+                    const ra = a[col], rb = b[col];
+                    const ea = ra == null || ra === '';
+                    const eb = rb == null || rb === '';
+                    if (ea !== eb) return ea ? (asc ? -1 : 1) : (asc ? 1 : -1);
+                    if (ea) continue; // both empty
+                    let va = ra, vb = rb;
                     const na = Number(va), nb = Number(vb);
-                    if (!isNaN(na) && !isNaN(nb)) {
+                    if (va !== '' && vb !== '' && !isNaN(na) && !isNaN(nb)) {
                         if (na !== nb) return asc ? na - nb : nb - na;
                         continue;
                     }
