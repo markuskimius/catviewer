@@ -208,16 +208,41 @@
         .col-order-saved.visible { opacity: 1; }
 
         .filter-bar { display: contents; }
-        .filter-item { display: flex; align-items: center; gap: 0; }
-        .combo-box { position: relative; display: inline-block; }
-        .combo-box input {
+        .filter-item { display: flex; align-items: center; gap: 0; position: relative; }
+        .filter-label {
+            display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap;
             background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
-            padding: 6px 24px 6px 10px; color: var(--text); font-size: 13px; outline: none; cursor: text;
-            min-width: 100px; box-sizing: border-box;
+            padding: 4px 8px; font-size: 13px; color: var(--text-muted); cursor: pointer;
+            user-select: none;
+        }
+        .filter-label:hover { border-color: var(--accent); color: var(--text); }
+        .filter-label .combo-tag { font-size: 11px; padding: 0 3px 0 5px; }
+        .filter-item.expanded .filter-label { display: none; }
+        .filter-item:not(.expanded) .combo-box { display: none; }
+        .filter-item:not(.expanded) .filter-mode-toggle { display: none; }
+        .filter-item:not(.expanded) .filter-range { display: none; }
+        .combo-box { position: relative; display: inline-flex; align-items: center; flex-wrap: wrap; gap: 3px;
+            background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+            padding: 3px 24px 3px 6px; min-width: 100px; box-sizing: border-box; cursor: text;
+        }
+        .combo-box:focus-within { border-color: var(--accent); }
+        .combo-box input {
+            background: none; border: none; border-radius: 0;
+            padding: 3px 4px; color: var(--text); font-size: 13px; outline: none; cursor: text;
+            min-width: 60px; flex: 1; box-sizing: border-box;
         }
         .combo-box input::placeholder { color: var(--text-muted); }
-        .combo-box input:focus { border-color: var(--accent); }
         .combo-box.has-value input { color: var(--text); }
+        .combo-tag {
+            display: inline-flex; align-items: center; gap: 2px;
+            background: var(--accent); color: #fff; border-radius: 4px;
+            padding: 1px 4px 1px 6px; font-size: 12px; white-space: nowrap; line-height: 1.4;
+        }
+        .combo-tag-remove {
+            background: none; border: none; color: rgba(255,255,255,0.7); cursor: pointer;
+            font-size: 13px; padding: 0 2px; line-height: 1;
+        }
+        .combo-tag-remove:hover { color: #fff; }
         .combo-box .combo-clear {
             position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
             background: none; border: none; color: var(--text-muted); cursor: pointer;
@@ -225,6 +250,7 @@
         }
         .combo-box.has-value .combo-clear { display: block; }
         .combo-box .combo-clear:hover { color: var(--text); }
+        .combo-option-check { display: inline-block; width: 14px; margin-right: 4px; text-align: center; font-size: 11px; }
         .combo-list {
             position: absolute; z-index: 200; top: 100%; left: 0; right: 0; min-width: 100%;
             background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
@@ -254,9 +280,9 @@
         .filter-add-btn:hover { border-color: var(--accent); color: var(--text); }
 
         .filter-range { display: flex; align-items: center; gap: 0; }
-        .filter-range .combo-box input { border-radius: 0; }
-        .filter-range .combo-box:first-of-type input { border-radius: 6px 0 0 6px; border-right: none; }
-        .filter-range .combo-box:last-of-type input { border-radius: 0 6px 6px 0; }
+        .filter-range .combo-box { border-radius: 0; }
+        .filter-range .combo-box:first-of-type { border-radius: 6px 0 0 6px; border-right: none; }
+        .filter-range .combo-box:last-of-type { border-radius: 0 6px 6px 0; }
         .filter-range .range-sep { background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 6px 4px; font-size: 11px; color: var(--text-muted); line-height: 1; }
         .filter-mode-toggle {
             background: none; border: 1px solid var(--border); border-radius: 4px;
@@ -862,6 +888,7 @@ let activeTab = 'table';
 let dragSrcColIdx = null;
 const DEFAULT_FILTERS = ['type', 'symbol'];
 let activeFilters = [...DEFAULT_FILTERS]; // column names currently shown as filter dropdowns
+const expandedFilters = new Set(); // filters currently showing their combobox
 
 // ── DOM ──
 const $ = id => document.getElementById(id);
@@ -1555,6 +1582,8 @@ function buildFilterURL(state) {
             if (typeof val === 'object' && val.mode === 'range') {
                 if (val.min) params.set('f.' + col + '.min', val.min);
                 if (val.max) params.set('f.' + col + '.max', val.max);
+            } else if (Array.isArray(val) && val.length) {
+                params.set('f.' + col, val.join(','));
             } else if (val) {
                 params.set('f.' + col, val);
             }
@@ -1599,6 +1628,8 @@ function restoreFilterState(state) {
             setComboBoxValue(col, val);
         }
     }
+    // Update collapsed labels to reflect restored values
+    document.querySelectorAll('.filter-item').forEach(updateFilterLabel);
 
     orderChainRoot = state.chainRoot || null;
     orderChainDepth = (!state.chainDepth || state.chainDepth === 'Infinity') ? Infinity : Number(state.chainDepth);
@@ -1707,14 +1738,14 @@ function stateFromHash() {
                 if (!filters[col] || typeof filters[col] !== 'object') filters[col] = { mode: 'range', min: '', max: '' };
                 filters[col][bound] = val;
             } else {
-                filters[rest] = val;
+                filters[rest] = val.includes(',') ? val.split(',') : [val];
             }
         }
     }
     // Backwards compat: support old type/action/side params
-    if (params.has('type') && !filters.type) filters.type = params.get('type');
-    if (params.has('action') && !filters.actionType) filters.actionType = params.get('action');
-    if (params.has('side') && !filters.side) filters.side = params.get('side');
+    if (params.has('type') && !filters.type) filters.type = [params.get('type')];
+    if (params.has('action') && !filters.actionType) filters.actionType = [params.get('action')];
+    if (params.has('side') && !filters.side) filters.side = [params.get('side')];
     return {
         search: params.get('q') || '',
         filters,
@@ -1747,6 +1778,7 @@ function loadFiltersFromURL() {
             setComboBoxValue(col, val);
         }
     }
+    document.querySelectorAll('.filter-item').forEach(updateFilterLabel);
 
     orderChainRoot = state.chainRoot;
     orderChainDepth = state.chainDepth === 'Infinity' ? Infinity : Number(state.chainDepth);
@@ -2076,7 +2108,9 @@ function getFilterValues() {
             if (min || max) values[col] = { mode: 'range', min, max };
         } else {
             const box = document.querySelector(`.filter-item .combo-box[data-col="${col}"]:not([data-bound])`);
-            if (box && box.dataset.rawValue) values[col] = box.dataset.rawValue;
+            if (box && box._selectedValues && box._selectedValues.length) {
+                values[col] = box._selectedValues;
+            }
         }
     }
     return values;
@@ -2125,27 +2159,33 @@ function measureTextWidth(text, font) {
 
 function createComboBox(col, placeholder, bound) {
     const options = buildFilterOptions(col);
+    const multiSelect = !bound; // multi-select for non-range filters
     const box = document.createElement('div');
     box.className = 'combo-box';
     box.dataset.col = col;
     if (bound) box.dataset.bound = bound;
     box.dataset.rawValue = '';
+    box._selectedValues = []; // array of raw values for multi-select
 
-    // Measure widest option to size the input
+    // Measure widest option to size the box
     const font = '13px ' + getComputedStyle(document.body).fontFamily;
     let maxW = measureTextWidth(placeholder, font);
     for (const o of options) {
-        const w = measureTextWidth(o.display, font);
+        const w = measureTextWidth(o.display + (multiSelect ? '     ' : ''), font);
         if (w > maxW) maxW = w;
     }
-    // padding (10+24) + border (2) + small buffer
-    const inputWidth = Math.ceil(maxW) + 44;
+    const boxWidth = Math.ceil(maxW) + 44;
+    if (multiSelect) {
+        box.style.minWidth = boxWidth + 'px';
+        box.style.width = 'auto';
+    } else {
+        box.style.width = boxWidth + 'px';
+    }
 
     const input = document.createElement('input');
     input.type = 'text';
     input.placeholder = placeholder;
     input.autocomplete = 'off';
-    input.style.width = inputWidth + 'px';
     box.appendChild(input);
 
     const clear = document.createElement('button');
@@ -2159,6 +2199,48 @@ function createComboBox(col, placeholder, bound) {
     box.appendChild(list);
 
     let highlighted = -1;
+
+    function isSelected(raw) {
+        return box._selectedValues.includes(raw);
+    }
+
+    function renderTags() {
+        // Remove existing tags
+        box.querySelectorAll('.combo-tag').forEach(t => t.remove());
+        for (const raw of box._selectedValues) {
+            const opt = options.find(o => o.raw === raw);
+            const display = opt ? opt.display : raw;
+            const tag = document.createElement('span');
+            tag.className = 'combo-tag';
+            tag.textContent = display;
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'combo-tag-remove';
+            removeBtn.innerHTML = '&times;';
+            removeBtn.addEventListener('mousedown', e => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleValue(raw);
+            });
+            tag.appendChild(removeBtn);
+            box.insertBefore(tag, input);
+        }
+        input.placeholder = box._selectedValues.length ? '' : placeholder;
+        box.dataset.rawValue = box._selectedValues.join(',');
+        box.classList.toggle('has-value', box._selectedValues.length > 0);
+    }
+
+    function toggleValue(raw) {
+        const idx = box._selectedValues.indexOf(raw);
+        if (idx >= 0) {
+            box._selectedValues.splice(idx, 1);
+        } else {
+            box._selectedValues.push(raw);
+        }
+        renderTags();
+        input.value = '';
+        renderOptions('');
+        applyFilters();
+    }
 
     function renderOptions(filter) {
         list.innerHTML = '';
@@ -2177,13 +2259,25 @@ function createComboBox(col, placeholder, bound) {
         matched.forEach((o, i) => {
             const item = document.createElement('div');
             item.className = 'combo-option';
-            item.textContent = o.display;
+            if (multiSelect) {
+                const check = document.createElement('span');
+                check.className = 'combo-option-check';
+                check.textContent = isSelected(o.raw) ? '\u2713' : '';
+                item.appendChild(check);
+                item.appendChild(document.createTextNode(o.display));
+            } else {
+                item.textContent = o.display;
+            }
             item.dataset.raw = o.raw;
             item.dataset.display = o.display;
             item.dataset.idx = i;
             item.addEventListener('mousedown', e => {
-                e.preventDefault(); // prevent blur
-                selectOption(o.raw, o.display);
+                e.preventDefault();
+                if (multiSelect) {
+                    toggleValue(o.raw);
+                } else {
+                    selectOption(o.raw, o.display);
+                }
             });
             list.appendChild(item);
         });
@@ -2198,9 +2292,14 @@ function createComboBox(col, placeholder, bound) {
     }
 
     function clearValue() {
-        box.dataset.rawValue = '';
-        input.value = '';
-        box.classList.remove('has-value');
+        if (multiSelect) {
+            box._selectedValues = [];
+            renderTags();
+        } else {
+            box.dataset.rawValue = '';
+            input.value = '';
+            box.classList.remove('has-value');
+        }
         applyFilters();
     }
 
@@ -2215,13 +2314,14 @@ function createComboBox(col, placeholder, bound) {
     }
 
     input.addEventListener('focus', () => {
-        renderOptions(box.dataset.rawValue ? '' : input.value);
+        // Show all options on focus; select the input text so typing replaces it
+        renderOptions('');
+        if (!multiSelect && input.value) input.select();
         list.classList.add('visible');
     });
 
     input.addEventListener('input', () => {
-        // When typing, clear the selected raw value so it acts as a search
-        if (box.dataset.rawValue) {
+        if (!multiSelect && box.dataset.rawValue) {
             box.dataset.rawValue = '';
             box.classList.remove('has-value');
         }
@@ -2230,11 +2330,11 @@ function createComboBox(col, placeholder, bound) {
     });
 
     input.addEventListener('blur', () => {
-        // Delay to allow mousedown on option to fire
         setTimeout(() => {
             list.classList.remove('visible');
-            // If no value selected and input has text, try to match
-            if (!box.dataset.rawValue && input.value) {
+            if (multiSelect) {
+                input.value = '';
+            } else if (!box.dataset.rawValue && input.value) {
                 const lc = input.value.toLowerCase();
                 const match = options.find(o =>
                     o.display.toLowerCase() === lc || o.raw.toLowerCase() === lc
@@ -2244,6 +2344,13 @@ function createComboBox(col, placeholder, bound) {
                 } else {
                     input.value = '';
                 }
+            }
+            // Collapse filter item back to label
+            const item = box.closest('.filter-item');
+            if (item && !item.contains(document.activeElement)) {
+                item.classList.remove('expanded');
+                expandedFilters.delete(box.dataset.col);
+                updateFilterLabel(item);
             }
         }, 150);
     });
@@ -2263,12 +2370,24 @@ function createComboBox(col, placeholder, bound) {
         } else if (e.key === 'Enter') {
             e.preventDefault();
             if (highlighted >= 0 && items[highlighted]) {
-                selectOption(items[highlighted].dataset.raw, items[highlighted].dataset.display);
-                input.blur();
+                if (multiSelect) {
+                    toggleValue(items[highlighted].dataset.raw);
+                    input.value = '';
+                    renderOptions('');
+                } else {
+                    selectOption(items[highlighted].dataset.raw, items[highlighted].dataset.display);
+                    input.blur();
+                }
             }
         } else if (e.key === 'Escape') {
             list.classList.remove('visible');
             input.blur();
+        } else if (e.key === 'Backspace' && multiSelect && !input.value && box._selectedValues.length) {
+            // Remove last tag on backspace when input is empty
+            box._selectedValues.pop();
+            renderTags();
+            renderOptions('');
+            applyFilters();
         }
     });
 
@@ -2276,6 +2395,14 @@ function createComboBox(col, placeholder, bound) {
         e.preventDefault();
         clearValue();
         input.focus();
+    });
+
+    // Click on the box focuses the input
+    box.addEventListener('mousedown', e => {
+        if (e.target === box) {
+            e.preventDefault();
+            input.focus();
+        }
     });
 
     return box;
@@ -2287,16 +2414,82 @@ function setComboBoxValue(col, rawValue, bound) {
         : `.filter-item .combo-box[data-col="${col}"]:not([data-bound])`;
     const box = document.querySelector(selector);
     if (!box) return;
+    // Multi-select: accept array of values
+    if (!bound && Array.isArray(rawValue)) {
+        box._selectedValues = rawValue.filter(v => v);
+        box.dataset.rawValue = box._selectedValues.join(',');
+        box.classList.toggle('has-value', box._selectedValues.length > 0);
+        // Render tags
+        box.querySelectorAll('.combo-tag').forEach(t => t.remove());
+        const input = box.querySelector('input');
+        const options = buildFilterOptions(col);
+        for (const raw of box._selectedValues) {
+            const opt = options.find(o => o.raw === raw);
+            const display = opt ? opt.display : raw;
+            const tag = document.createElement('span');
+            tag.className = 'combo-tag';
+            tag.textContent = display;
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'combo-tag-remove';
+            removeBtn.innerHTML = '&times;';
+            removeBtn.addEventListener('mousedown', e => {
+                e.preventDefault();
+                e.stopPropagation();
+                const idx = box._selectedValues.indexOf(raw);
+                if (idx >= 0) box._selectedValues.splice(idx, 1);
+                box.dataset.rawValue = box._selectedValues.join(',');
+                box.classList.toggle('has-value', box._selectedValues.length > 0);
+                tag.remove();
+                input.placeholder = box._selectedValues.length ? '' : 'All ' + col;
+                applyFilters();
+            });
+            tag.appendChild(removeBtn);
+            box.insertBefore(tag, input);
+        }
+        input.placeholder = box._selectedValues.length ? '' : 'All ' + col;
+        input.value = '';
+        return;
+    }
     if (!rawValue) {
         box.dataset.rawValue = '';
         box.querySelector('input').value = '';
         box.classList.remove('has-value');
+        if (box._selectedValues) box._selectedValues = [];
         return;
     }
+    // Single value for range bound boxes
     box.dataset.rawValue = rawValue;
     const translated = translateFilterValue(col, rawValue);
     box.querySelector('input').value = translated || rawValue;
     box.classList.add('has-value');
+}
+
+function updateFilterLabel(item) {
+    const label = item.querySelector('.filter-label');
+    if (!label) return;
+    const col = label.dataset.col;
+    // Remove old tags from label, keep the name span
+    label.querySelectorAll('.combo-tag').forEach(t => t.remove());
+    // Get selected values from comboboxes in this item
+    const boxes = item.querySelectorAll('.combo-box');
+    for (const box of boxes) {
+        const bound = box.dataset.bound;
+        if (box._selectedValues && box._selectedValues.length) {
+            for (const val of box._selectedValues) {
+                const translated = translateFilterValue(col, val);
+                const tag = document.createElement('span');
+                tag.className = 'combo-tag';
+                tag.textContent = translated || val;
+                label.appendChild(tag);
+            }
+        } else if (bound && box.dataset.rawValue) {
+            const translated = translateFilterValue(col, box.dataset.rawValue);
+            const tag = document.createElement('span');
+            tag.className = 'combo-tag';
+            tag.textContent = (bound === 'min' ? '≥' : '≤') + (translated || box.dataset.rawValue);
+            label.appendChild(tag);
+        }
+    }
 }
 
 function renderFilterBar() {
@@ -2311,6 +2504,28 @@ function renderFilterBar() {
         const item = document.createElement('div');
         item.className = 'filter-item';
 
+        // Collapsed label — shows filter name + selected tags
+        const label = document.createElement('div');
+        label.className = 'filter-label';
+        label.dataset.col = col;
+        const labelName = document.createElement('span');
+        labelName.textContent = col;
+        label.appendChild(labelName);
+        item.appendChild(label);
+
+        // Clicking label expands to show the combobox
+        label.addEventListener('click', () => {
+            item.classList.add('expanded');
+            expandedFilters.add(col);
+            const inp = item.querySelector('.combo-box input');
+            if (inp) inp.focus();
+        });
+
+        // Restore expanded state if it was expanded before re-render
+        if (expandedFilters.has(col)) {
+            item.classList.add('expanded');
+        }
+
         if (rangeable) {
             const toggle = document.createElement('button');
             toggle.className = 'filter-mode-toggle' + (mode === 'range' ? ' active' : '');
@@ -2319,8 +2534,13 @@ function renderFilterBar() {
             toggle.textContent = mode === 'range' ? 'Range' : 'Exact';
             toggle.addEventListener('click', () => {
                 filterModes[col] = (filterModes[col] || 'exact') === 'exact' ? 'range' : 'exact';
+                expandedFilters.add(col);
                 renderFilterBar();
                 applyFilters();
+                // Re-focus the new combobox input so it stays open
+                const newItem = document.querySelector(`.filter-item .filter-label[data-col="${col}"]`)?.closest('.filter-item');
+                const inp = newItem?.querySelector('.combo-box input');
+                if (inp) inp.focus();
             });
             item.appendChild(toggle);
         }
@@ -2433,6 +2653,8 @@ function getSavedFilterColumns() {
 }
 
 function applyFilters(skipSync) {
+    // Update collapsed filter labels to reflect current selections
+    document.querySelectorAll('.filter-item').forEach(updateFilterLabel);
     const search = $('searchInput').value.toLowerCase();
     const filterValues = getFilterValues();
 
@@ -2453,6 +2675,8 @@ function applyFilters(skipSync) {
                 const maxB = fv.max ? getComparableValue(col, fv.max, colType) : null;
                 if (minB !== null && val < minB) return false;
                 if (maxB !== null && val > maxB) return false;
+            } else if (Array.isArray(fv)) {
+                if (!fv.includes(String(r[col] ?? ''))) return false;
             } else {
                 if (String(r[col] ?? '') !== fv) return false;
             }
