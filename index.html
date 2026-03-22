@@ -2062,7 +2062,7 @@ function initializeUI() {
     // Restore saved filter columns or use defaults
     const savedFilterCols = getSavedFilterColumns();
     activeFilters = savedFilterCols ? [...savedFilterCols] : [...DEFAULT_FILTERS];
-    filterModes = {};
+    filterModes = getSavedFilterModes();
     $('detailPanel').classList.remove('visible');
     document.body.classList.remove('detail-open');
     document.documentElement.style.removeProperty('--detail-h');
@@ -2851,6 +2851,13 @@ function getSavedFilterColumns() {
     } catch { return null; }
 }
 
+function getSavedFilterModes() {
+    try {
+        const saved = localStorage.getItem('catViewer_filterModes');
+        return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
+}
+
 function applyFilters(skipSync) {
     // Update collapsed filter labels to reflect current selections
     document.querySelectorAll('.filter-item').forEach(updateFilterLabel);
@@ -3597,6 +3604,7 @@ function saveLayout() {
     localStorage.setItem('catViewer_columnOrder', JSON.stringify(columns));
     localStorage.setItem('catViewer_hiddenColumns', JSON.stringify([...hiddenColumns]));
     localStorage.setItem('catViewer_filterColumns', JSON.stringify(activeFilters));
+    localStorage.setItem('catViewer_filterModes', JSON.stringify(filterModes));
     const msg = $('colOrderSaved');
     msg.classList.add('visible');
     setTimeout(() => msg.classList.remove('visible'), 1500);
@@ -3613,6 +3621,7 @@ $('resetLayoutBtn').addEventListener('click', () => {
     localStorage.removeItem('catViewer_columnOrder');
     localStorage.removeItem('catViewer_hiddenColumns');
     localStorage.removeItem('catViewer_filterColumns');
+    localStorage.removeItem('catViewer_filterModes');
     hiddenColumns.clear();
     if (!allRecords.length) return;
     const colSet = new Set();
@@ -3638,6 +3647,7 @@ $('exportLayoutBtn').addEventListener('click', () => {
         columnOrder: columns,
         hiddenColumns: [...hiddenColumns],
         filterColumns: activeFilters,
+        filterModes: Object.keys(filterModes).length ? filterModes : undefined,
     };
     const blob = new Blob([JSON.stringify(layout, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -3680,11 +3690,12 @@ function applyLayout(layout) {
     if (Array.isArray(layout.filterColumns)) {
         activeFilters = layout.filterColumns;
     }
-    filterModes = {};
+    filterModes = (layout.filterModes && typeof layout.filterModes === 'object') ? { ...layout.filterModes } : {};
     // Save to localStorage so it persists
     localStorage.setItem('catViewer_columnOrder', JSON.stringify(columns));
     localStorage.setItem('catViewer_hiddenColumns', JSON.stringify([...hiddenColumns]));
     localStorage.setItem('catViewer_filterColumns', JSON.stringify(activeFilters));
+    localStorage.setItem('catViewer_filterModes', JSON.stringify(filterModes));
     renderFilterBar();
     applyFilters();
     const msg = $('colOrderSaved');
