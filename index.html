@@ -931,8 +931,7 @@
             </div>
             <div class="filter-bar" id="filterBar"></div>
             <button class="btn-clear-all" id="clearAllFilters" title="Clear all filters and search">Clear All</button>
-            <button class="errors-toggle" id="validationToggle" title="Enable schema validation highlighting">Validation</button>
-            <button class="errors-toggle" id="errorsToggle" title="Show only records with validation errors" style="display:none">Errors Only</button>
+            <button class="errors-toggle" id="errorsToggle" title="Show only records with validation errors">Errors Only</button>
             <span class="toolbar-spacer"></span>
             <div class="col-order-controls">
                 <span class="col-order-saved" id="colOrderSaved">Saved</span>
@@ -950,6 +949,8 @@
                         <button class="tools-menu-item" id="redoBtn" disabled><span class="tools-menu-label">Redo</span><span class="tools-menu-shortcut redo-shortcut"></span></button>
                         <div class="tools-menu-sep"></div>
                         <button class="tools-menu-item" id="exportBtn">Export CSV</button>
+                        <div class="tools-menu-sep"></div>
+                        <button class="tools-menu-item" id="validationToggle">&#10003; Validation</button>
                     </div>
                 </div>
                 <input type="file" id="importLayoutInput" accept=".json" style="display:none">
@@ -1253,7 +1254,7 @@ let orderChainDepth = Infinity;
 let chainDisplayData = null;
 let activeTab = 'table';
 let showErrorsOnly = false;
-let validationEnabled = false;
+let validationEnabled = true;
 let dragSrcColIdx = null;
 let colMgrDragIdx = null;
 let hiddenColumns = new Set();
@@ -4601,7 +4602,7 @@ $('clearAllFilters').addEventListener('click', clearAllFilters);
 
 $('validationToggle').addEventListener('click', () => {
     validationEnabled = !validationEnabled;
-    $('validationToggle').classList.toggle('active', validationEnabled);
+    $('validationToggle').textContent = (validationEnabled ? '\u2713 ' : '') + 'Validation';
     $('errorsToggle').style.display = validationEnabled ? '' : 'none';
     if (!validationEnabled && showErrorsOnly) {
         showErrorsOnly = false;
