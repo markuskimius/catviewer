@@ -1275,6 +1275,19 @@ function handleFile(file, append) {
     }
 }
 
+function validateCATFile(records) {
+    // Valid CAT event types start with ME (equity), MO (option), or ML (multi-leg)
+    const CAT_TYPE_PREFIXES = ['ME', 'MO', 'ML'];
+    let validCount = 0;
+    for (const rec of records) {
+        const t = rec.type || '';
+        if (t && CAT_TYPE_PREFIXES.some(p => t.startsWith(p))) {
+            validCount++;
+        }
+    }
+    return validCount;
+}
+
 function processFileText(file, text, append) {
     try {
         if (append && loadedFiles.some(f => f.name === file.name)) {
@@ -1293,6 +1306,13 @@ function processFileText(file, text, append) {
 
         if (!newRecords.length) {
             showError('No records found in file.');
+            return;
+        }
+
+        // Validate that the file contains CAT records
+        const validCount = validateCATFile(newRecords);
+        if (validCount === 0) {
+            showError('This does not appear to be a CAT file. No records with a valid CAT event type (ME/MO/ML) were found.');
             return;
         }
 
