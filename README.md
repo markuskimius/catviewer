@@ -14,7 +14,7 @@ Supports CAT Technical Specifications for Industry Members v4.1.0 r15.
 
 Open `index.html` in any modern browser. No server, build step, or dependencies required.
 
-1. Drag and drop a CAT data file onto the page (or click to browse). Multiple files supported; hold Shift while dropping to append.
+1. Drag and drop a CAT data file (JSON, CSV, or ZIP) onto the page (or click to browse). Multiple files supported; hold Shift while dropping to append.
 2. Browse, filter, sort, and inspect records
 3. Export filtered results to CSV
 
@@ -22,18 +22,23 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 
 - **JSON** — NDJSON (one JSON object per line) or JSON arrays, per the CAT Technical Specifications
 - **CSV** — Positional field format (no header row) as defined in the CAT spec. All 99 event types (39 equity, 35 options, 25 multi-leg) are mapped to named fields per the spec, with each event type having its own distinct field schema.
+- **ZIP** — ZIP archives containing JSON or CSV CAT files (extracted in-browser using native APIs)
 
 ## Features
 
 - **Sortable, paginated records table** with priority column ordering and configurable page size (50/100/250/500/All)
+- **Column manager** — show, hide, and reorder columns with layout persistence
 - **Sticky header** — stays visible while scrolling through records
 - **Color-coded event types** — orders, routes, trades, cancels, modifications, quotes, and allocations are visually distinguished
-- **Filtering** — by event type, action type (NEW/RPR/COR/DEL), side (Buy/Sell/Short), and free-text search across all fields
-- **Record detail panel** — fixed to the bottom of the viewport with animated slide-up/down transitions and translated/original view modes
+- **Dynamic filters** — searchable, collapsible comboboxes with range support for event type, action type (NEW/RPR/COR/DEL), side (Buy/Sell/Short), and free-text search across all fields; filter layout persists across sessions
+- **Record detail panel** — fixed and resizable at the bottom of the viewport with animated slide-up/down transitions and translated/original view modes
 - **Translated display** — human-readable timestamps (string format and epoch nanoseconds → Eastern Time), dates, side codes, and compound fields (legDetails, buyDetails, sellDetails)
 - **Clickable linkage fields** — navigate between related records via orderID, tradeID, parentOrderID, priorOrderID, etc.
 - **Order chain view** — hierarchy tree showing parent/child order relationships
-- **Multi-file support** — load multiple files via drag-and-drop or file picker; hold Shift to append
+- **URL deep linking** — hash-based URL state with direct links to selected records
+- **Multi-file support** — load multiple files (JSON, CSV, ZIP) via drag-and-drop or file picker; hold Shift to append
+- **File validation** — verifies files are CAT format before loading
+- **Tools menu** — keyboard-accessible dropdown with layout export/import for sharing between users/machines, and drag-and-drop layout reordering
 - **Event Summary tab** — counts by event type and action type
 - **Raw Data tab** — parsed JSON view of loaded records
 - **CSV export** — download filtered results

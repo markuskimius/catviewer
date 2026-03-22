@@ -22,16 +22,20 @@ When working with this spec, use `pdftotext` to extract relevant sections rather
 A single-file web application for compliance officers to inspect CAT data files. No build step required — open `index.html` directly in a browser.
 
 ### Key features
-- Drag-and-drop or file picker for JSON (NDJSON) and CSV format CAT files (multiple files supported; hold Shift to append)
-- Auto-detects format from extension and content
+- Drag-and-drop or file picker for JSON (NDJSON), CSV, and ZIP format CAT files (multiple files supported; hold Shift to append)
+- Auto-detects format from extension and content; validates files are CAT format before loading
 - Sortable, paginated record table with priority column ordering and configurable page size (50/100/250/500/All)
+- Column manager to show/hide/reorder columns, with layout persistence
 - Sticky header that stays visible while scrolling
+- Dynamic searchable filters with collapsible comboboxes, range support, and layout persistence
 - Filters by event type, action type (NEW/RPR/COR/DEL), side, and free-text search
 - Color-coded event type badges (order/route/trade/cancel/modify/quote/allocation)
-- Fixed record detail panel at bottom of viewport with animated slide-up/down transitions and translated/original view modes
+- Fixed, resizable record detail panel at bottom of viewport with animated slide-up/down transitions and translated/original view modes
 - Translated display for timestamps (both string format and epoch nanoseconds → Eastern Time), dates, side codes, compound fields (legDetails, buyDetails, sellDetails)
 - Clickable linkage fields (orderID, tradeID, parentOrderID, priorOrderID, etc.) for navigating between related records
 - Order chain view with hierarchy tree
+- URL hash state with deep linking to selected records
+- Tools dropdown menu (keyboard shortcut accessible) with layout export/import and drag-and-drop layout reordering
 - Event Summary tab with counts broken down by action type
 - Raw Data tab showing parsed JSON
 - CSV export of filtered results
