@@ -468,6 +468,23 @@
         .side-buy { color: var(--green); font-weight: 600; }
         .side-sell { color: var(--red); font-weight: 600; }
 
+        .cat-tooltip {
+            position: fixed;
+            z-index: 10000;
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 12px;
+            pointer-events: none;
+            white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+        .cat-tooltip.visible { opacity: 1; }
+
         .order-chain-bar {
             margin: 0 24px 8px;
             padding: 8px 16px;
@@ -1060,6 +1077,136 @@ const CATEGORY_LABELS = {
     order: 'Order', route: 'Route', trade: 'Trade',
     cancel: 'Cancel', modify: 'Modify', quote: 'Quote',
     alloc: 'Allocation',
+};
+
+// Tooltips for field values — maps column name → { value: description }
+const FIELD_TOOLTIPS = {
+    type: {
+        // Equity Order Events
+        MENO: 'New Order', MENOS: 'New Order Supplement',
+        MEOA: 'Order Accepted', MEOAS: 'Order Accepted Supplement',
+        MEOJ: 'Order Adjusted', MEOJM: 'Order Adjusted Modified', MEOJC: 'Order Adjusted Cancelled',
+        MEOE: 'Order Effective',
+        // Equity Order Internal Route Events
+        MEIR: 'Order Internal Route Accepted',
+        MEIM: 'Order Internal Route Modified', MEIMR: 'Order Internal Route Modification Request',
+        MEIC: 'Order Internal Route Cancelled', MEICR: 'Order Internal Route Cancel Request',
+        MEOIR: 'Order Internal Route', MEOIRM: 'Order Internal Route Modified',
+        MEOIRC: 'Order Internal Route Cancelled',
+        MEOIMRQ: 'Order Internal Route Modification Request', MEOICRQ: 'Order Internal Route Cancel Request',
+        // Equity Route Events
+        MEOR: 'Order Route', MEORS: 'Order Route Supplement',
+        MEMR: 'Route Modified', MEMRS: 'Route Modified Supplement',
+        MECR: 'Route Cancelled', MECRS: 'Route Cancelled Supplement',
+        MEORM: 'Order Route Modified', MEORC: 'Order Route Cancelled',
+        MEORMS: 'Order Route Modified Supplement', MEORCS: 'Order Route Cancelled Supplement',
+        // Equity Modify/Cancel Events
+        MEOM: 'Order Modified (Cancel/Replace)', MEOMS: 'Order Modified (Cancel/Replace) Supplement',
+        MEOMR: 'Order Modification Request', MEOMRQ: 'Order Modification Request',
+        MEOC: 'Order Cancelled', MEOCR: 'Order Cancel Request',
+        MECO: 'Child Order', MECOC: 'Child Order Cancelled', MECOM: 'Child Order Modified',
+        MECOCRQ: 'Child Order Cancel Request',
+        // Equity Quote Events
+        MENQ: 'New Quote', MENQS: 'New Quote Supplement',
+        MERQ: 'Routed Quote', MERQS: 'Routed Quote Supplement',
+        MEQR: 'Quote Received/Replaced', MEQRS: 'Quote Received/Replaced Supplement',
+        MEQC: 'Quote Cancelled', MEQM: 'Quote Modified', MEQS: 'Quote Status',
+        // Equity Trade Events
+        MEOT: 'Order Trade', MEOTS: 'Order Trade Supplement',
+        // Equity Fulfillment/Allocation
+        MEOF: 'Order Fulfillment', MEOFS: 'Order Fulfillment Supplement',
+        MEFA: 'Order Fulfillment Amendment',
+        MEPA: 'Post-Trade Allocation', MEAA: 'Amended Allocation',
+        MEOPA: 'Post-Trade Allocation', MEOPAA: 'Post-Trade Allocation Accept',
+        // Option Order Events
+        MONO: 'New Option Order', MONOS: 'Option Order Supplement',
+        MOOA: 'Option Order Accepted', MOOAS: 'Option Order Accepted Supplement',
+        MOOJ: 'Option Order Adjusted', MOOJM: 'Option Order Adjusted Modified', MOOJC: 'Option Order Adjusted Cancelled',
+        MOOE: 'Option Order Effective',
+        // Option Order Internal Route Events
+        MOIR: 'Option Order Internal Route Accepted',
+        MOIM: 'Option Order Internal Route Modified', MOIMR: 'Option Order Internal Route Modification Request',
+        MOIC: 'Option Order Internal Route Cancelled', MOICR: 'Option Order Internal Route Cancel Request',
+        MOOIR: 'Option Order Internal Route', MOOIRM: 'Option Order Internal Route Modified',
+        MOOIRC: 'Option Order Internal Route Cancelled',
+        MOOIMRQ: 'Option Order Internal Route Modification Request', MOOICRQ: 'Option Order Internal Route Cancel Request',
+        // Option Route Events
+        MOOR: 'Option Order Route', MOORS: 'Option Order Route Supplement',
+        MOMR: 'Option Route Modified', MOMRS: 'Option Route Modified Supplement',
+        MOCR: 'Option Route Cancelled', MOCRS: 'Option Route Cancelled Supplement',
+        MOORM: 'Option Order Route Modified', MOORC: 'Option Order Route Cancelled',
+        MOORMS: 'Option Order Route Modified Supplement', MOORCS: 'Option Order Route Cancelled Supplement',
+        // Option Modify/Cancel Events
+        MOOM: 'Option Order Modified (Cancel/Replace)', MOOMS: 'Option Order Modified Supplement',
+        MOOMR: 'Option Order Modification Request', MOOMRQ: 'Option Order Modification Request',
+        MOOC: 'Option Order Cancelled', MOOCR: 'Option Order Cancel Request',
+        MOCO: 'Child Option Order', MOCOC: 'Child Option Order Cancelled', MOCOM: 'Child Option Order Modified',
+        MOCOCRQ: 'Child Option Order Cancel Request',
+        // Option Quote Events
+        MONQ: 'New Option Quote', MORQ: 'Option Routed Quote',
+        MOQR: 'Option Quote Received', MOQC: 'Option Quote Cancelled', MOQM: 'Option Quote Modified',
+        // Option Trade Events
+        MOOT: 'Option Trade', MOOTS: 'Option Trade Supplement',
+        // Option Fulfillment/Allocation
+        MOOF: 'Option Order Fulfillment', MOOFS: 'Option Order Fulfillment Supplement',
+        MOFA: 'Option Order Fulfillment Amendment',
+        MOPA: 'Option Post-Trade Allocation', MOAA: 'Option Amended Allocation',
+        MOOPA: 'Option Post-Trade Allocation', MOOPAA: 'Option Post-Trade Allocation Accept',
+        // Multi-Leg Order Events
+        MLNO: 'Multi-Leg New Order', MLNOS: 'Multi-Leg New Order Supplement',
+        MLOA: 'Multi-Leg Order Accepted', MLOAS: 'Multi-Leg Order Accepted Supplement',
+        MLOS: 'Multi-Leg Order Supplement',
+        MLOE: 'Multi-Leg Order Effect',
+        MLOJ: 'Multi-Leg Order Adjusted', MLOJM: 'Multi-Leg Order Adjusted Modified', MLOJC: 'Multi-Leg Order Adjusted Cancelled',
+        // Multi-Leg Order Internal Route Events
+        MLIR: 'Multi-Leg Order Internal Route Accepted',
+        MLIM: 'Multi-Leg Order Internal Route Modified', MLIMR: 'Multi-Leg Order Internal Route Modification Request',
+        MLIC: 'Multi-Leg Order Internal Route Cancelled', MLICR: 'Multi-Leg Order Internal Route Cancel Request',
+        MLOIR: 'Multi-Leg Order Internal Route', MLOIRM: 'Multi-Leg Order Internal Route Modified',
+        MLOIRC: 'Multi-Leg Order Internal Route Cancelled',
+        MLOIMRQ: 'Multi-Leg Order Internal Route Modification Request', MLOICRQ: 'Multi-Leg Order Internal Route Cancel Request',
+        // Multi-Leg Route Events
+        MLOR: 'Multi-Leg Order Route', MLORS: 'Multi-Leg Order Route Supplement',
+        MLMR: 'Multi-Leg Route Modified',
+        MLCR: 'Multi-Leg Route Cancelled',
+        MLORM: 'Multi-Leg Order Route Modified', MLORC: 'Multi-Leg Order Route Cancelled',
+        MLORMS: 'Multi-Leg Order Route Modified Supplement', MLORCS: 'Multi-Leg Order Route Cancelled Supplement',
+        // Multi-Leg Modify/Cancel Events
+        MLOM: 'Multi-Leg Order Modified', MLOMS: 'Multi-Leg Order Modified Supplement',
+        MLOMR: 'Multi-Leg Order Modification Request', MLOMRQ: 'Multi-Leg Order Modification Request',
+        MLOC: 'Multi-Leg Order Cancelled', MLOCR: 'Multi-Leg Order Cancel Request',
+        MLCO: 'Multi-Leg Child Order', MLCOC: 'Multi-Leg Child Order Cancelled', MLCOM: 'Multi-Leg Child Order Modified',
+        MLCOCRQ: 'Multi-Leg Child Order Cancel Request',
+        // Multi-Leg Quote Events
+        MLNQ: 'Multi-Leg New Quote', MLNQS: 'Multi-Leg New Quote Supplement',
+        MLRQ: 'Multi-Leg Routed Quote', MLRQS: 'Multi-Leg Routed Quote Supplement',
+        MLQR: 'Multi-Leg Quote Received', MLQC: 'Multi-Leg Quote Cancelled',
+        MLQM: 'Multi-Leg Quote Modified', MLQS: 'Multi-Leg Quote Supplement',
+        // Multi-Leg Trade (legacy)
+        MLOT: 'Multi-Leg Order Trade', MLOTS: 'Multi-Leg Order Trade Supplement',
+        MLOF: 'Multi-Leg Order Fulfillment', MLOFS: 'Multi-Leg Order Fulfillment Supplement',
+        // Allocation aliases
+        MLOPA: 'Multi-Leg Post-Trade Allocation', MLOPAA: 'Multi-Leg Post-Trade Allocation Accept',
+    },
+    actionType: {
+        NEW: 'New Record',
+        RPR: 'Repair — repair of events for which a CAT error was provided in feedback',
+        COR: 'Correction — correction of events initiated by firms',
+        DEL: 'Delete — record level delete instruction',
+    },
+    'timeInForce.name': {
+        // Boolean values (no accompanying paired value)
+        GTC: 'Good Till Cancelled',
+        GTM: 'Good This Month — valid until last business day of the month in which the order originated',
+        IOC: 'Immediate or Cancel',
+        IOR: 'Immediate or Return — only applicable to options floor brokers',
+        // Non-Boolean values (has accompanying paired value)
+        DAY: 'Day Order — value is expiration date (must equal Event Date or Event Date + 1 Trading Day)',
+        GFD: 'Good for Duration — value is duration in whole seconds (OTC Link ATS only)',
+        GTD: 'Good Till Date — value is expiration date',
+        GTT: 'Good Till Time — value is expiration timestamp',
+        GTX: 'Good Till Crossing — value is expiration date (must equal Event Date or Event Date + 1 Trading Day)',
+    },
 };
 
 // Key columns to show in the table (in order of importance)
@@ -3391,11 +3538,13 @@ function formatCell(col, value) {
     if (col === 'type') {
         const cat = EVENT_CATEGORIES[s] || 'other';
         const cls = CATEGORY_CLASS[cat] || 'et-other';
-        return `<span class="event-type ${cls}">${escapeHtml(s)}</span>`;
+        const tip = FIELD_TOOLTIPS.type[s];
+        return `<span class="event-type ${cls}"${tip ? ` data-tooltip="${escapeHtml(tip)}"` : ''}>${escapeHtml(s)}</span>`;
     }
     if (col === 'actionType') {
         const cls = { NEW: 'action-new', RPR: 'action-rpr', COR: 'action-cor', DEL: 'action-del' }[s] || '';
-        return `<span class="${cls}">${escapeHtml(s)}</span>`;
+        const tip = FIELD_TOOLTIPS.actionType && FIELD_TOOLTIPS.actionType[s];
+        return `<span class="${cls}"${tip ? ` data-tooltip="${escapeHtml(tip)}"` : ''}>${escapeHtml(s)}</span>`;
     }
     if (col === 'side') {
         const label = FIELD_LABELS.side[s];
@@ -3405,7 +3554,12 @@ function formatCell(col, value) {
         }
     }
     if (FIELD_LABELS[col] && FIELD_LABELS[col][s]) {
-        return `<span title="${escapeHtml(s)}">${escapeHtml(FIELD_LABELS[col][s])}</span>`;
+        const tip = FIELD_TOOLTIPS[col] && FIELD_TOOLTIPS[col][s];
+        return `<span ${tip ? `data-tooltip="${escapeHtml(tip)}"` : `title="${escapeHtml(s)}"`}>${escapeHtml(FIELD_LABELS[col][s])}</span>`;
+    }
+    // General tooltip for fields with no label translation
+    if (FIELD_TOOLTIPS[col] && FIELD_TOOLTIPS[col][s]) {
+        return `<span data-tooltip="${escapeHtml(FIELD_TOOLTIPS[col][s])}">${escapeHtml(s)}</span>`;
     }
     // Timestamps STRING format: YYYYMMDD[T| ]HHMMSS[.ffffff] → YYYY-MM-DD HH:MM:SS[.ffffff]
     if (/Timestamp$|KeyDate$/.test(col) && /^\d{8}[T ]\d{6}(\.\d+)?$/.test(s)) {
@@ -4213,6 +4367,44 @@ $('exportBtn').addEventListener('click', () => {
     a.click();
     URL.revokeObjectURL(url);
 });
+
+// ── Custom Tooltips ──
+(function() {
+    const tip = document.createElement('div');
+    tip.className = 'cat-tooltip';
+    document.body.appendChild(tip);
+    let timer = null;
+    const DELAY = 150; // ms before showing
+
+    document.addEventListener('mouseover', (e) => {
+        const el = e.target.closest('[data-tooltip]');
+        if (!el) return;
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+            tip.textContent = el.dataset.tooltip;
+            tip.style.display = 'block';
+            // Position near cursor, adjust to stay in viewport
+            const rect = el.getBoundingClientRect();
+            let left = rect.left;
+            let top = rect.bottom + 4;
+            tip.classList.remove('visible');
+            tip.offsetHeight; // reflow to measure
+            if (left + tip.offsetWidth > window.innerWidth - 8) left = window.innerWidth - tip.offsetWidth - 8;
+            if (top + tip.offsetHeight > window.innerHeight - 8) top = rect.top - tip.offsetHeight - 4;
+            tip.style.left = left + 'px';
+            tip.style.top = top + 'px';
+            tip.classList.add('visible');
+        }, DELAY);
+    });
+
+    document.addEventListener('mouseout', (e) => {
+        const el = e.target.closest('[data-tooltip]');
+        if (!el) return;
+        clearTimeout(timer);
+        tip.classList.remove('visible');
+        tip.style.display = 'none';
+    });
+})();
 
 // ── Helpers ──
 function escapeHtml(s) {
