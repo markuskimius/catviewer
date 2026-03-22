@@ -4607,8 +4607,11 @@ $('validationToggle').addEventListener('click', () => {
         showErrorsOnly = false;
         $('errorsToggle').classList.remove('active');
     }
-    currentPage = 0;
-    initializeUI();
+    applyFilters();
+    // Refresh detail panel if open
+    if (currentDetailRecord) {
+        renderDetailGrid(currentDetailRecord, detailMode, $('showAllFields').checked);
+    }
 });
 
 $('errorsToggle').addEventListener('click', () => {
