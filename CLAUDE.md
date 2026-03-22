@@ -39,6 +39,7 @@ A single-file web application for compliance officers to inspect CAT data files.
 - Event Summary tab with counts broken down by action type
 - Raw Data tab showing parsed JSON
 - CSV export of filtered results
+- Field-level validation against CAT schema spec (v4.1.0 r15) with cell highlighting, error tooltips, detail panel badges, validation summary stats, and "Errors Only" filter toggle
 
 ### CAT file format notes
 - **JSON files**: NDJSON (one JSON object per line) or a JSON array. Each record has a `type` field (e.g., `MENO`, `MEOR`, `MEOT`) and `actionType` (`NEW`, `RPR`, `COR`, `DEL`).

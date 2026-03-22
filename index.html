@@ -468,6 +468,21 @@
         .side-buy { color: var(--green); font-weight: 600; }
         .side-sell { color: var(--red); font-weight: 600; }
 
+        /* Validation highlighting */
+        td.val-error { border-left: 3px solid var(--red); background: rgba(239,68,68,0.1); }
+        td.val-warn  { border-left: 3px solid var(--orange); background: rgba(245,158,11,0.07); }
+        tr.has-errors td:first-child { position: relative; }
+        .val-icon { color: var(--orange); font-size: 11px; cursor: help; margin-right: 2px; }
+        .detail-field.has-val-error { border: 1px solid var(--red); border-radius: 4px; background: rgba(239,68,68,0.08); }
+        .detail-field.has-val-warn  { border: 1px solid var(--orange); border-radius: 4px; background: rgba(245,158,11,0.05); }
+        .val-badge { display: inline-block; font-size: 9px; padding: 1px 5px; border-radius: 3px; margin-left: 4px; font-weight: normal; vertical-align: middle; }
+        .val-badge-error { background: var(--red); color: #fff; }
+        .val-badge-warn  { background: var(--orange); color: #000; }
+        .val-stat-error { color: var(--orange); }
+        .val-stat-ok { color: var(--green); }
+        .errors-toggle { font-size: 12px; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; margin-left: 8px; }
+        .errors-toggle.active { background: rgba(245,158,11,0.15); border-color: var(--orange); color: var(--orange); }
+
         .cat-tooltip {
             position: fixed;
             z-index: 10000;
@@ -916,6 +931,7 @@
             </div>
             <div class="filter-bar" id="filterBar"></div>
             <button class="btn-clear-all" id="clearAllFilters" title="Clear all filters and search">Clear All</button>
+            <button class="errors-toggle" id="errorsToggle" title="Show only records with validation errors">Errors Only</button>
             <span class="toolbar-spacer"></span>
             <div class="col-order-controls">
                 <span class="col-order-saved" id="colOrderSaved">Saved</span>
@@ -1235,6 +1251,7 @@ let orderChainRoot = null;
 let orderChainDepth = Infinity;
 let chainDisplayData = null;
 let activeTab = 'table';
+let showErrorsOnly = false;
 let dragSrcColIdx = null;
 let colMgrDragIdx = null;
 let hiddenColumns = new Set();
@@ -1491,6 +1508,113 @@ const CAT_CSV_FIELDS = {
   'MORQ': ['actionType','errorROEID','firmROEID','type','CATReporterIMID','quoteKeyDate','quoteID','optionID','eventTimestamp','senderIMID','destination','routedQuoteID','dupROIDCond','bidPrice','bidQty','askPrice','askQty','quoteRejectedFlag','destinationType','RFQID','bidRelativePrice','askRelativePrice','validUntilDuration'],
 };
 
+// ── Validation Schema (generated from CAT spec v4.1.0 r15) ──
+const CAT_SCHEMA = {
+  MENO:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicDupFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"manualOrderKeyDate":["C", "SN"],"manualOrderID":["C", "S", 64],"deptType":["R", "S"],"solicitationFlag":["R", "B"],"RFQID":["C", "S", 64],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"handlingInstructions":["C", "O"],"custDspIntrFlag":["R", "B"],"firmDesignatedID":["R", "S", 40],"accountHolderType":["R", "S"],"affiliateFlag":["R", "B"],"infoBarrierID":["C", "S", 20],"aggregatedOrders":["C", "A"],"negotiatedTradeFlag":["R", "B"],"representativeInd":["R", "S"],"seqNum":["C", "S", 40],"atsDisplayInd":["C", "S"],"displayPrice":["C", "N", 10, 8],"workingPrice":["C", "N", 10, 8],"displayQty":["C", "N", 12, 0],"atsOrderType":["C", "A"],"nbbPrice":["C", "N", 10, 8],"nbbQty":["C", "N", 12, 0],"nboPrice":["C", "N", 10, 8],"nboQty":["C", "N", 12, 0],"nbboSource":["C", "S"],"nbboTimestamp":["C", "SN"],"netPrice":["C", "N", 10, 8],"BFMMFlag":["C", "B"]},
+  MENOS:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"aggregatedOrders":["C", "A"],"firmDesignatedID":["C", "S", 40]},
+  MEOR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicDupFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"senderIMID":["C", "S", 16],"destination":["C", "S", 16],"destinationType":["R", "S"],"routedOrderID":["C", "S", 64],"session":["C", "S", 40],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"affiliateFlag":["R", "B"],"isoInd":["R", "S"],"handlingInstructions":["C", "O"],"routeRejectedFlag":["R", "B"],"dupROIDCond":["R", "B"],"seqNum":["C", "S", 40],"multiLegInd":["R", "B"],"pairedOrderID":["O", "S", 64],"infoBarrierID":["C", "S", 20],"netPrice":["C", "N", 10, 8],"quoteKeyDate":["C", "SN"],"quoteID":["C", "S", 64]},
+  MEMR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"senderIMID":["C", "S", 16],"destination":["C", "S", 16],"destinationType":["R", "S"],"routedOrderID":["C", "S", 64],"priorRoutedOrderID":["C", "S", 64],"session":["C", "S", 40],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"retiredFieldPosition":["O", "S"],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"affiliateFlag":["R", "B"],"isoInd":["R", "S"],"handlingInstructions":["C", "O"],"routeRejectedFlag":["R", "B"],"dupROIDCond":["R", "B"],"seqNum":["C", "S", 40],"netPrice":["C", "N", 10, 8],"multiLegInd":["R", "B"]},
+  MECR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"cancelQty":["R", "N", 12, 6],"retiredFieldPosition":["O", "S"],"senderIMID":["C", "S", 16],"destination":["C", "S", 16],"destinationType":["R", "S"],"routedOrderID":["C", "S", 64],"session":["C", "S", 40],"routeRejectedFlag":["R", "B"],"seqNum":["C", "S", 40],"multiLegInd":["R", "B"]},
+  MEORS:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"senderIMID":["C", "S", 16],"destination":["C", "S", 16],"destinationType":["R", "S"],"routedOrderID":["C", "S", 64],"session":["C", "S", 40],"routeRejectedFlag":["R", "B"]},
+  MEMRS:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"senderIMID":["C", "S", 16],"destination":["C", "S", 16],"destinationType":["R", "S"],"routedOrderID":["C", "S", 64],"session":["C", "S", 40],"routeRejectedFlag":["R", "B"],"multiLegInd":["R", "B"]},
+  MECRS:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"senderIMID":["C", "S", 16],"destination":["C", "S", 16],"destinationType":["R", "S"],"routedOrderID":["C", "S", 64],"session":["C", "S", 40],"routeRejectedFlag":["R", "B"],"multiLegInd":["R", "B"]},
+  MEOA:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicDupFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"receiverIMID":["R", "S", 16],"senderIMID":["R", "S", 16],"senderType":["R", "S"],"routedOrderID":["C", "S", 64],"manualOrderKeyDate":["C", "SN"],"manualOrderID":["C", "S", 64],"affiliateFlag":["R", "B"],"deptType":["R", "S"],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"isoInd":["R", "S"],"handlingInstructions":["C", "O"],"custDspIntrFlag":["R", "B"],"infoBarrierID":["C", "S", 20],"seqNum":["C", "S", 40],"atsDisplayInd":["C", "S"],"displayPrice":["C", "N", 10, 8],"workingPrice":["C", "N", 10, 8],"displayQty":["C", "N", 12, 0],"atsOrderType":["C", "A"],"nbbPrice":["C", "N", 10, 8],"nbbQty":["C", "N", 12, 0],"nboPrice":["C", "N", 10, 8],"nboQty":["C", "N", 12, 0],"nbboSource":["C", "S"],"nbboTimestamp":["C", "SN"],"solicitationFlag":["R", "B"],"pairedOrderID":["O", "S", 64],"netPrice":["C", "N", 10, 8]},
+  MEIR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"parentOrderKeyDate":["C", "SN"],"parentOrderID":["C", "S", 64],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"deptType":["R", "S"],"receivingDeskType":["R", "S"],"infoBarrierID":["C", "S", 20],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"handlingInstructions":["C", "O"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"multiLegInd":["R", "B"],"netPrice":["C", "N", 10, 8],"deskOrderID":["C", "S", 64]},
+  MEIM:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"priorOrderKeyDate":["C", "SN"],"priorOrderID":["C", "S", 64],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"deptType":["R", "S"],"receivingDeskType":["R", "S"],"infoBarrierID":["C", "S", 20],"initiator":["R", "S"],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"leavesQty":["R", "N", 12, 6],"orderType":["R", "S"],"handlingInstructions":["C", "O"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"requestTimestamp":["C", "SN"],"netPrice":["C", "N", 10, 8],"deskOrderID":["C", "S", 64],"priorDeskOrderID":["C", "S", 64]},
+  MEIC:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"cancelQty":["R", "N", 12, 6],"leavesQty":["R", "N", 12, 6],"initiator":["R", "S"],"requestTimestamp":["C", "SN"],"infoBarrierID":["C", "S", 20],"deskOrderID":["C", "S", 64]},
+  MEIMR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"deptType":["R", "S"],"receivingDeskType":["R", "S"],"infoBarrierID":["C", "S", 20],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"retiredFieldPosition":["O", "S"],"orderType":["R", "S"],"handlingInstructions":["C", "O"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"netPrice":["C", "N", 10, 8],"deskOrderID":["C", "S", 64]},
+  MEICR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"cancelQty":["R", "N", 12, 6],"deskOrderID":["C", "S", 64]},
+  MECO:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"parentOrderKeyDate":["R", "SN"],"parentOrderID":["R", "S", 64],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"handlingInstructions":["C", "O"],"seqNum":["C", "S", 40],"atsDisplayInd":["C", "S"],"displayPrice":["C", "N", 10, 8],"workingPrice":["C", "N", 10, 8],"displayQty":["C", "N", 12, 0],"nbbPrice":["C", "N", 10, 8],"nbbQty":["C", "N", 12, 0],"nboPrice":["C", "N", 10, 8],"nboQty":["C", "N", 12, 0],"nbboSource":["C", "S"],"nbboTimestamp":["C", "SN"],"multiLegInd":["R", "B"],"infoBarrierID":["C", "S", 20],"netPrice":["C", "N", 10, 8],"manualFlag":["O", "B"],"electronicTimestamp":["C", "SN"]},
+  MECOM:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"priorOrderKeyDate":["C", "SN"],"priorOrderID":["C", "S", 64],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"leavesQty":["R", "N", 12, 6],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"handlingInstructions":["C", "O"],"seqNum":["C", "S", 40],"atsDisplayInd":["C", "S"],"displayPrice":["C", "N", 10, 8],"workingPrice":["C", "N", 10, 8],"displayQty":["C", "N", 12, 0],"nbbPrice":["C", "N", 10, 8],"nbbQty":["C", "N", 12, 0],"nboPrice":["C", "N", 10, 8],"nboQty":["C", "N", 12, 0],"nbboSource":["C", "S"],"nbboTimestamp":["C", "SN"],"netPrice":["C", "N", 10, 8],"manualFlag":["O", "B"],"electronicTimestamp":["C", "SN"]},
+  MECOC:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"side":["R", "S"],"cancelQty":["R", "N", 12, 6],"leavesQty":["R", "N", 12, 6],"reservedForFutureUse":["O", "S"],"seqNum":["C", "S", 40],"manualFlag":["O", "B"],"electronicTimestamp":["C", "SN"]},
+  MEOM:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"priorOrderKeyDate":["C", "SN"],"priorOrderID":["C", "S", 64],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"manualOrderKeyDate":["C", "SN"],"manualOrderID":["C", "S", 64],"electronicDupFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"receiverIMID":["C", "S", 16],"senderIMID":["C", "S", 16],"senderType":["C", "S"],"routedOrderID":["C", "S", 64],"requestTimestamp":["C", "SN"],"reservedForFutureUse":["O", "S"],"reservedForFutureUse":["O", "S"],"reservedForFutureUse":["O", "S"],"initiator":["R", "S"],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"leavesQty":["R", "N", 12, 6],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"isoInd":["R", "S"],"handlingInstructions":["C", "O"],"custDspIntrFlag":["R", "B"],"infoBarrierID":["C", "S", 20],"aggregatedOrders":["C", "A"],"representativeInd":["R", "S"],"seqNum":["C", "S", 40],"atsDisplayInd":["C", "S"],"displayPrice":["C", "N", 10, 8],"workingPrice":["C", "N", 10, 8],"displayQty":["C", "N", 12, 0],"atsOrderType":["C", "A"],"nbbPrice":["C", "N", 10, 8],"nbbQty":["C", "N", 12, 0],"nboPrice":["C", "N", 10, 8],"nboQty":["C", "N", 12, 0],"nbboSource":["C", "S"],"nbboTimestamp":["C", "SN"],"netPrice":["C", "N", 10, 8],"BFMMFlag":["C", "B"]},
+  MEOMS:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"aggregatedOrders":["R", "A"]},
+  MEOMR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"receiverIMID":["C", "S", 16],"senderIMID":["C", "S", 16],"senderType":["C", "S"],"reservedForFutureUse":["O", "S"],"reservedForFutureUse":["O", "S"],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"isoInd":["R", "S"],"handlingInstructions":["C", "O"],"custDspIntrFlag":["R", "B"],"infoBarrierID":["C", "S", 20],"reservedForFutureUse":["O", "S"],"reservedForFutureUse":["O", "S"],"seqNum":["C", "S", 40],"atsDisplayInd":["C", "S"],"displayPrice":["C", "N", 10, 8],"workingPrice":["C", "N", 10, 8],"displayQty":["C", "N", 12, 0],"atsOrderType":["C", "A"],"nbbPrice":["C", "N", 10, 8],"nbbQty":["C", "N", 12, 0],"nboPrice":["C", "N", 10, 8],"nboQty":["C", "N", 12, 0],"nbboSource":["C", "S"],"nbboTimestamp":["C", "SN"],"netPrice":["C", "N", 10, 8]},
+  MEOJ:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"priorOrderKeyDate":["C", "SN"],"priorOrderID":["C", "S", 64],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"initiator":["R", "S"],"price":["C", "N", 10, 8],"quantity":["C", "N", 12, 6],"minQty":["C", "N", 12, 0],"leavesQty":["C", "N", 12, 6],"seqNum":["C", "S", 40],"atsDisplayInd":["C", "S"],"displayPrice":["C", "N", 10, 8],"workingPrice":["C", "N", 10, 8],"displayQty":["C", "N", 12, 0],"nbbPrice":["C", "N", 10, 8],"nbbQty":["C", "N", 12, 0],"nboPrice":["C", "N", 10, 8],"nboQty":["C", "N", 12, 0],"nbboSource":["C", "S"],"nbboTimestamp":["C", "SN"],"timeInForce":["R", "O"],"netPrice":["C", "N", 10, 8]},
+  MEOC:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"cancelQty":["R", "N", 12, 6],"leavesQty":["R", "N", 12, 6],"initiator":["R", "S"],"seqNum":["C", "S", 40],"requestTimestamp":["C", "SN"],"infoBarrierID":["C", "S", 20]},
+  MEOCR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"cancelQty":["R", "N", 12, 6],"seqNum":["C", "S", 40],"infoBarrierID":["C", "S", 20]},
+  MENQ:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"quoteKeyDate":["R", "SN"],"quoteID":["R", "S", 64],"symbol":["R", "S", 22],"retiredFieldPosition":["O", "S"],"retiredFieldPosition":["O", "S"],"eventTimestamp":["R", "SN"],"seqNum":["C", "S", 40],"retiredFieldPosition":["O", "S"],"retiredFieldPosition":["O", "S"],"retiredFieldPosition":["O", "S"],"onlyOneQuoteFlag":["R", "B"],"bidPrice":["C", "N", 10, 8],"bidQty":["C", "N", 12, 0],"askPrice":["C", "N", 10, 8],"askQty":["C", "N", 12, 0],"firmDesignatedID":["C", "S", 40],"accountHolderType":["C", "S"],"unsolicitedInd":["C", "S"],"retiredFieldPosition":["O", "S"],"retiredFieldPosition":["O", "S"],"unpricedInd":["R", "B"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"representativeQuoteInd":["C", "S"],"askAggregatedOrders":["C", "A"],"bidAggregatedOrders":["C", "A"],"RFQID":["C", "S", 64],"RFQFlag":["C", "B"],"bidRelativePrice":["C", "O"],"askRelativePrice":["C", "O"],"validUntilDuration":["O", "N", 12, 6]},
+  MENQS:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"quoteKeyDate":["R", "SN"],"quoteID":["R", "S", 64],"symbol":["R", "S", 22],"eventTimestamp":["R", "SN"],"representativeQuoteInd":["R", "S"],"askAggregatedOrders":["C", "A"],"bidAggregatedOrders":["C", "A"]},
+  MERQ:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"quoteKeyDate":["R", "SN"],"quoteID":["R", "S", 64],"symbol":["R", "S", 22],"eventTimestamp":["R", "SN"],"seqNum":["C", "S", 40],"senderIMID":["R", "S", 16],"destination":["C", "S", 16],"routedQuoteID":["C", "S", 64],"bidPrice":["C", "N", 10, 8],"bidQty":["C", "N", 12, 0],"askPrice":["C", "N", 10, 8],"askQty":["C", "N", 12, 0],"quoteRejectedFlag":["R", "B"],"unpricedInd":["R", "B"],"dupROIDCond":["R", "B"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"destinationType":["C", "S"],"session":["C", "S", 40],"RFQID":["C", "S", 64],"bidRelativePrice":["C", "O"],"askRelativePrice":["C", "O"],"validUntilDuration":["O", "N", 12, 6]},
+  MERQS:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"quoteKeyDate":["R", "SN"],"quoteID":["R", "S", 64],"symbol":["R", "S", 22],"eventTimestamp":["R", "SN"],"senderIMID":["R", "S", 16],"destination":["R", "S", 16],"routedQuoteID":["R", "S", 64],"quoteRejectedFlag":["R", "B"],"destinationType":["R", "S"],"session":["C", "S", 40]},
+  MEQR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"quoteKeyDate":["R", "SN"],"quoteID":["R", "S", 64],"symbol":["R", "S", 22],"receivedQuoteID":["C", "S", 64],"eventTimestamp":["R", "SN"],"seqNum":["R", "S", 40],"receiverIMID":["R", "S", 16],"senderIMID":["C", "S", 16],"onlyOneQuoteFlag":["R", "B"],"retiredFieldPosition":["O", "S"],"retiredFieldPosition":["O", "S"],"bidPrice":["C", "N", 10, 8],"bidQty":["C", "N", 12, 0],"askPrice":["C", "N", 10, 8],"askQty":["C", "N", 12, 0],"retiredFieldPosition":["O", "S"],"unsolicitedInd":["R", "S"],"quoteWantedInd":["C", "S"],"unpricedInd":["R", "B"],"dupROIDCond":["R", "B"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"RFQID":["C", "S", 64],"RFQFlag":["C", "B"],"bidRelativePrice":["C", "O"],"askRelativePrice":["C", "O"],"senderType":["C", "S"],"validUntilDuration":["O", "N", 12, 6]},
+  MEQC:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"quoteKeyDate":["R", "SN"],"quoteID":["R", "S", 64],"symbol":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"seqNum":["C", "S", 40],"reservedForFutureUse":["O", "S"],"initiator":["R", "S"],"retiredFieldPosition":["O", "S"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"RFQID":["C", "S", 64]},
+  MEQM:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"quoteKeyDate":["R", "SN"],"quoteID":["R", "S", 64],"symbol":["R", "S", 22],"priorQuoteKeyDate":["C", "SN"],"priorQuoteID":["C", "S", 64],"eventTimestamp":["R", "SN"],"seqNum":["C", "S", 40],"bidPrice":["C", "N", 10, 8],"bidQty":["C", "N", 12, 0],"askPrice":["C", "N", 10, 8],"askQty":["C", "N", 12, 0],"unsolicitedInd":["R", "S"],"unpricedInd":["R", "B"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"RFQID":["C", "S", 64],"bidRelativePrice":["C", "O"],"askRelativePrice":["C", "O"],"validUntilDuration":["O", "N", 12, 6]},
+  MEQS:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"quoteKeyDate":["R", "SN"],"quoteID":["R", "S", 64],"symbol":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"seqNum":["C", "S", 40],"mpStatusCode":["R", "S"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"]},
+  MEOT:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"tradeKeyDate":["R", "SN"],"tradeID":["R", "S", 64],"symbol":["R", "S", 22],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["O", "SN"],"cancelFlag":["R", "B"],"cancelTimestamp":["C", "SN"],"retiredFieldPosition":["O", "S"],"retiredFieldPosition":["O", "S"],"quantity":["R", "N", 12, 6],"price":["R", "N", 10, 8],"capacity":["R", "S"],"tapeTradeID":["C", "S", 40],"marketCenterID":["C", "S"],"sideDetailsInd":["R", "S"],"buyDetails":["C", "A"],"sellDetails":["C", "A"],"reportingExceptionCode":["C", "S"],"seqNum":["C", "S", 40],"nbbPrice":["C", "N", 10, 8],"nbbQty":["C", "N", 12, 0],"nboPrice":["C", "N", 10, 8],"nboQty":["C", "N", 12, 0],"nbboSource":["C", "S"],"nbboTimestamp":["C", "SN"],"retiredFieldPosition":["O", "S"],"clearingFirm":["C", "N", 20, 0],"counterparty":["C", "S", 16],"multiLegInd":["R", "B"],"infoBarrierID":["C", "S", 20]},
+  MEOTS:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"tradeKeyDate":["R", "SN"],"tradeID":["R", "S", 64],"symbol":["R", "S", 22],"eventTimestamp":["R", "SN"],"buyDetails":["C", "A"],"sellDetails":["C", "A"],"multiLegInd":["R", "B"]},
+  MEOF:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"fillKeyDate":["R", "SN"],"fulfillmentID":["R", "S", 64],"symbol":["R", "S", 22],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"fulfillmentLinkType":["R", "S"],"cancelFlag":["R", "B"],"cancelTimestamp":["C", "SN"],"quantity":["R", "N", 12, 6],"price":["R", "N", 10, 8],"capacity":["R", "S"],"clientDetails":["R", "A"],"firmDetails":["C", "A"],"infoBarrierID":["C", "S", 20]},
+  MEOFS:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"fillKeyDate":["R", "SN"],"fulfillmentID":["R", "S", 64],"symbol":["R", "S", 22],"eventTimestamp":["R", "SN"],"firmDetails":["R", "A"]},
+  MEFA:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"fillKeyDate":["R", "SN"],"fulfillmentID":["R", "S", 64],"priorFillKeyDate":["C", "SN"],"priorFulfillmentID":["C", "S", 64],"symbol":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"quantity":["R", "N", 12, 6],"capacity":["R", "S"],"price":["R", "N", 10, 8],"fulfillmentLinkType":["R", "S"],"clientDetails":["C", "A"],"firmDetails":["C", "A"]},
+  MEPA:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"allocationKeyDate":["R", "SN"],"allocationID":["R", "S", 64],"symbol":["R", "S", 22],"eventTimestamp":["R", "SN"],"cancelFlag":["R", "B"],"cancelTimestamp":["C", "SN"],"quantity":["R", "N", 12, 6],"price":["R", "N", 10, 8],"side":["R", "S"],"firmDesignatedID":["R", "S", 40],"retiredFieldPosition":["O", "S"],"institutionFlag":["R", "B"],"tradeDate":["R", "N", 8, 0],"settlementDate":["C", "N", 8, 0],"allocationType":["R", "S"],"DVPCustodianID":["C", "S", 40],"correspondentCRD":["C", "N", 20, 0],"newOrderFDID":["C", "S", 40],"allocationInstructionTime":["O", "SN"],"retiredFieldPosition":["O", "S"],"accountHolderType":["R", "S"]},
+  MEAA:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"allocationKeyDate":["R", "SN"],"allocationID":["R", "S", 64],"priorAllocationKeyDate":["C", "SN"],"priorAllocationID":["C", "S", 64],"symbol":["R", "S", 22],"eventTimestamp":["R", "SN"],"quantity":["R", "N", 12, 6],"price":["R", "N", 10, 8],"side":["R", "S"],"firmDesignatedID":["R", "S", 40],"retiredFieldPosition":["O", "S"],"institutionFlag":["R", "B"],"tradeDate":["R", "N", 8, 0],"settlementDate":["C", "N", 8, 0],"allocationType":["R", "S"],"DVPCustodianID":["C", "S", 40],"correspondentCRD":["C", "N", 20, 0],"newOrderFDID":["C", "S", 40],"allocationInstructionTime":["O", "SN"],"cancelFlag":["R", "B"],"cancelTimestamp":["C", "SN"],"retiredFieldPosition":["O", "S"],"accountHolderType":["R", "S"]},
+  MEOE:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"symbol":["R", "S", 22],"priorOrderKeyDate":["C", "SN"],"priorOrderID":["C", "S", 64],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"reservedForFutureUse":["O", "S"],"side":["C", "S"],"price":["C", "N", 10, 8],"quantity":["C", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"seqNum":["C", "S", 40],"atsDisplayInd":["C", "S"],"displayPrice":["C", "N", 10, 8],"workingPrice":["C", "N", 10, 8],"displayQty":["C", "N", 12, 0],"nbbPrice":["C", "N", 10, 8],"nbbQty":["C", "N", 12, 0],"nboPrice":["C", "N", 10, 8],"nboQty":["C", "N", 12, 0],"nbboSource":["C", "S"],"nbboTimestamp":["C", "SN"],"triggerPrice":["C", "N", 10, 8],"netPrice":["C", "N", 10, 8]},
+  MONO:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"manualOrderKeyDate":["C", "SN"],"manualOrderID":["C", "S", 64],"electronicDupFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"deptType":["R", "S"],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"handlingInstructions":["C", "O"],"firmDesignatedID":["R", "S", 40],"accountHolderType":["R", "S"],"affiliateFlag":["R", "B"],"aggregatedOrders":["C", "A"],"solicitationFlag":["R", "B"],"openCloseIndicator":["C", "S"],"representativeInd":["R", "S"],"retiredFieldPosition":["O", "S"],"RFQID":["C", "S", 64],"netPrice":["C", "N", 10, 8]},
+  MONOS:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"aggregatedOrders":["C", "A"],"retiredFieldPosition":["O", "S"],"retiredFieldPosition":["O", "S"],"firmDesignatedID":["C", "S", 40]},
+  MOOR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicDupFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"senderIMID":["C", "S", 16],"destination":["C", "S", 16],"destinationType":["R", "S"],"routedOrderID":["C", "S", 64],"session":["C", "S", 40],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"handlingInstructions":["C", "O"],"routeRejectedFlag":["R", "B"],"exchOriginCode":["C", "S", 4],"affiliateFlag":["R", "B"],"multiLegInd":["R", "B"],"openCloseIndicator":["C", "S"],"retiredFieldPosition":["O", "S"],"retiredFieldPosition":["O", "S"],"pairedOrderID":["C", "S", 64],"netPrice":["C", "N", 10, 8]},
+  MOMR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"senderIMID":["C", "S", 16],"destination":["C", "S", 16],"destinationType":["R", "S"],"routedOrderID":["C", "S", 64],"priorRoutedOrderID":["C", "S", 64],"session":["C", "S", 40],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"retiredFieldPosition":["O", "S"],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"affiliateFlag":["R", "B"],"handlingInstructions":["C", "O"],"routeRejectedFlag":["R", "B"],"dupROIDCond":["R", "B"],"exchOriginCode":["C", "S", 4],"openCloseIndicator":["C", "S"],"netPrice":["C", "N", 10, 8],"multiLegInd":["R", "B"]},
+  MOCR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"cancelQty":["R", "N", 12, 6],"retiredFieldPosition":["O", "S"],"senderIMID":["C", "S", 16],"destination":["C", "S", 16],"destinationType":["R", "S"],"routedOrderID":["C", "S", 64],"session":["C", "S", 40],"routeRejectedFlag":["R", "B"],"multiLegInd":["R", "B"]},
+  MOORS:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"senderIMID":["C", "S", 16],"destination":["C", "S", 16],"destinationType":["R", "S"],"routedOrderID":["C", "S", 64],"session":["C", "S", 40],"routeRejectedFlag":["R", "B"],"manualFlag":["R", "B"]},
+  MOMRS:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"senderIMID":["C", "S", 16],"destination":["C", "S", 16],"destinationType":["R", "S"],"routedOrderID":["C", "S", 64],"session":["C", "S", 40],"routeRejectedFlag":["R", "B"],"multiLegInd":["R", "B"]},
+  MOCRS:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"senderIMID":["C", "S", 16],"destination":["C", "S", 16],"destinationType":["R", "S"],"routedOrderID":["C", "S", 64],"session":["C", "S", 40],"routeRejectedFlag":["R", "B"],"multiLegInd":["R", "B"]},
+  MOOA:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"eventTimestamp":["R", "SN"],"manualOrderKeyDate":["C", "SN"],"manualOrderID":["C", "S", 64],"manualFlag":["R", "B"],"electronicDupFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"receiverIMID":["R", "S", 16],"senderIMID":["R", "S", 16],"senderType":["R", "S"],"routedOrderID":["C", "S", 64],"deptType":["R", "S"],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"handlingInstructions":["C", "O"],"affiliateFlag":["R", "B"],"solicitationFlag":["R", "B"],"pairedOrderID":["O", "S", 64],"openCloseIndicator":["C", "S"],"retiredFieldPosition":["O", "S"],"retiredFieldPosition":["O", "S"],"netPrice":["C", "N", 10, 8]},
+  MOIR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"parentOrderKeyDate":["C", "SN"],"parentOrderID":["C", "S", 64],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"deptType":["R", "S"],"receivingDeskType":["R", "S"],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"handlingInstructions":["C", "O"],"openCloseIndicator":["C", "S"],"retiredFieldPosition":["O", "S"],"retiredFieldPosition":["O", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"multiLegInd":["R", "B"],"netPrice":["C", "N", 10, 8],"deskOrderID":["C", "S", 64]},
+  MOIM:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"priorOrderKeyDate":["C", "SN"],"priorOrderID":["C", "S", 64],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"deptType":["R", "S"],"receivingDeskType":["R", "S"],"initiator":["R", "S"],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"leavesQty":["R", "N", 12, 6],"orderType":["R", "S"],"handlingInstructions":["C", "O"],"openCloseIndicator":["C", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"requestTimestamp":["C", "SN"],"netPrice":["C", "N", 10, 8],"deskOrderID":["C", "S", 64],"priorDeskOrderID":["C", "S", 64]},
+  MOIC:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"cancelQty":["R", "N", 12, 6],"leavesQty":["R", "N", 12, 6],"initiator":["R", "S"],"requestTimestamp":["C", "SN"],"deskOrderID":["C", "S", 64]},
+  MOIMR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"deptType":["R", "S"],"receivingDeskType":["R", "S"],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"retiredFieldPosition":["O", "S"],"orderType":["R", "S"],"handlingInstructions":["C", "O"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"netPrice":["C", "N", 10, 8],"deskOrderID":["C", "S", 64]},
+  MOICR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"cancelQty":["R", "N", 12, 6],"deskOrderID":["C", "S", 64]},
+  MOCO:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"parentOrderKeyDate":["R", "SN"],"parentOrderID":["R", "S", 64],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"handlingInstructions":["C", "O"],"openCloseIndicator":["R", "S"],"retiredFieldPosition":["O", "S"],"retiredFieldPosition":["O", "S"],"multiLegInd":["R", "B"],"netPrice":["C", "N", 10, 8],"manualFlag":["O", "B"],"electronicTimestamp":["C", "SN"]},
+  MOCOM:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"priorOrderKeyDate":["C", "SN"],"priorOrderID":["C", "S", 64],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"leavesQty":["R", "N", 12, 6],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"handlingInstructions":["C", "O"],"openCloseIndicator":["C", "S"],"retiredFieldPosition":["O", "S"],"retiredFieldPosition":["O", "S"],"netPrice":["C", "N", 10, 8],"manualFlag":["O", "B"],"electronicTimestamp":["C", "SN"]},
+  MOCOC:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"side":["R", "S"],"cancelQty":["R", "N", 12, 6],"leavesQty":["R", "N", 12, 6],"reservedForFutureUse":["O", "S"],"retiredFieldPosition":["O", "S"],"manualFlag":["O", "B"],"electronicTimestamp":["C", "SN"]},
+  MOOM:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"priorOrderKeyDate":["C", "SN"],"priorOrderID":["C", "S", 64],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualOrderKeyDate":["C", "SN"],"manualOrderID":["C", "S", 64],"manualFlag":["R", "B"],"electronicDupFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"receiverIMID":["C", "S", 16],"senderIMID":["C", "S", 16],"senderType":["C", "S"],"routedOrderID":["C", "S", 64],"initiator":["R", "S"],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"leavesQty":["R", "N", 12, 6],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"handlingInstructions":["C", "O"],"openCloseIndicator":["C", "S"],"requestTimestamp":["C", "SN"],"reservedForFutureUse":["O", "S"],"aggregatedOrders":["C", "A"],"representativeInd":["R", "S"],"retiredFieldPosition":["O", "S"],"retiredFieldPosition":["O", "S"],"netPrice":["C", "N", 10, 8]},
+  MOOMS:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"aggregatedOrders":["R", "A"]},
+  MOOMR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"receiverIMID":["C", "S", 16],"senderIMID":["C", "S", 16],"senderType":["C", "S"],"side":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"timeInForce":["R", "O"],"orderType":["R", "S"],"tradingSession":["R", "S"],"handlingInstructions":["C", "O"],"openCloseIndicator":["C", "S"],"netPrice":["C", "N", 10, 8]},
+  MOOJ:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"priorOrderKeyDate":["C", "SN"],"priorOrderID":["C", "S", 64],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"initiator":["R", "S"],"price":["C", "N", 10, 8],"quantity":["C", "N", 12, 6],"minQty":["C", "N", 12, 0],"leavesQty":["C", "N", 12, 6],"retiredFieldPosition":["O", "S"],"retiredFieldPosition":["O", "S"],"timeInForce":["R", "O"],"netPrice":["C", "N", 10, 8]},
+  MOOC:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"cancelQty":["R", "N", 12, 6],"leavesQty":["R", "N", 12, 6],"initiator":["R", "S"],"retiredFieldPosition":["O", "S"],"requestTimestamp":["C", "SN"]},
+  MOOCR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"cancelQty":["R", "N", 12, 6]},
+  MONQ:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"quoteKeyDate":["R", "SN"],"quoteID":["R", "S", 64],"optionID":["R", "S", 22],"eventTimestamp":["R", "SN"],"onlyOneQuoteFlag":["R", "B"],"bidPrice":["C", "N", 10, 8],"bidQty":["C", "N", 12, 0],"askPrice":["C", "N", 10, 8],"askQty":["C", "N", 12, 0],"firmDesignatedID":["R", "S", 40],"accountHolderType":["R", "S"],"RFQID":["R", "S", 64],"RFQFlag":["R", "B"],"bidRelativePrice":["C", "O"],"askRelativePrice":["C", "O"],"validUntilDuration":["O", "N", 12, 6]},
+  MORQ:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"quoteKeyDate":["R", "SN"],"quoteID":["R", "S", 64],"optionID":["R", "S", 22],"eventTimestamp":["R", "SN"],"senderIMID":["R", "S", 16],"destination":["C", "S", 16],"routedQuoteID":["R", "S", 64],"dupROIDCond":["R", "B"],"bidPrice":["C", "N", 10, 8],"bidQty":["C", "N", 12, 0],"askPrice":["C", "N", 10, 8],"askQty":["C", "N", 12, 0],"quoteRejectedFlag":["R", "B"],"destinationType":["R", "S"],"RFQID":["R", "S", 64],"bidRelativePrice":["C", "O"],"askRelativePrice":["C", "O"],"validUntilDuration":["O", "N", 12, 6]},
+  MOQR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"quoteKeyDate":["R", "SN"],"quoteID":["R", "S", 64],"optionID":["R", "S", 22],"receivedQuoteID":["R", "S", 64],"dupROIDCond":["R", "B"],"eventTimestamp":["R", "SN"],"receiverIMID":["R", "S", 16],"senderIMID":["C", "S", 16],"onlyOneQuoteFlag":["R", "B"],"bidPrice":["C", "N", 10, 8],"bidQty":["C", "N", 12, 0],"askPrice":["C", "N", 10, 8],"askQty":["C", "N", 12, 0],"RFQID":["R", "S", 64],"RFQFlag":["R", "B"],"bidRelativePrice":["C", "O"],"askRelativePrice":["C", "O"],"senderType":["R", "S"],"validUntilDuration":["O", "N", 12, 6]},
+  MOQC:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"quoteKeyDate":["R", "SN"],"quoteID":["R", "S", 64],"optionID":["R", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"RFQID":["R", "S", 64]},
+  MOQM:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"quoteKeyDate":["R", "SN"],"quoteID":["R", "S", 64],"optionID":["R", "S", 22],"priorQuoteKeyDate":["C", "SN"],"priorQuoteID":["C", "S", 64],"receiverIMID":["C", "S", 16],"senderIMID":["C", "S", 16],"routedQuoteID":["R", "S", 64],"eventTimestamp":["R", "SN"],"bidPrice":["C", "N", 10, 8],"bidQty":["C", "N", 12, 0],"askPrice":["C", "N", 10, 8],"askQty":["C", "N", 12, 0],"RFQID":["R", "S", 64],"bidRelativePrice":["C", "O"],"askRelativePrice":["C", "O"],"validUntilDuration":["O", "N", 12, 6]},
+  MOOT:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"tradeKeyDate":["R", "SN"],"tradeID":["R", "S", 64],"optionID":["R", "S", 22],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["O", "SN"],"cancelFlag":["R", "B"],"cancelTimestamp":["C", "SN"],"quantity":["R", "N", 12, 6],"price":["R", "N", 10, 8],"capacity":["R", "S"],"tapeTradeID":["R", "S", 40],"sideDetailsInd":["R", "S"],"buyDetails":["C", "A"],"sellDetails":["C", "A"],"marketCenterID":["R", "S"],"multiLegInd":["R", "B"],"clearingFirm":["R", "N", 20, 0]},
+  MOOF:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"fillKeyDate":["R", "SN"],"fulfillmentID":["R", "S", 64],"optionID":["R", "S", 22],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"quantity":["R", "N", 12, 6],"price":["R", "N", 10, 8],"fulfillmentLinkType":["R", "S"],"clientDetails":["R", "A"],"firmDetails":["C", "A"],"retiredFieldPosition":["O", "S"],"cancelFlag":["R", "B"],"cancelTimestamp":["C", "SN"]},
+  MOOFS:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"fillKeyDate":["R", "SN"],"fulfillmentID":["R", "S", 64],"optionID":["R", "S", 22],"eventTimestamp":["R", "SN"],"firmDetails":["R", "A"]},
+  MOFA:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"fillKeyDate":["R", "SN"],"fulfillmentID":["R", "S", 64],"optionID":["R", "S", 22],"priorFillKeyDate":["C", "SN"],"priorFulfillmentID":["C", "S", 64],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"fulfillmentLinkType":["R", "S"],"quantity":["R", "N", 12, 6],"price":["R", "N", 10, 8],"clientDetails":["C", "A"],"firmDetails":["C", "A"],"retiredFieldPosition":["O", "S"]},
+  MOPA:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"allocationKeyDate":["R", "SN"],"allocationID":["R", "S", 64],"optionID":["R", "S", 22],"eventTimestamp":["R", "SN"],"cancelFlag":["R", "B"],"cancelTimestamp":["C", "SN"],"quantity":["R", "N", 12, 6],"price":["R", "N", 10, 8],"side":["R", "S"],"firmDesignatedID":["R", "S", 40],"retiredFieldPosition":["O", "S"],"institutionFlag":["R", "B"],"tradeDate":["R", "N", 8, 0],"settlementDate":["C", "N", 8, 0],"allocationType":["R", "S"],"retiredFieldPosition":["O", "S"],"correspondentCRD":["C", "N", 20, 0],"newOrderFDID":["C", "S", 40],"allocationInstructionTime":["O", "SN"],"retiredFieldPosition":["O", "S"],"occClearingMemberID":["C", "S", 40],"accountHolderType":["R", "S"]},
+  MOAA:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"allocationKeyDate":["R", "SN"],"allocationID":["R", "S", 64],"priorAllocationKeyDate":["C", "SN"],"priorAllocationID":["C", "S", 64],"optionID":["R", "S", 22],"eventTimestamp":["R", "SN"],"quantity":["R", "N", 12, 6],"price":["R", "N", 10, 8],"side":["R", "S"],"firmDesignatedID":["R", "S", 40],"retiredFieldPosition":["O", "S"],"institutionFlag":["R", "B"],"tradeDate":["R", "N", 8, 0],"settlementDate":["C", "N", 8, 0],"allocationType":["R", "S"],"retiredFieldPosition":["O", "S"],"correspondentCRD":["C", "N", 20, 0],"newOrderFDID":["C", "S", 40],"allocationInstructionTime":["O", "SN"],"cancelFlag":["R", "B"],"cancelTimestamp":["C", "SN"],"retiredFieldPosition":["O", "S"],"occClearingMemberID":["C", "S", 40],"accountHolderType":["R", "S"]},
+  MOOE:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"optionID":["R", "S", 22],"priorOrderKeyDate":["C", "SN"],"priorOrderID":["C", "S", 64],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"reservedForFutureUse":["O", "S"],"side":["C", "S"],"price":["C", "N", 10, 8],"quantity":["C", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"openCloseIndicator":["C", "S"],"triggerPrice":["C", "N", 10, 8],"netPrice":["C", "N", 10, 8]},
+  MLNO:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"underlying":["O", "S", 22],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"manualOrderKeyDate":["C", "SN"],"manualOrderID":["C", "S", 64],"electronicDupFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"deptType":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"handlingInstructions":["C", "O"],"firmDesignatedID":["R", "S", 40],"accountHolderType":["R", "S"],"affiliateFlag":["R", "B"],"aggregatedOrders":["C", "A"],"representativeInd":["R", "S"],"solicitationFlag":["R", "B"],"RFQID":["C", "S", 64],"numberOfLegs":["R", "N", 12, 0],"priceType":["C", "S"],"legDetails":["R", "A"]},
+  MLOR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"underlying":["O", "S", 22],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicDupFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"senderIMID":["C", "S", 16],"destination":["C", "S", 16],"destinationType":["R", "S"],"routedOrderID":["C", "S", 64],"session":["C", "S", 40],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"handlingInstructions":["C", "O"],"affiliateFlag":["R", "B"],"routeRejectedFlag":["R", "B"],"exchOriginCode":["C", "S", 4],"pairedOrderID":["C", "S", 64],"numberOfLegs":["R", "N", 12, 0],"priceType":["C", "S"],"legDetails":["R", "A"]},
+  MLMR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"underlying":["O", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"senderIMID":["C", "S", 16],"destination":["C", "S", 16],"destinationType":["R", "S"],"routedOrderID":["C", "S", 64],"priorRoutedOrderID":["C", "S", 64],"session":["C", "S", 40],"reservedForFutureUse":["O", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"retiredFieldPosition":["O", "S"],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"affiliateFlag":["R", "B"],"handlingInstructions":["C", "O"],"routeRejectedFlag":["R", "B"],"dupROIDCond":["R", "B"],"exchOriginCode":["C", "S", 4],"numberOfLegs":["R", "N", 12, 0],"priceType":["C", "S"],"legDetails":["R", "A"]},
+  MLCR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"underlying":["O", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"cancelQty":["R", "N", 12, 6],"retiredFieldPosition":["O", "S"],"senderIMID":["C", "S", 16],"destination":["C", "S", 16],"destinationType":["R", "S"],"routedOrderID":["C", "S", 64],"session":["C", "S", 40],"routeRejectedFlag":["R", "B"],"numberOfLegs":["O", "N", 12, 0],"reservedForFutureUse":["O", "S"]},
+  MLOA:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"underlying":["O", "S", 22],"eventTimestamp":["R", "SN"],"manualOrderKeyDate":["C", "SN"],"manualOrderID":["C", "S", 64],"manualFlag":["R", "B"],"electronicDupFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"receiverIMID":["R", "S", 16],"senderIMID":["R", "S", 16],"senderType":["R", "S"],"routedOrderID":["C", "S", 64],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"handlingInstructions":["C", "O"],"affiliateFlag":["R", "B"],"solicitationFlag":["R", "B"],"pairedOrderID":["O", "S", 64],"numberOfLegs":["R", "N", 12, 0],"priceType":["C", "S"],"legDetails":["R", "A"],"deptType":["R", "S"]},
+  MLIR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"parentOrderKeyDate":["C", "SN"],"parentOrderID":["C", "S", 64],"underlying":["O", "S", 22],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"deptType":["R", "S"],"receivingDeskType":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"handlingInstructions":["C", "O"],"numberOfLegs":["R", "N", 12, 0],"priceType":["C", "S"],"legDetails":["R", "A"],"deskOrderID":["C", "S", 64]},
+  MLIM:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"underlying":["O", "S", 22],"priorOrderKeyDate":["C", "SN"],"priorOrderID":["C", "S", 64],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"deptType":["R", "S"],"receivingDeskType":["R", "S"],"initiator":["R", "S"],"reservedForFutureUse":["O", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"leavesQty":["R", "N", 12, 6],"orderType":["R", "S"],"handlingInstructions":["C", "O"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"requestTimestamp":["C", "SN"],"numberOfLegs":["R", "N", 12, 0],"priceType":["C", "S"],"legDetails":["R", "A"],"deskOrderID":["C", "S", 64],"priorDeskOrderID":["C", "S", 64]},
+  MLIC:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"underlying":["O", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"cancelQty":["R", "N", 12, 6],"leavesQty":["R", "N", 12, 6],"initiator":["R", "S"],"requestTimestamp":["C", "SN"],"numberOfLegs":["O", "N", 12, 0],"deskOrderID":["C", "S", 64]},
+  MLIMR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"underlying":["O", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"deptType":["R", "S"],"receivingDeskType":["R", "S"],"reservedForFutureUse":["O", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"retiredFieldPosition":["O", "S"],"orderType":["R", "S"],"handlingInstructions":["C", "O"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"numberOfLegs":["R", "N", 12, 0],"priceType":["C", "S"],"legDetails":["R", "A"],"deskOrderID":["C", "S", 64]},
+  MLICR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"underlying":["O", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"cancelQty":["R", "N", 12, 6],"numberOfLegs":["O", "N", 12, 0],"deskOrderID":["C", "S", 64]},
+  MLCO:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"parentOrderKeyDate":["R", "SN"],"parentOrderID":["R", "S", 64],"underlying":["O", "S", 22],"eventTimestamp":["R", "SN"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"handlingInstructions":["C", "O"],"numberOfLegs":["R", "N", 12, 0],"priceType":["C", "S"],"legDetails":["R", "A"],"manualFlag":["O", "B"],"electronicTimestamp":["C", "SN"]},
+  MLCOM:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"underlying":["O", "S", 22],"priorOrderKeyDate":["C", "SN"],"priorOrderID":["C", "S", 64],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"reservedForFutureUse":["O", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"leavesQty":["R", "N", 12, 6],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"handlingInstructions":["C", "O"],"numberOfLegs":["R", "N", 12, 0],"priceType":["C", "S"],"legDetails":["R", "A"],"manualFlag":["O", "B"],"electronicTimestamp":["C", "SN"]},
+  MLCOC:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"underlying":["O", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"reservedForFutureUse":["O", "S"],"cancelQty":["R", "N", 12, 6],"leavesQty":["R", "N", 12, 6],"numberOfLegs":["O", "N", 12, 0],"manualFlag":["O", "B"],"electronicTimestamp":["C", "SN"]},
+  MLOM:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"priorOrderKeyDate":["C", "SN"],"priorOrderID":["C", "S", 64],"underlying":["O", "S", 22],"eventTimestamp":["R", "SN"],"manualOrderKeyDate":["C", "SN"],"manualOrderID":["C", "S", 64],"manualFlag":["R", "B"],"electronicDupFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"receiverIMID":["C", "S", 16],"senderIMID":["C", "S", 16],"senderType":["C", "S"],"routedOrderID":["C", "S", 64],"initiator":["R", "S"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"leavesQty":["R", "N", 12, 6],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"handlingInstructions":["C", "O"],"reservedForFutureUse":["O", "S"],"aggregatedOrders":["C", "A"],"representativeInd":["R", "S"],"requestTimestamp":["C", "SN"],"numberOfLegs":["R", "N", 12, 0],"priceType":["C", "S"],"legDetails":["R", "A"]},
+  MLOMR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"underlying":["O", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"receiverIMID":["C", "S", 16],"senderIMID":["C", "S", 16],"senderType":["C", "S"],"timeInForce":["R", "O"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"tradingSession":["R", "S"],"handlingInstructions":["C", "O"],"numberOfLegs":["R", "N", 12, 0],"priceType":["C", "S"],"legDetails":["R", "A"]},
+  MLOC:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"underlying":["O", "S", 22],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"cancelQty":["R", "N", 12, 6],"leavesQty":["R", "N", 12, 6],"initiator":["R", "S"],"requestTimestamp":["C", "SN"]},
+  MLOCR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"underlying":["O", "S", 22],"originatingIMID":["C", "S", 7],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"electronicTimestamp":["C", "SN"],"cancelQty":["R", "N", 12, 6]},
+  MLNQ:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"quoteKeyDate":["R", "SN"],"quoteID":["R", "S", 64],"underlying":["O", "S", 22],"eventTimestamp":["R", "SN"],"onlyOneQuoteFlag":["R", "B"],"bidPrice":["C", "N", 10, 8],"bidQty":["C", "N", 12, 0],"askPrice":["C", "N", 10, 8],"askQty":["C", "N", 12, 0],"firmDesignatedID":["R", "S", 40],"accountHolderType":["R", "S"],"numberOfLegs":["R", "N", 12, 0],"RFQID":["R", "S", 64],"RFQFlag":["R", "B"],"quotePriceType":["C", "S"],"validUntilDuration":["O", "N", 12, 6],"legDetails":["R", "A"]},
+  MLRQ:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"quoteKeyDate":["R", "SN"],"quoteID":["R", "S", 64],"underlying":["O", "S", 22],"eventTimestamp":["R", "SN"],"senderIMID":["R", "S", 16],"destination":["C", "S", 16],"routedQuoteID":["R", "S", 64],"dupROIDCond":["R", "B"],"bidPrice":["C", "N", 10, 8],"bidQty":["C", "N", 12, 0],"askPrice":["C", "N", 10, 8],"askQty":["C", "N", 12, 0],"quoteRejectedFlag":["R", "B"],"destinationType":["R", "S"],"numberOfLegs":["R", "N", 12, 0],"RFQID":["R", "S", 64],"quotePriceType":["C", "S"],"validUntilDuration":["O", "N", 12, 6],"legDetails":["R", "A"]},
+  MLQS:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"quoteKeyDate":["R", "SN"],"quoteID":["R", "S", 64],"underlying":["O", "S", 22],"eventTimestamp":["R", "SN"],"firmDesignatedID":["C", "S", 40],"senderIMID":["C", "S", 16],"destination":["C", "S", 16],"destinationType":["C", "S"],"routedQuoteID":["C", "S", 64],"quoteRejectedFlag":["R", "B"],"RFQID":["R", "S", 64],"legDetails":["C", "A"]},
+  MLQR:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"quoteKeyDate":["R", "SN"],"quoteID":["R", "S", 64],"underlying":["O", "S", 22],"receivedQuoteID":["R", "S", 64],"dupROIDCond":["R", "B"],"eventTimestamp":["R", "SN"],"receiverIMID":["R", "S", 16],"senderIMID":["C", "S", 16],"onlyOneQuoteFlag":["R", "B"],"bidPrice":["C", "N", 10, 8],"bidQty":["C", "N", 12, 0],"askPrice":["C", "N", 10, 8],"askQty":["C", "N", 12, 0],"numberOfLegs":["R", "N", 12, 0],"RFQID":["R", "S", 64],"RFQFlag":["R", "B"],"quotePriceType":["C", "S"],"senderType":["R", "S"],"validUntilDuration":["O", "N", 12, 6],"legDetails":["R", "A"]},
+  MLQC:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"quoteKeyDate":["R", "SN"],"quoteID":["R", "S", 64],"underlying":["O", "S", 22],"eventTimestamp":["R", "SN"],"retiredFieldPosition":["O", "S"],"RFQID":["R", "S", 64]},
+  MLQM:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"quoteKeyDate":["R", "SN"],"quoteID":["R", "S", 64],"underlying":["O", "S", 22],"priorQuoteKeyDate":["C", "SN"],"priorQuoteID":["C", "S", 64],"receiverIMID":["C", "S", 16],"senderIMID":["C", "S", 16],"routedQuoteID":["R", "S", 64],"eventTimestamp":["R", "SN"],"bidPrice":["C", "N", 10, 8],"bidQty":["C", "N", 12, 0],"askPrice":["C", "N", 10, 8],"askQty":["C", "N", 12, 0],"numberOfLegs":["R", "N", 12, 0],"RFQID":["R", "S", 64],"quotePriceType":["C", "S"],"validUntilDuration":["O", "N", 12, 6],"legDetails":["R", "A"]},
+  MLOS:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"underlying":["O", "S", 22],"eventTimestamp":["R", "SN"],"manualFlag":["R", "B"],"aggregatedOrders":["C", "A"],"firmDesignatedID":["C", "S", 40],"senderIMID":["C", "S", 16],"destination":["C", "S", 16],"destinationType":["C", "S"],"routedOrderID":["C", "S", 64],"session":["C", "S", 40],"routeRejectedFlag":["R", "B"],"legDetails":["C", "A"]},
+  MLOE:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"priorOrderKeyDate":["C", "SN"],"priorOrderID":["C", "S", 64],"underlying":["O", "S", 22],"eventTimestamp":["R", "SN"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"numberOfLegs":["R", "N", 12, 0],"priceType":["C", "S"],"triggerPrice":["C", "N", 10, 8],"legDetails":["R", "A"]},
+};
+
+const CAT_ALLOWED_EXCHANGES = new Set(["AMER", "AMEROP", "ARCA", "ARCAOP", "BOX", "BSTX", "BX", "BYX", "BZX", "BZXOP", "C2", "CBOE", "CHX", "EDGA", "EDGX", "EDGXOP", "EMLD", "GEMX", "IEX", "ISE", "LTSE", "MEMX", "MEMXOP", "MIAMI", "MRX", "NOBO", "NOM", "NSDQ", "NSX", "NYSE", "PEARL", "PEARLEQ", "PHLX", "PSX", "SPHR", "24X", "TXSE"]);
+const CAT_ALLOWED_TYPES = new Set(["MENO", "MENOS", "MEOR", "MEMR", "MECR", "MEORS", "MEMRS", "MECRS", "MEOA", "MEIR", "MEIM", "MEIC", "MEIMR", "MEICR", "MECO", "MECOM", "MECOC", "MEOM", "MEOMS", "MEOMR", "MEOJ", "MEOC", "MEOCR", "MENQ", "MENQS", "MERQ", "MERQS", "MEQR", "MEQC", "MEQM", "MEQS", "MEOT", "MEOTS", "MEOF", "MEOFS", "MEFA", "MEPA", "MEAA", "MEOE", "MONO", "MONOS", "MOOR", "MOMR", "MOCR", "MOORS", "MOMRS", "MOCRS", "MOOA", "MOIR", "MOIM", "MOIC", "MOIMR", "MOICR", "MOCO", "MOCOM", "MOCOC", "MOOM", "MOOMS", "MOOMR", "MOOJ", "MOOC", "MOOCR", "MONQ", "MORQ", "MOQR", "MOQC", "MOQM", "MOOT", "MOOF", "MOOFS", "MOFA", "MOPA", "MOAA", "MOOE", "MLNO", "MLOR", "MLMR", "MLCR", "MLOA", "MLIR", "MLIM", "MLIC", "MLIMR", "MLICR", "MLCO", "MLCOM", "MLCOC", "MLOM", "MLOMR", "MLOC", "MLOCR", "MLNQ", "MLRQ", "MLQS", "MLQR", "MLQC", "MLQM", "MLOS", "MLOE"]);
+
+
 function parseCSV(text) {
     const lines = text.split(/\r?\n/).filter(l => l.trim());
     if (!lines.length) return [];
@@ -1708,6 +1832,182 @@ function validateCATFile(records) {
     return validCount;
 }
 
+// ── Field-Level Validation Engine ──
+// Internal fields to skip during validation
+const VALIDATION_SKIP_FIELDS = new Set(['_idx', '_errors', '_original', '_timeInForce_original']);
+
+// Allowed values for Choice-type fields (from FIELD_LABELS + spec)
+const CAT_CHOICE_VALUES = {
+    actionType: new Set(['NEW', 'RPR', 'COR', 'DEL']),
+    side: new Set(['B', 'S', 'SL', 'SS', 'SX']),
+    orderType: new Set(['CAB', 'LMT', 'MKT', 'PEG', 'STP', 'STPLMT', 'TRL', 'TRLSTP', 'VWP', 'OTH']),
+    tradingSession: new Set(['FOR', 'PRE', 'PREREG', 'REG', 'REGPOST', 'POST', 'PREPOST', 'ALL']),
+    capacity: new Set(['A', 'P', 'R']),
+    destinationType: new Set(['F', 'E', 'N', 'O', 'D', 'S']),
+    senderType: new Set(['F', 'E', 'N', 'O', 'S']),
+    deptType: new Set(['A', 'ATS', 'DMA', 'SA', 'T', 'O']),
+    accountHolderType: new Set(['A', 'E', 'F', 'I', 'O', 'V', 'P', 'X']),
+    openCloseIndicator: new Set(['Open', 'Close']),
+    allocationType: new Set(['CUS', 'DVP', 'CUSF', 'DVPF', 'CMTA', 'FLP', 'FRM', 'STO', 'OTH']),
+    receivingDeskType: new Set(['A', 'AR', 'B', 'C', 'CR', 'D', 'EC', 'FB', 'IN', 'IS', 'O', 'PF', 'PR', 'PT', 'S', 'SW', 'T', 'TR']),
+    initiator: new Set(['C', 'F']),
+    isoInd: new Set(['ISOD', 'ISOI', 'NA']),
+    atsDisplayInd: new Set(['S', 'A', 'Y', 'N']),
+    sideDetailsInd: new Set(['BUY', 'SELL', 'NA']),
+    representativeInd: new Set(['Y', 'N']),
+    representativeQuoteInd: new Set(['Y', 'N']),
+    nbboSource: new Set(['S', 'D', 'OPRA', 'NA']),
+    quoteWantedInd: new Set(['Y', 'N']),
+    mpStatusCode: new Set(['A', 'R', 'E']),
+    reportingExceptionCode: new Set(['P', 'N']),
+    priceType: new Set(['PER', 'NET', 'OTH']),
+    quotePriceType: new Set(['PER', 'NET', 'OTH']),
+    fulfillmentLinkType: new Set(['TA', 'AA', 'PA']),
+    unsolicitedInd: new Set(['Y', 'N']),
+};
+
+function validateRecord(record, format) {
+    const type = record.type;
+    const schema = CAT_SCHEMA[type];
+    const errors = {};
+
+    function addError(field, severity, message) {
+        if (!errors[field]) errors[field] = [];
+        errors[field].push({ severity, message });
+    }
+
+    // 1. Unknown event type
+    if (!schema) {
+        if (type) {
+            addError('type', 'error', `Unknown event type: ${type}`);
+        } else {
+            addError('type', 'error', 'Missing event type');
+        }
+        return Object.keys(errors).length ? errors : null;
+    }
+
+    const isNew = record.actionType === 'NEW';
+    const isCSV = format === 'csv';
+
+    // 2. Check each field defined in the schema
+    for (const [fieldName, rules] of Object.entries(schema)) {
+        const [req, typeCode, ...constraints] = rules;
+        const value = record[fieldName];
+        const isEmpty = value === undefined || value === null || value === '';
+
+        // Skip retired/reserved fields
+        if (fieldName === 'retiredFieldPosition' || fieldName === 'reservedForFutureUse') continue;
+
+        // Required field missing (only for NEW action type)
+        if (req === 'R' && isEmpty && isNew) {
+            addError(fieldName, 'error', `Required field is missing`);
+            continue;
+        }
+
+        // Skip further checks if empty
+        if (isEmpty) continue;
+
+        // Type checking
+        if (typeCode === 'B') {
+            if (isCSV) {
+                if (value !== 'true' && value !== 'false') {
+                    addError(fieldName, 'error', `Expected boolean (true/false), got: ${String(value).slice(0, 20)}`);
+                }
+            } else {
+                if (typeof value !== 'boolean') {
+                    addError(fieldName, 'error', `Expected boolean, got ${typeof value}`);
+                }
+            }
+        } else if (typeCode === 'N') {
+            const numStr = String(value);
+            if (isCSV) {
+                if (!/^-?\d+(\.\d+)?$/.test(numStr)) {
+                    addError(fieldName, 'error', `Expected number, got: ${numStr.slice(0, 20)}`);
+                    continue;
+                }
+            } else {
+                if (typeof value !== 'number') {
+                    addError(fieldName, 'error', `Expected number, got ${typeof value}`);
+                    continue;
+                }
+            }
+            // Precision/scale check
+            if (constraints.length >= 2) {
+                // CAT spec: precision = max digits before decimal, scale = max digits after decimal
+                const [maxIntDigits, maxFracDigits] = constraints;
+                const parts = numStr.replace('-', '').split('.');
+                const intPart = parts[0].replace(/^0+/, '') || '0';
+                const fracPart = parts[1] || '';
+                if (intPart.length > maxIntDigits) {
+                    addError(fieldName, 'warn', `Integer part exceeds max ${maxIntDigits} digits (got ${intPart.length})`);
+                }
+                if (fracPart.length > maxFracDigits && maxFracDigits >= 0) {
+                    addError(fieldName, 'warn', `Decimal places exceed max ${maxFracDigits} (got ${fracPart.length})`);
+                }
+            }
+        } else if (typeCode === 'S') {
+            if (!isCSV && typeof value !== 'string') {
+                addError(fieldName, 'error', `Expected string, got ${typeof value}`);
+                continue;
+            }
+            // Max length check
+            if (constraints.length >= 1) {
+                const maxLen = constraints[0];
+                if (maxLen > 0 && String(value).length > maxLen) {
+                    addError(fieldName, 'error', `Exceeds max length ${maxLen} (got ${String(value).length})`);
+                }
+            }
+        } else if (typeCode === 'SN') {
+            // Timestamp: accepts string or number
+            if (!isCSV && typeof value !== 'string' && typeof value !== 'number') {
+                addError(fieldName, 'error', `Expected string or number timestamp, got ${typeof value}`);
+            }
+            // Validate timestamp format
+            const s = String(value);
+            if (typeof value === 'string' || isCSV) {
+                // String format: YYYYMMDDTHHMMSS.ffffff (15-25 chars) or epoch number string
+                if (!/^\d{8}[T ]\d{6}(\.\d{1,9})?$/.test(s) && !/^\d{13,20}$/.test(s)) {
+                    addError(fieldName, 'warn', `Invalid timestamp format: ${s.slice(0, 30)}`);
+                }
+            }
+        } else if (typeCode === 'A') {
+            // Array type — check it's actually an array (JSON) or non-empty string (CSV)
+            if (!isCSV && !Array.isArray(value) && typeof value !== 'string') {
+                addError(fieldName, 'error', `Expected array, got ${typeof value}`);
+            }
+        } else if (typeCode === 'O') {
+            // Object type (timeInForce, handlingInstructions)
+            if (!isCSV && typeof value !== 'object') {
+                addError(fieldName, 'error', `Expected object, got ${typeof value}`);
+            }
+        }
+
+        // Allowed values check for Choice fields
+        if (typeCode === 'S' && CAT_CHOICE_VALUES[fieldName]) {
+            const sv = String(value);
+            if (!CAT_CHOICE_VALUES[fieldName].has(sv)) {
+                addError(fieldName, 'warn', `Unexpected value "${sv.slice(0, 20)}" for ${fieldName}`);
+            }
+        }
+
+        // Message type validation
+        if (fieldName === 'type' && !CAT_ALLOWED_TYPES.has(String(value))) {
+            addError(fieldName, 'error', `Unknown message type: ${String(value)}`);
+        }
+    }
+
+    // 3. Check for unknown fields
+    for (const key of Object.keys(record)) {
+        if (VALIDATION_SKIP_FIELDS.has(key)) continue;
+        if (key.startsWith('retiredFieldPosition') || key.startsWith('reservedForFutureUse')) continue;
+        if (!schema[key]) {
+            addError(key, 'warn', `Unknown field for ${type}`);
+        }
+    }
+
+    return Object.keys(errors).length ? errors : null;
+}
+
 function processFileText(file, text, append) {
     try {
         if (append && loadedFiles.some(f => f.name === file.name)) {
@@ -1747,6 +2047,8 @@ function processFileText(file, text, append) {
         }
 
         // Flatten nested objects for display
+        // Validate records against schema before flattening
+        newRecords.forEach(r => { r._errors = validateRecord(r, fmt); });
         newRecords = newRecords.map(flattenRecord);
 
         if (append) {
@@ -1775,7 +2077,10 @@ const TRADE_SIDE_FIELDS_SUPP = ['orderKeyDate', 'orderID', 'side', 'quantity', '
 
 function flattenRecord(record) {
     const flat = {};
+    flat._errors = record._errors || null;
+    flat._original = record;
     for (const [key, value] of Object.entries(record)) {
+        if (key === '_errors' || key === '_original') continue;
         if (key === 'timeInForce') {
             // timeInForce: extract single name/value pair into .type and .value
             if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
@@ -2324,6 +2629,9 @@ function clearAllFilters() {
     // Clear search
     $('searchInput').value = '';
     syncSearchClear();
+    // Clear errors-only filter
+    showErrorsOnly = false;
+    $('errorsToggle').classList.remove('active');
     // Clear order chain
     orderChainRoot = null;
     orderChainDepth = Infinity;
@@ -2403,6 +2711,8 @@ function initializeUI() {
     document.body.style.paddingBottom = '';
     currentDetailRecord = null;
     detailMode = 'translated';
+    showErrorsOnly = false;
+    $('errorsToggle').classList.remove('active');
     switchTab('table', false);
     $('showAllFields').checked = false;
     document.querySelectorAll('.detail-tab').forEach(t => t.classList.toggle('active', t.dataset.detailTab === 'translated'));
@@ -2414,7 +2724,7 @@ function initializeUI() {
 
     // Determine columns
     const colSet = new Set();
-    allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx' && k !== '_timeInForce_original') colSet.add(k); }));
+    allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx' && k !== '_timeInForce_original' && k !== '_errors' && k !== '_original') colSet.add(k); }));
     const allCols = Array.from(colSet);
 
     // Apply saved column order if available, then append any new columns
@@ -2484,6 +2794,20 @@ function initializeUI() {
             <span class="stat-label">Size:</span>
             <span class="stat-value">${formatSize(totalSize)}</span>
         </div>
+        ${(() => {
+            const errRecCount = allRecords.filter(r => r._errors && Object.keys(r._errors).length).length;
+            const totalErrs = allRecords.reduce((s, r) => s + (r._errors ? Object.keys(r._errors).length : 0), 0);
+            if (errRecCount > 0) {
+                return `<div class="stat">
+                    <span class="stat-label">Validation:</span>
+                    <span class="stat-value val-stat-error">${totalErrs.toLocaleString()} error${totalErrs !== 1 ? 's' : ''} in ${errRecCount.toLocaleString()} record${errRecCount !== 1 ? 's' : ''}</span>
+                </div>`;
+            }
+            return `<div class="stat">
+                <span class="stat-label">Validation:</span>
+                <span class="stat-value val-stat-ok">&#10003; All valid</span>
+            </div>`;
+        })()}
     `;
 
     // Render dynamic filter bar
@@ -3145,7 +3469,7 @@ function showAddFilterMenu(e) {
     if (existing) { existing.remove(); return; }
 
     const allCols = new Set();
-    allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx') allCols.add(k); }));
+    allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx' && k !== '_timeInForce_original' && k !== '_errors' && k !== '_original') allCols.add(k); }));
     const available = Array.from(allCols).sort().filter(c => !activeFilters.includes(c));
     if (!available.length) return;
 
@@ -3244,10 +3568,11 @@ function applyFilters(skipSync) {
         }
         if (search) {
             const match = Object.values(r).some(v =>
-                String(v).toLowerCase().includes(search)
+                v !== null && typeof v !== 'object' && String(v).toLowerCase().includes(search)
             );
             if (!match) return false;
         }
+        if (showErrorsOnly && !(r._errors && Object.keys(r._errors).length)) return false;
         return true;
     });
 
@@ -3303,15 +3628,21 @@ function renderTable() {
         const globalIdx = start + idx;
         const chainEntry = chainDisplayData ? chainDisplayData[globalIdx] : null;
         const groupFirst = chainEntry && chainEntry.isFirstOfOrder && chainEntry.depth > 0;
+        const hasErrors = record._errors && Object.keys(record._errors).length > 0;
         let cls = selectedRow === globalIdx ? 'selected' : '';
         if (groupFirst) cls += ' order-group-first';
         html += `<tr data-idx="${globalIdx}" class="${cls}">`;
-        html += `<td>${globalIdx + 1}</td>`;
+        html += `<td>${hasErrors ? '<span class="val-icon" title="Validation errors">\u26A0</span>' : ''}${globalIdx + 1}</td>`;
         if (chainDisplayData) {
             html += `<td class="tree-cell">${chainEntry ? escapeHtml(chainEntry.treePrefix) : ''}</td>`;
         }
         for (const col of visCols) {
-            html += `<td>${formatCell(col, record[col])}</td>`;
+            const errs = record._errors && record._errors[col];
+            const parentErrs = !errs && col.includes('.') && record._errors && record._errors[col.split('.')[0]];
+            const allErrs = errs || parentErrs;
+            const errCls = allErrs ? (allErrs.some(e => e.severity === 'error') ? ' val-error' : ' val-warn') : '';
+            const errTip = allErrs ? allErrs.map(e => e.message).join('; ') : '';
+            html += `<td${errCls ? ` class="${errCls}"` : ''}${errTip ? ` data-tooltip="${escapeHtml(errTip)}"` : ''}>${formatCell(col, record[col])}</td>`;
         }
         html += '</tr>';
     });
@@ -3694,9 +4025,20 @@ function renderDetailGrid(record, mode, showAll) {
         keys = newKeys;
     }
 
+    // Append fields with validation errors that aren't already in the key list
+    // (e.g. required fields missing entirely from the record)
+    if (record._errors) {
+        const keySet = new Set(keys);
+        for (const errField of Object.keys(record._errors)) {
+            if (!keySet.has(errField)) {
+                keys.push(errField);
+            }
+        }
+    }
+
     let html = '';
     for (const key of keys) {
-        if (key === '_idx') continue;
+        if (key === '_idx' || key === '_errors' || key === '_original') continue;
         if (key === '_placeholder') {
             html += '<div class="detail-field" style="visibility:hidden"></div>';
             continue;
@@ -3704,13 +4046,22 @@ function renderDetailGrid(record, mode, showAll) {
         const value = record[key];
         const isEmpty = value === undefined || value === null || value === '';
 
-        if (!showAll && isEmpty) continue;
-
         const displayKey = key === '_timeInForce_original' ? 'timeInForce' : key;
 
+        // Look up validation errors for this field
+        const lookupKey = key === '_timeInForce_original' ? 'timeInForce' : key;
+        const fieldErrors = record._errors && (record._errors[lookupKey] || (lookupKey.includes('.') && record._errors[lookupKey.split('.')[0]]));
+        const errClass = fieldErrors ? (fieldErrors.some(e => e.severity === 'error') ? ' has-val-error' : ' has-val-warn') : '';
+
+        // Show empty fields if "show all" is checked, or if the field has validation errors (e.g. missing required)
+        if (!showAll && isEmpty && !fieldErrors) continue;
+        const errBadges = fieldErrors ? fieldErrors.map(e =>
+            `<span class="val-badge val-badge-${e.severity}">${escapeHtml(e.message)}</span>`
+        ).join('') : '';
+
         if (isEmpty) {
-            html += `<div class="detail-field">
-                <span class="field-name">${escapeHtml(displayKey)}</span>
+            html += `<div class="detail-field${errClass}">
+                <span class="field-name">${escapeHtml(displayKey)}${errBadges}</span>
                 <span class="field-value"><span style="color:var(--surface2)">&mdash;</span></span>
             </div>`;
             continue;
@@ -3720,8 +4071,8 @@ function renderDetailGrid(record, mode, showAll) {
         if (key === 'legDetails' && mode === 'translated') {
             const legs = parseLegDetails(value);
             if (legs.length) {
-                html += `<div class="detail-field-wide">
-                    <div class="field-name">${escapeHtml(key)}</div>
+                html += `<div class="detail-field-wide${errClass}">
+                    <div class="field-name">${escapeHtml(key)}${errBadges}</div>
                     ${renderLegDetailsHTML(value, mode)}
                 </div>`;
                 continue;
@@ -3732,8 +4083,8 @@ function renderDetailGrid(record, mode, showAll) {
             const fields = isSupp ? TRADE_SIDE_FIELDS_SUPP : TRADE_SIDE_FIELDS;
             const items = parseSideDetails(value, fields);
             if (items.length) {
-                html += `<div class="detail-field-wide">
-                    <div class="field-name">${escapeHtml(key)}</div>
+                html += `<div class="detail-field-wide${errClass}">
+                    <div class="field-name">${escapeHtml(key)}${errBadges}</div>
                     ${renderSideDetailsHTML(value, fields, mode)}
                 </div>`;
                 continue;
@@ -3747,8 +4098,8 @@ function renderDetailGrid(record, mode, showAll) {
         } else {
             display = escapeHtml(raw);
         }
-        html += `<div class="detail-field">
-            <span class="field-name">${escapeHtml(displayKey)}</span>
+        html += `<div class="detail-field${errClass}">
+            <span class="field-name">${escapeHtml(displayKey)}${errBadges}</span>
             <span class="field-value">${display}</span>
         </div>`;
     }
@@ -3877,7 +4228,7 @@ function renderEventSummary() {
 function renderRawTab() {
     const maxShow = 50;
     const sample = allRecords.slice(0, maxShow);
-    const replacer = (k, v) => (k === '_idx' || k === '_timeInForce_original') ? undefined : v;
+    const replacer = (k, v) => (k === '_idx' || k === '_timeInForce_original' || k === '_errors' || k === '_original') ? undefined : v;
     $('rawContent').textContent = JSON.stringify(sample, replacer, 2) +
         (allRecords.length > maxShow ? `\n\n... (${allRecords.length - maxShow} more records)` : '');
 }
@@ -3906,6 +4257,13 @@ $('searchClear').addEventListener('click', () => {
 
 // ── Clear all filters ──
 $('clearAllFilters').addEventListener('click', clearAllFilters);
+
+$('errorsToggle').addEventListener('click', () => {
+    showErrorsOnly = !showErrorsOnly;
+    $('errorsToggle').classList.toggle('active', showErrorsOnly);
+    currentPage = 0;
+    applyFilters();
+});
 
 // ── Order chain controls ──
 $('clearChain').addEventListener('click', clearOrderChain);
@@ -4111,7 +4469,7 @@ $('resetLayoutBtn').addEventListener('click', () => {
     hiddenColumns.clear();
     if (!allRecords.length) return;
     const colSet = new Set();
-    allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx' && k !== '_timeInForce_original') colSet.add(k); }));
+    allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx' && k !== '_timeInForce_original' && k !== '_errors' && k !== '_original') colSet.add(k); }));
     const allCols = Array.from(colSet);
     columns = [];
     for (const col of PRIORITY_COLUMNS) {
@@ -4155,7 +4513,7 @@ function applyLayout(layout) {
     // Apply column order — keep any columns from current data that aren't in the file
     if (allRecords.length) {
         const colSet = new Set();
-        allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx' && k !== '_timeInForce_original') colSet.add(k); }));
+        allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx' && k !== '_timeInForce_original' && k !== '_errors' && k !== '_original') colSet.add(k); }));
         const allCols = Array.from(colSet);
         columns = [];
         for (const col of layout.columnOrder) {
