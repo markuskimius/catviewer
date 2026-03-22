@@ -2323,37 +2323,104 @@ function formatLegSummary(value) {
     return `${legs.length} leg${legs.length > 1 ? 's' : ''}: ${parts.join(' / ')}`;
 }
 
-function renderLegDetailsHTML(value, mode) {
+// Parse array-field validation errors into a per-element, per-field map:
+// { 0: { side: [{severity, message}], _row: [{severity, message}] }, ... }
+// _row entries are element-level errors not tied to a specific field.
+function parseArrayFieldErrors(errors) {
+    if (!errors) return null;
+    const map = {};
+    for (const err of errors) {
+        // Match "Element [N]: required field "FIELD" is missing"
+        let m = err.message.match(/^Element \[(\d+)\]: required field "(\w+)" is missing$/);
+        if (m) {
+            const idx = parseInt(m[1]), field = m[2];
+            if (!map[idx]) map[idx] = {};
+            if (!map[idx][field]) map[idx][field] = [];
+            map[idx][field].push(err);
+            continue;
+        }
+        // Match "Element [N].FIELD: MESSAGE"
+        m = err.message.match(/^Element \[(\d+)\]\.(\w+): (.+)$/);
+        if (m) {
+            const idx = parseInt(m[1]), field = m[2];
+            if (!map[idx]) map[idx] = {};
+            if (!map[idx][field]) map[idx][field] = [];
+            map[idx][field].push(err);
+            continue;
+        }
+        // Match "Element [N]: MESSAGE" (whole-row error)
+        m = err.message.match(/^Element \[(\d+)\]: (.+)$/);
+        if (m) {
+            const idx = parseInt(m[1]);
+            if (!map[idx]) map[idx] = {};
+            if (!map[idx]._row) map[idx]._row = [];
+            map[idx]._row.push(err);
+            continue;
+        }
+    }
+    return Object.keys(map).length ? map : null;
+}
+
+// Build <td> with optional validation error highlighting and tooltip
+function renderCellWithErrors(content, cellErrors) {
+    if (!cellErrors || !cellErrors.length) return `<td>${content}</td>`;
+    const cls = cellErrors.some(e => e.severity === 'error') ? 'val-error' : 'val-warn';
+    const tip = cellErrors.map(e => {
+        // Strip "Element [N].field: " prefix for cleaner tooltips
+        return e.message.replace(/^Element \[\d+\](?:\.\w+)?:\s*/, '');
+    }).join('; ');
+    return `<td class="${cls}" data-tooltip="${escapeHtml(tip)}">${content}</td>`;
+}
+
+function renderLegDetailsHTML(value, mode, fieldErrors) {
     const legs = parseLegDetails(value);
     if (!legs.length) return escapeHtml(String(value));
+    const errMap = parseArrayFieldErrors(fieldErrors);
+    // Determine columns: start with LEG_DETAIL_FIELDS, add any error-referenced fields not already present
+    const displayFields = [...LEG_DETAIL_FIELDS];
+    if (errMap) {
+        for (const elemErrs of Object.values(errMap)) {
+            for (const f of Object.keys(elemErrs)) {
+                if (f !== '_row' && !displayFields.includes(f)) displayFields.push(f);
+            }
+        }
+    }
     let html = '<table class="leg-table"><thead><tr>';
     html += '<th>#</th>';
-    for (const f of LEG_DETAIL_FIELDS) {
+    for (const f of displayFields) {
         html += `<th>${escapeHtml(f)}</th>`;
     }
     html += '</tr></thead><tbody>';
     legs.forEach((leg, i) => {
+        const rowErrs = errMap && errMap[i];
         html += '<tr>';
-        html += `<td>${i + 1}</td>`;
-        for (const f of LEG_DETAIL_FIELDS) {
+        // Row number cell — show warning icon if row-level errors
+        if (rowErrs && rowErrs._row) {
+            const tip = rowErrs._row.map(e => e.message).join('; ');
+            html += `<td class="val-error" data-tooltip="${escapeHtml(tip)}">${i + 1}</td>`;
+        } else {
+            html += `<td>${i + 1}</td>`;
+        }
+        for (const f of displayFields) {
             const raw = leg[f];
+            const cellErrs = rowErrs && rowErrs[f];
             if (raw === undefined || raw === null || raw === '') {
-                html += '<td><span style="color:var(--surface2)">&mdash;</span></td>';
+                html += renderCellWithErrors('<span style="color:var(--surface2)">&mdash;</span>', cellErrs);
             } else if (mode === 'translated' && f === 'side' && FIELD_LABELS.side[raw]) {
                 const sideCls = (raw === 'B') ? 'side-buy' : 'side-sell';
-                html += `<td title="${escapeHtml(raw)}"><span class="${sideCls}">${escapeHtml(FIELD_LABELS.side[raw])}</span></td>`;
+                html += renderCellWithErrors(`<span class="${sideCls}" title="${escapeHtml(raw)}">${escapeHtml(FIELD_LABELS.side[raw])}</span>`, cellErrs);
             } else if (mode === 'translated' && FIELD_LABELS[f] && FIELD_LABELS[f][raw]) {
-                html += `<td title="${escapeHtml(raw)}">${escapeHtml(FIELD_LABELS[f][raw])}</td>`;
+                html += renderCellWithErrors(`<span title="${escapeHtml(raw)}">${escapeHtml(FIELD_LABELS[f][raw])}</span>`, cellErrs);
             } else if (mode === 'translated' && (f === 'symbol' || f === 'underlying')) {
                 const ticker = String(raw).trim();
                 const url = 'https://finance.yahoo.com/quote/' + encodeURIComponent(ticker);
-                html += `<td><a class="yahoo-link" href="${escapeHtml(url)}" target="_blank" rel="noopener" title="View ${escapeHtml(ticker)} on Yahoo Finance">${escapeHtml(ticker)}</a></td>`;
+                html += renderCellWithErrors(`<a class="yahoo-link" href="${escapeHtml(url)}" target="_blank" rel="noopener" title="View ${escapeHtml(ticker)} on Yahoo Finance">${escapeHtml(ticker)}</a>`, cellErrs);
             } else if (mode === 'translated' && f === 'optionID') {
                 const yahooSym = String(raw).replace(/\s+/g, '');
                 const url = 'https://finance.yahoo.com/quote/' + encodeURIComponent(yahooSym);
-                html += `<td><a class="yahoo-link" href="${escapeHtml(url)}" target="_blank" rel="noopener" title="View option on Yahoo Finance">${escapeHtml(String(raw))}</a></td>`;
+                html += renderCellWithErrors(`<a class="yahoo-link" href="${escapeHtml(url)}" target="_blank" rel="noopener" title="View option on Yahoo Finance">${escapeHtml(String(raw))}</a>`, cellErrs);
             } else {
-                html += `<td>${escapeHtml(String(raw))}</td>`;
+                html += renderCellWithErrors(escapeHtml(String(raw)), cellErrs);
             }
         }
         html += '</tr>';
@@ -2377,39 +2444,112 @@ function parseSideDetails(value, fields) {
     });
 }
 
-function renderSideDetailsHTML(value, fields, mode) {
+function renderSideDetailsHTML(value, fields, mode, fieldErrors) {
     const items = parseSideDetails(value, fields);
     if (!items.length) return escapeHtml(String(value));
-    // Filter out retiredFieldPosition
+    const errMap = parseArrayFieldErrors(fieldErrors);
+    // Filter out retiredFieldPosition, then add any error-referenced fields not already present
     const displayFields = fields.filter(f => f !== 'retiredFieldPosition');
+    if (errMap) {
+        for (const elemErrs of Object.values(errMap)) {
+            for (const f of Object.keys(elemErrs)) {
+                if (f !== '_row' && !displayFields.includes(f)) displayFields.push(f);
+            }
+        }
+    }
     let html = '<table class="leg-table"><thead><tr>';
     for (const f of displayFields) {
         html += `<th>${escapeHtml(f)}</th>`;
     }
     html += '</tr></thead><tbody>';
-    items.forEach(item => {
+    items.forEach((item, i) => {
+        const rowErrs = errMap && errMap[i];
         html += '<tr>';
         for (const f of displayFields) {
             const raw = item[f];
+            const cellErrs = rowErrs && rowErrs[f];
             if (raw === undefined || raw === null || raw === '') {
-                html += '<td><span style="color:var(--surface2)">&mdash;</span></td>';
+                html += renderCellWithErrors('<span style="color:var(--surface2)">&mdash;</span>', cellErrs);
             } else if (mode === 'translated' && f === 'side' && FIELD_LABELS.side[raw]) {
                 const sideCls = (raw === 'B') ? 'side-buy' : 'side-sell';
-                html += `<td title="${escapeHtml(raw)}"><span class="${sideCls}">${escapeHtml(FIELD_LABELS.side[raw])}</span></td>`;
+                html += renderCellWithErrors(`<span class="${sideCls}" title="${escapeHtml(raw)}">${escapeHtml(FIELD_LABELS.side[raw])}</span>`, cellErrs);
             } else if (mode === 'translated' && FIELD_LABELS[f] && FIELD_LABELS[f][raw]) {
-                html += `<td title="${escapeHtml(raw)}">${escapeHtml(FIELD_LABELS[f][raw])}</td>`;
+                html += renderCellWithErrors(`<span title="${escapeHtml(raw)}">${escapeHtml(FIELD_LABELS[f][raw])}</span>`, cellErrs);
             } else if (mode === 'translated' && /Timestamp$|KeyDate$/.test(f) && /^\d{8}[T ]\d{6}(\.\d+)?$/.test(raw)) {
                 const d = raw.slice(0,4)+'-'+raw.slice(4,6)+'-'+raw.slice(6,8);
                 const t = raw.slice(9,11)+':'+raw.slice(11,13)+':'+raw.slice(13);
-                html += `<td title="${escapeHtml(raw)}">${d} ${t}</td>`;
+                html += renderCellWithErrors(`<span title="${escapeHtml(raw)}">${d} ${t}</span>`, cellErrs);
             } else if (mode === 'translated' && /Timestamp$|KeyDate$/.test(f) && /^\d{13,19}$/.test(String(raw))) {
                 const et = formatEpochNanosToET(raw);
-                if (et) html += `<td title="${escapeHtml(String(raw))} (UTC epoch ns → ET)">${et}</td>`;
-                else html += `<td>${escapeHtml(String(raw))}</td>`;
+                if (et) html += renderCellWithErrors(`<span title="${escapeHtml(String(raw))} (UTC epoch ns → ET)">${et}</span>`, cellErrs);
+                else html += renderCellWithErrors(escapeHtml(String(raw)), cellErrs);
             } else if (mode === 'translated' && LINKAGE_FIELDS[f] && lookupLinkedRecords(f, raw)) {
-                html += `<td><span class="order-link" data-link-field="${escapeHtml(f)}" data-link-value="${escapeHtml(raw)}" title="Show linked records">${escapeHtml(String(raw))}</span></td>`;
+                html += renderCellWithErrors(`<span class="order-link" data-link-field="${escapeHtml(f)}" data-link-value="${escapeHtml(raw)}" title="Show linked records">${escapeHtml(String(raw))}</span>`, cellErrs);
             } else {
-                html += `<td>${escapeHtml(String(raw))}</td>`;
+                html += renderCellWithErrors(escapeHtml(String(raw)), cellErrs);
+            }
+        }
+        html += '</tr>';
+    });
+    html += '</tbody></table>';
+    return html;
+}
+
+// Generic compound field table renderer for aggregatedOrders, clientDetails, firmDetails, etc.
+function renderCompoundArrayHTML(value, mode, fieldErrors) {
+    const items = Array.isArray(value) ? value : [];
+    if (!items.length) return escapeHtml(String(value));
+    const errMap = parseArrayFieldErrors(fieldErrors);
+    // Collect all field names from data, filter out retired/reserved
+    const fieldSet = new Set();
+    for (const item of items) {
+        if (item && typeof item === 'object') {
+            for (const k of Object.keys(item)) {
+                if (!k.startsWith('retiredFieldPosition') && !k.startsWith('reservedForFutureUse')) fieldSet.add(k);
+            }
+        }
+    }
+    // Add any error-referenced fields
+    if (errMap) {
+        for (const elemErrs of Object.values(errMap)) {
+            for (const f of Object.keys(elemErrs)) {
+                if (f !== '_row' && !f.startsWith('retiredFieldPosition') && !f.startsWith('reservedForFutureUse')) fieldSet.add(f);
+            }
+        }
+    }
+    const displayFields = [...fieldSet];
+    if (!displayFields.length) return escapeHtml(JSON.stringify(value));
+    let html = '<table class="leg-table"><thead><tr>';
+    for (const f of displayFields) {
+        html += `<th>${escapeHtml(f)}</th>`;
+    }
+    html += '</tr></thead><tbody>';
+    items.forEach((item, i) => {
+        const rowErrs = errMap && errMap[i];
+        html += '<tr>';
+        for (const f of displayFields) {
+            const raw = item && item[f];
+            const cellErrs = rowErrs && rowErrs[f];
+            if (raw === undefined || raw === null || raw === '') {
+                html += renderCellWithErrors('<span style="color:var(--surface2)">&mdash;</span>', cellErrs);
+            } else if (mode === 'translated' && f === 'side' && FIELD_LABELS.side[raw]) {
+                const sideCls = (raw === 'B') ? 'side-buy' : 'side-sell';
+                html += renderCellWithErrors(`<span class="${sideCls}" title="${escapeHtml(raw)}">${escapeHtml(FIELD_LABELS.side[raw])}</span>`, cellErrs);
+            } else if (mode === 'translated' && FIELD_LABELS[f] && FIELD_LABELS[f][raw]) {
+                html += renderCellWithErrors(`<span title="${escapeHtml(raw)}">${escapeHtml(FIELD_LABELS[f][raw])}</span>`, cellErrs);
+            } else if (mode === 'translated' && /Timestamp$|KeyDate$/.test(f) && /^\d{8}[T ]\d{6}(\.\d+)?$/.test(String(raw))) {
+                const s = String(raw);
+                const d = s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);
+                const t = s.slice(9,11)+':'+s.slice(11,13)+':'+s.slice(13);
+                html += renderCellWithErrors(`<span title="${escapeHtml(s)}">${d} ${t}</span>`, cellErrs);
+            } else if (mode === 'translated' && /Timestamp$|KeyDate$/.test(f) && /^\d{13,19}$/.test(String(raw))) {
+                const et = formatEpochNanosToET(raw);
+                if (et) html += renderCellWithErrors(`<span title="${escapeHtml(String(raw))} (UTC epoch ns → ET)">${et}</span>`, cellErrs);
+                else html += renderCellWithErrors(escapeHtml(String(raw)), cellErrs);
+            } else if (mode === 'translated' && LINKAGE_FIELDS[f] && lookupLinkedRecords(f, raw)) {
+                html += renderCellWithErrors(`<span class="order-link" data-link-field="${escapeHtml(f)}" data-link-value="${escapeHtml(raw)}" title="Show linked records">${escapeHtml(String(raw))}</span>`, cellErrs);
+            } else {
+                html += renderCellWithErrors(escapeHtml(String(raw)), cellErrs);
             }
         }
         html += '</tr>';
@@ -4242,13 +4382,18 @@ function renderDetailGrid(record, mode, showAll) {
             continue;
         }
 
-        // Compound fields (legDetails, buyDetails, sellDetails) get a full-width sub-table in translated mode
+        // Compound fields get a full-width sub-table in translated mode with per-cell error highlighting
         if (key === 'legDetails' && mode === 'translated') {
             const legs = parseLegDetails(value);
             if (legs.length) {
-                html += `<div class="detail-field-wide${errClass}">
-                    <div class="field-name">${escapeHtml(key)}${errBadges}</div>
-                    ${renderLegDetailsHTML(value, mode)}
+                // Element errors shown inside cells; only show non-element errors as badges above
+                const elemErrs = fieldErrors ? fieldErrors.filter(e => /^Element \[/.test(e.message)) : [];
+                const otherErrs = fieldErrors ? fieldErrors.filter(e => !/^Element \[/.test(e.message)) : [];
+                const topBadges = otherErrs.length ? otherErrs.map(e => `<span class="val-badge val-badge-${e.severity}">${escapeHtml(e.message)}</span>`).join('') : '';
+                const topClass = otherErrs.length ? (otherErrs.some(e => e.severity === 'error') ? ' has-val-error' : ' has-val-warn') : '';
+                html += `<div class="detail-field-wide${topClass}">
+                    <div class="field-name">${escapeHtml(key)}${topBadges}</div>
+                    ${renderLegDetailsHTML(value, mode, elemErrs.length ? elemErrs : null)}
                 </div>`;
                 continue;
             }
@@ -4258,12 +4403,27 @@ function renderDetailGrid(record, mode, showAll) {
             const fields = isSupp ? TRADE_SIDE_FIELDS_SUPP : TRADE_SIDE_FIELDS;
             const items = parseSideDetails(value, fields);
             if (items.length) {
-                html += `<div class="detail-field-wide${errClass}">
-                    <div class="field-name">${escapeHtml(key)}${errBadges}</div>
-                    ${renderSideDetailsHTML(value, fields, mode)}
+                const elemErrs = fieldErrors ? fieldErrors.filter(e => /^Element \[/.test(e.message)) : [];
+                const otherErrs = fieldErrors ? fieldErrors.filter(e => !/^Element \[/.test(e.message)) : [];
+                const topBadges = otherErrs.length ? otherErrs.map(e => `<span class="val-badge val-badge-${e.severity}">${escapeHtml(e.message)}</span>`).join('') : '';
+                const topClass = otherErrs.length ? (otherErrs.some(e => e.severity === 'error') ? ' has-val-error' : ' has-val-warn') : '';
+                html += `<div class="detail-field-wide${topClass}">
+                    <div class="field-name">${escapeHtml(key)}${topBadges}</div>
+                    ${renderSideDetailsHTML(value, fields, mode, elemErrs.length ? elemErrs : null)}
                 </div>`;
                 continue;
             }
+        }
+        if (COMPOUND_FIELDS.has(key) && key !== 'legDetails' && key !== 'buyDetails' && key !== 'sellDetails' && mode === 'translated' && Array.isArray(value) && value.length) {
+            const elemErrs = fieldErrors ? fieldErrors.filter(e => /^Element \[/.test(e.message)) : [];
+            const otherErrs = fieldErrors ? fieldErrors.filter(e => !/^Element \[/.test(e.message)) : [];
+            const topBadges = otherErrs.length ? otherErrs.map(e => `<span class="val-badge val-badge-${e.severity}">${escapeHtml(e.message)}</span>`).join('') : '';
+            const topClass = otherErrs.length ? (otherErrs.some(e => e.severity === 'error') ? ' has-val-error' : ' has-val-warn') : '';
+            html += `<div class="detail-field-wide${topClass}">
+                <div class="field-name">${escapeHtml(key)}${topBadges}</div>
+                ${renderCompoundArrayHTML(value, mode, elemErrs.length ? elemErrs : null)}
+            </div>`;
+            continue;
         }
 
         const raw = (typeof value === 'object') ? JSON.stringify(value) : String(value);
