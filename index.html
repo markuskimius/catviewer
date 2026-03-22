@@ -1668,9 +1668,10 @@ function switchTab(name, push) {
         // Capture current scroll before layout change
         const scrollBefore = window.scrollY;
         document.body.classList.add('detail-open');
-        // Recalculate layout from current panel height
-        const panelH = panel.offsetHeight;
-        document.documentElement.style.setProperty('--detail-h', panelH + 'px');
+        // Restore panel height from before tab switch
+        if (savedDetailH) {
+            document.documentElement.style.setProperty('--detail-h', savedDetailH);
+        }
         panel.classList.add('visible');
         // Animate scroll so tab bar ends up flush below sticky header
         const headerH = document.querySelector('header').offsetHeight;
@@ -1692,6 +1693,8 @@ function switchTab(name, push) {
             requestAnimationFrame(animateScroll);
         }
     } else if (name !== 'table' && currentDetailRecord) {
+        // Save current panel height so it can be restored when switching back
+        savedDetailH = document.documentElement.style.getPropertyValue('--detail-h');
         document.body.style.transition = 'none';
         document.body.classList.remove('detail-open');
         document.documentElement.style.removeProperty('--detail-h');
@@ -2989,6 +2992,7 @@ function formatCell(col, value) {
 
 let detailMode = 'translated';
 let currentDetailRecord = null;
+let savedDetailH = '';
 
 function getFieldsForType(type) {
     return CAT_CSV_FIELDS[type] || null;
