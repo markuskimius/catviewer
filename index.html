@@ -1011,7 +1011,7 @@ const CATEGORY_LABELS = {
 
 // Key columns to show in the table (in order of importance)
 const PRIORITY_COLUMNS = [
-    'type', 'actionType', 'firmROEID', 'symbol', 'optionID', 'eventTimestamp',
+    'type', 'actionType', 'firmROEID', 'symbol', 'underlying', 'optionID', 'eventTimestamp',
     'orderKeyDate', 'orderID', 'side', 'price', 'quantity',
     'orderType', 'timeInForce', 'deptType', 'manualFlag',
     'CATReporterIMID', 'firmDesignatedID', 'accountHolderType',
@@ -1571,7 +1571,7 @@ function renderLegDetailsHTML(value, mode) {
                 html += `<td title="${escapeHtml(raw)}"><span class="${sideCls}">${escapeHtml(FIELD_LABELS.side[raw])}</span></td>`;
             } else if (mode === 'translated' && FIELD_LABELS[f] && FIELD_LABELS[f][raw]) {
                 html += `<td title="${escapeHtml(raw)}">${escapeHtml(FIELD_LABELS[f][raw])}</td>`;
-            } else if (mode === 'translated' && f === 'symbol') {
+            } else if (mode === 'translated' && (f === 'symbol' || f === 'underlying')) {
                 const ticker = String(raw).trim();
                 const url = 'https://finance.yahoo.com/quote/' + encodeURIComponent(ticker);
                 html += `<td><a class="yahoo-link" href="${escapeHtml(url)}" target="_blank" rel="noopener" title="View ${escapeHtml(ticker)} on Yahoo Finance">${escapeHtml(ticker)}</a></td>`;
@@ -3148,7 +3148,7 @@ function formatCell(col, value) {
     if (value === undefined || value === null || value === '') return '<span style="color:var(--surface2)">&mdash;</span>';
     const s = String(value);
 
-    if (col === 'symbol') {
+    if (col === 'symbol' || col === 'underlying') {
         const ticker = s.trim();
         const url = 'https://finance.yahoo.com/quote/' + encodeURIComponent(ticker);
         return `<a class="yahoo-link" href="${escapeHtml(url)}" target="_blank" rel="noopener" title="View ${escapeHtml(ticker)} on Yahoo Finance">${escapeHtml(ticker)}</a>`;
