@@ -2217,7 +2217,6 @@ function card(label, value, detail) {
 // ── Dynamic Filters ──
 const PRICE_FIELDS = new Set(['price', 'fillPrice', 'displayPrice', 'workingPrice', 'netPrice']);
 const QTY_FIELDS = new Set(['quantity', 'fillQty', 'leavesQty', 'minQty', 'displayQty', 'cancelQty']);
-const FLAG_FIELDS = new Set(['manualFlag', 'electronicDupFlag', 'negotiatedTradeFlag', 'cancelFlag', 'solicitationFlag', 'affiliateFlag', 'custDspIntrFlag', 'BFMMFlag']);
 let filterModes = {}; // col → 'exact' | 'range'
 
 // Plain-text translation of a raw value for display in filter dropdowns
@@ -2263,10 +2262,6 @@ function translateFilterValue(col, rawValue) {
     // Quantities: format with thousands separators
     if (QTY_FIELDS.has(col) && !isNaN(Number(s))) {
         return Number(s).toLocaleString();
-    }
-    // Boolean flags: Y/N
-    if (FLAG_FIELDS.has(col)) {
-        return (s === 'true' || s === true) ? 'Yes' : 'No';
     }
     return null;
 }
@@ -3216,9 +3211,6 @@ function formatCell(col, value) {
     }
     if ((col === 'quantity' || col === 'fillQty' || col === 'leavesQty' || col === 'minQty' || col === 'displayQty') && !isNaN(Number(s))) {
         return Number(s).toLocaleString();
-    }
-    if (col === 'manualFlag' || col === 'electronicDupFlag' || col === 'negotiatedTradeFlag' || col === 'cancelFlag' || col === 'solicitationFlag' || col === 'affiliateFlag' || col === 'custDspIntrFlag' || col === 'BFMMFlag') {
-        return s === 'true' || s === true ? '<span style="color:var(--orange)">Y</span>' : '<span style="color:var(--text-muted)">N</span>';
     }
     return escapeHtml(s);
 }
