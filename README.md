@@ -38,16 +38,16 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 - **URL deep linking** — hash-based URL state with direct links to selected records
 - **Multi-file support** — load multiple files (JSON, CSV, ZIP) via drag-and-drop or file picker; hold Shift to append
 - **File validation** — verifies files are CAT format before loading
-- **Tools menu** — keyboard-accessible dropdown with layout export/import for sharing between users/machines, and drag-and-drop layout reordering
+- **Tools menu** — keyboard-accessible dropdown with layout export/import for sharing between users/machines, drag-and-drop layout reordering, and validation toggle
 - **Event Summary tab** — counts by event type and action type
 - **Raw Data tab** — parsed JSON view of loaded records
 - **CSV export** — download filtered results
-- **Schema validation** — automatic field-level validation against the CAT spec with highlighted cells, error tooltips, detail panel badges, summary stats, and "Errors Only" filter. Validates nested compound fields (legDetails, buyDetails, sellDetails, aggregatedOrders, etc.), timeInForce name/value pairs, and handlingInstructions attributes.
+- **Schema validation** — field-level validation against the CAT spec (togglable via Tools menu, enabled by default) with cell highlighting, error tooltips, detail panel badges, validation summary stats, and "Errors Only" filter. Deep validation of compound array fields (legDetails, buyDetails, sellDetails, aggregatedOrders, clientDetails, firmDetails), timeInForce name/value pairs (boolean vs non-boolean types), and handlingInstructions attributes. Errors in nested fields are highlighted at the cell level within detail panel tables.
+- **Multi-level undo/redo** for filter and column operations
 
 ## Sample Data
 
-- `sample_data.json` — 15 records covering MENO, MEOR, MEOT, MEOM, MECO, and MENQ events
-- `sample_data.csv` — 6 records (MENO, MEOR) in positional CSV format
+- `1234_TEST_20250317_Sample_OrderEvents_000001.json` — 68 records covering MEAA, MECO, MEIM, MEIR, MENO, MEOA, MEOM, MEOR, MEOT, MLNO, MLOR, MOCO, and MOOT events
 
 ## Reference
 

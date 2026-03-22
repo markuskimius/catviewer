@@ -35,11 +35,12 @@ A single-file web application for compliance officers to inspect CAT data files.
 - Clickable linkage fields (orderID, tradeID, parentOrderID, priorOrderID, etc.) for navigating between related records
 - Order chain view with hierarchy tree
 - URL hash state with deep linking to selected records
-- Tools dropdown menu (keyboard shortcut accessible) with layout export/import and drag-and-drop layout reordering
+- Tools dropdown menu (keyboard shortcut accessible) with layout export/import, drag-and-drop layout reordering, and validation toggle
 - Event Summary tab with counts broken down by action type
 - Raw Data tab showing parsed JSON
 - CSV export of filtered results
-- Field-level validation against CAT schema spec (v4.1.0 r15) with cell highlighting, error tooltips, detail panel badges, validation summary stats, and "Errors Only" filter toggle. Deep validation of compound array fields (legDetails, buyDetails, sellDetails, aggregatedOrders, clientDetails, firmDetails), timeInForce name/value pairs (boolean vs non-boolean types), and handlingInstructions attributes.
+- Multi-level undo/redo for filter and column operations
+- Field-level validation against CAT schema spec (v4.1.0 r15), togglable via Tools menu (enabled by default), with cell highlighting, error tooltips, detail panel badges, validation summary stats, and "Errors Only" filter toggle. Deep validation of compound array fields (legDetails, buyDetails, sellDetails, aggregatedOrders, clientDetails, firmDetails), timeInForce name/value pairs (boolean vs non-boolean types), and handlingInstructions attributes. Nested field errors highlighted at cell level in detail panel tables.
 
 ### CAT file format notes
 - **JSON files**: NDJSON (one JSON object per line) or a JSON array. Each record has a `type` field (e.g., `MENO`, `MEOR`, `MEOT`) and `actionType` (`NEW`, `RPR`, `COR`, `DEL`).
@@ -47,8 +48,7 @@ A single-file web application for compliance officers to inspect CAT data files.
 - Event type prefixes: `ME` = equity, `MO` = option, `ML` = multi-leg
 
 ### Sample data
-- `sample_data.json` — 15 records covering MENO, MEOR, MEOT, MEOM, MECO, MENQ events
-- `sample_data.csv` — 6 records (MENO, MEOR) in CSV positional format
+- `1234_TEST_20250317_Sample_OrderEvents_000001.json` — 68 records covering MEAA, MECO, MEIM, MEIR, MENO, MEOA, MEOM, MEOR, MEOT, MLNO, MLOR, MOCO, MOOT events
 
 ### Versioning
 Version is automatically set by a git pre-commit hook (`.git/hooks/pre-commit`). Format: `vYYYY.MM.DD`. Do not manually set version numbers in `index.html`.
