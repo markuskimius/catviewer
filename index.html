@@ -931,7 +931,8 @@
             </div>
             <div class="filter-bar" id="filterBar"></div>
             <button class="btn-clear-all" id="clearAllFilters" title="Clear all filters and search">Clear All</button>
-            <button class="errors-toggle" id="errorsToggle" title="Show only records with validation errors">Errors Only</button>
+            <button class="errors-toggle" id="validationToggle" title="Enable schema validation highlighting">Validation</button>
+            <button class="errors-toggle" id="errorsToggle" title="Show only records with validation errors" style="display:none">Errors Only</button>
             <span class="toolbar-spacer"></span>
             <div class="col-order-controls">
                 <span class="col-order-saved" id="colOrderSaved">Saved</span>
@@ -1252,6 +1253,7 @@ let orderChainDepth = Infinity;
 let chainDisplayData = null;
 let activeTab = 'table';
 let showErrorsOnly = false;
+let validationEnabled = false;
 let dragSrcColIdx = null;
 let colMgrDragIdx = null;
 let hiddenColumns = new Set();
@@ -3109,7 +3111,7 @@ function initializeUI() {
             <span class="stat-label">Size:</span>
             <span class="stat-value">${formatSize(totalSize)}</span>
         </div>
-        ${(() => {
+        ${validationEnabled ? (() => {
             const errRecCount = allRecords.filter(r => r._errors && Object.keys(r._errors).length).length;
             const totalErrs = allRecords.reduce((s, r) => s + (r._errors ? Object.keys(r._errors).length : 0), 0);
             if (errRecCount > 0) {
@@ -3122,7 +3124,7 @@ function initializeUI() {
                 <span class="stat-label">Validation:</span>
                 <span class="stat-value val-stat-ok">&#10003; All valid</span>
             </div>`;
-        })()}
+        })() : ''}
     `;
 
     // Render dynamic filter bar
@@ -3887,7 +3889,7 @@ function applyFilters(skipSync) {
             );
             if (!match) return false;
         }
-        if (showErrorsOnly && !(r._errors && Object.keys(r._errors).length)) return false;
+        if (validationEnabled && showErrorsOnly && !(r._errors && Object.keys(r._errors).length)) return false;
         return true;
     });
 
@@ -3943,7 +3945,7 @@ function renderTable() {
         const globalIdx = start + idx;
         const chainEntry = chainDisplayData ? chainDisplayData[globalIdx] : null;
         const groupFirst = chainEntry && chainEntry.isFirstOfOrder && chainEntry.depth > 0;
-        const hasErrors = record._errors && Object.keys(record._errors).length > 0;
+        const hasErrors = validationEnabled && record._errors && Object.keys(record._errors).length > 0;
         let cls = selectedRow === globalIdx ? 'selected' : '';
         if (groupFirst) cls += ' order-group-first';
         html += `<tr data-idx="${globalIdx}" class="${cls}">`;
@@ -3952,8 +3954,8 @@ function renderTable() {
             html += `<td class="tree-cell">${chainEntry ? escapeHtml(chainEntry.treePrefix) : ''}</td>`;
         }
         for (const col of visCols) {
-            const errs = record._errors && record._errors[col];
-            const parentErrs = !errs && col.includes('.') && record._errors && record._errors[col.split('.')[0]];
+            const errs = validationEnabled && record._errors && record._errors[col];
+            const parentErrs = validationEnabled && !errs && col.includes('.') && record._errors && record._errors[col.split('.')[0]];
             const allErrs = errs || parentErrs;
             const errCls = allErrs ? (allErrs.some(e => e.severity === 'error') ? ' val-error' : ' val-warn') : '';
             const errTip = allErrs ? allErrs.map(e => e.message).join('; ') : '';
@@ -4342,7 +4344,7 @@ function renderDetailGrid(record, mode, showAll) {
 
     // Append fields with validation errors that aren't already in the key list
     // (e.g. required fields missing entirely from the record)
-    if (record._errors) {
+    if (validationEnabled && record._errors) {
         const keySet = new Set(keys);
         for (const errField of Object.keys(record._errors)) {
             if (!keySet.has(errField)) {
@@ -4367,9 +4369,9 @@ function renderDetailGrid(record, mode, showAll) {
 
         const displayKey = key === '_timeInForce_original' ? 'timeInForce' : key;
 
-        // Look up validation errors for this field
+        // Look up validation errors for this field (only when validation display is enabled)
         const lookupKey = key === '_timeInForce_original' ? 'timeInForce' : key;
-        const fieldErrors = record._errors && (record._errors[lookupKey] || (lookupKey.includes('.') && record._errors[lookupKey.split('.')[0]]));
+        const fieldErrors = validationEnabled && record._errors && (record._errors[lookupKey] || (lookupKey.includes('.') && record._errors[lookupKey.split('.')[0]]));
         const errClass = fieldErrors ? (fieldErrors.some(e => e.severity === 'error') ? ' has-val-error' : ' has-val-warn') : '';
 
         // Show empty fields if "show all" is checked, or if the field has validation errors (e.g. missing required)
@@ -4596,6 +4598,18 @@ $('searchClear').addEventListener('click', () => {
 
 // ── Clear all filters ──
 $('clearAllFilters').addEventListener('click', clearAllFilters);
+
+$('validationToggle').addEventListener('click', () => {
+    validationEnabled = !validationEnabled;
+    $('validationToggle').classList.toggle('active', validationEnabled);
+    $('errorsToggle').style.display = validationEnabled ? '' : 'none';
+    if (!validationEnabled && showErrorsOnly) {
+        showErrorsOnly = false;
+        $('errorsToggle').classList.remove('active');
+    }
+    currentPage = 0;
+    initializeUI();
+});
 
 $('errorsToggle').addEventListener('click', () => {
     showErrorsOnly = !showErrorsOnly;
