@@ -257,7 +257,8 @@
             background: none; border: none; color: var(--text); cursor: pointer;
             text-align: left;
         }
-        .tools-menu-item:hover { background: var(--surface2); }
+        .tools-menu-item:hover:not(:disabled) { background: var(--surface2); }
+        .tools-menu-item:disabled { color: var(--text-muted); cursor: default; opacity: 0.5; }
         .tools-menu-sep { height: 1px; background: var(--border); margin: 4px 0; }
         .tools-menu-shortcut { color: var(--text-muted); font-size: 11px; margin-left: 24px; }
 
@@ -889,6 +890,9 @@
                         <button class="tools-menu-item" id="exportLayoutBtn">Export Layout</button>
                         <button class="tools-menu-item" id="importLayoutBtn">Import Layout</button>
                         <div class="tools-menu-sep"></div>
+                        <button class="tools-menu-item" id="undoBtn" disabled><span class="tools-menu-label">Undo</span><span class="tools-menu-shortcut undo-shortcut"></span></button>
+                        <button class="tools-menu-item" id="redoBtn" disabled><span class="tools-menu-label">Redo</span><span class="tools-menu-shortcut redo-shortcut"></span></button>
+                        <div class="tools-menu-sep"></div>
                         <button class="tools-menu-item" id="exportBtn">Export CSV</button>
                     </div>
                 </div>
@@ -1065,11 +1069,81 @@ let activeTab = 'table';
 let dragSrcColIdx = null;
 let colMgrDragIdx = null;
 let hiddenColumns = new Set();
+const undoStack = [];
+const redoStack = [];
+const MAX_UNDO = 50;
 const DEFAULT_FILTERS = ['type', 'symbol'];
 let activeFilters = [...DEFAULT_FILTERS]; // column names currently shown as filter dropdowns
 const expandedFilters = new Set(); // filters currently showing their combobox
 
 function visibleColumns() { return columns.filter(c => !hiddenColumns.has(c)); }
+
+function snapshotState() {
+    return {
+        columns: [...columns],
+        hiddenColumns: new Set(hiddenColumns),
+        activeFilters: [...activeFilters],
+        filterModes: { ...filterModes }
+    };
+}
+
+function pushUndo(label) {
+    undoStack.push({ label, state: snapshotState() });
+    if (undoStack.length > MAX_UNDO) undoStack.shift();
+    redoStack.length = 0;
+    updateUndoRedoMenu();
+}
+
+function restoreState(snapshot) {
+    columns.length = 0;
+    columns.push(...snapshot.columns);
+    hiddenColumns.clear();
+    snapshot.hiddenColumns.forEach(c => hiddenColumns.add(c));
+    activeFilters = [...snapshot.activeFilters];
+    filterModes = { ...snapshot.filterModes };
+    renderFilterBar();
+    applyFilters();
+    renderTable();
+    if ($('colMgrOverlay').classList.contains('visible')) {
+        renderColMgrList($('colMgrSearch').value);
+    }
+}
+
+function performUndo() {
+    if (!undoStack.length) return;
+    const entry = undoStack.pop();
+    redoStack.push({ label: entry.label, state: snapshotState() });
+    restoreState(entry.state);
+    updateUndoRedoMenu();
+}
+
+function performRedo() {
+    if (!redoStack.length) return;
+    const entry = redoStack.pop();
+    undoStack.push({ label: entry.label, state: snapshotState() });
+    restoreState(entry.state);
+    updateUndoRedoMenu();
+}
+
+function updateUndoRedoMenu() {
+    const undoItem = $('undoBtn');
+    const redoItem = $('redoBtn');
+    if (!undoItem) return;
+    if (undoStack.length) {
+        undoItem.disabled = false;
+        undoItem.querySelector('.tools-menu-label').textContent = 'Undo ' + undoStack[undoStack.length - 1].label;
+    } else {
+        undoItem.disabled = true;
+        undoItem.querySelector('.tools-menu-label').textContent = 'Undo';
+    }
+    if (redoStack.length) {
+        redoItem.disabled = false;
+        redoItem.querySelector('.tools-menu-label').textContent = 'Redo ' + redoStack[redoStack.length - 1].label;
+    } else {
+        redoItem.disabled = true;
+        redoItem.querySelector('.tools-menu-label').textContent = 'Redo';
+    }
+}
 
 // ── DOM ──
 const $ = id => document.getElementById(id);
@@ -2821,10 +2895,28 @@ function renderFilterBar() {
         removeBtn.title = 'Remove filter';
         removeBtn.innerHTML = '&times;';
         removeBtn.addEventListener('click', () => {
-            activeFilters = activeFilters.filter(c => c !== col);
-            delete filterModes[col];
-            renderFilterBar();
-            applyFilters();
+            // Check if this filter has active values
+            const mode = filterModes[col] || 'exact';
+            let hasValue = false;
+            if (mode === 'range') {
+                const minBox = item.querySelector(`.combo-box[data-bound="min"]`);
+                const maxBox = item.querySelector(`.combo-box[data-bound="max"]`);
+                hasValue = (minBox && minBox.dataset.rawValue) || (maxBox && maxBox.dataset.rawValue);
+            } else {
+                const box = item.querySelector(`.combo-box:not([data-bound])`);
+                hasValue = box && box._selectedValues && box._selectedValues.length > 0;
+            }
+            if (hasValue) {
+                // Clear the filter values instead of removing
+                item.querySelectorAll('.combo-clear').forEach(btn => btn.dispatchEvent(new MouseEvent('mousedown')));
+            } else {
+                // No active values — remove the filter
+                pushUndo('Remove Filter');
+                activeFilters = activeFilters.filter(c => c !== col);
+                delete filterModes[col];
+                renderFilterBar();
+                applyFilters();
+            }
         });
         item.appendChild(removeBtn);
 
@@ -3127,6 +3219,7 @@ function renderTable() {
             const visFromIdx = dragSrcColIdx;
             const visToIdx = parseInt(th.dataset.colIdx);
             if (visFromIdx === null || visFromIdx === visToIdx) return;
+            pushUndo('Move Column');
             const vc = visibleColumns();
             const fromCol = vc[visFromIdx];
             const toCol = vc[visToIdx];
@@ -3707,7 +3800,12 @@ $('detailGrid').addEventListener('click', e => {
 });
 
 // ── Tools Menu ──
-document.querySelector('.tools-menu-shortcut').textContent = navigator.platform.includes('Mac') ? '\u2318S' : 'Ctrl+S';
+const isMac = navigator.platform.includes('Mac');
+document.querySelector('.tools-menu-shortcut:not(.undo-shortcut):not(.redo-shortcut)').textContent = isMac ? '\u2318S' : 'Ctrl+S';
+document.querySelector('.undo-shortcut').textContent = isMac ? '\u2318Z' : 'Ctrl+Z';
+document.querySelector('.redo-shortcut').textContent = isMac ? '\u21E7\u2318Z' : 'Ctrl+Y';
+$('undoBtn').addEventListener('click', performUndo);
+$('redoBtn').addEventListener('click', performRedo);
 (function() {
     const btn = $('toolsMenuBtn'), menu = $('toolsMenu');
     let dragging = false;
@@ -3731,7 +3829,7 @@ document.querySelector('.tools-menu-shortcut').textContent = navigator.platform.
         if (!dragging) return;
         dragging = false;
         const item = e.target.closest('.tools-menu-item');
-        if (item && menu.contains(item)) {
+        if (item && menu.contains(item) && !item.disabled) {
             item.click();
             menu.classList.remove('open');
         }
@@ -3740,7 +3838,8 @@ document.querySelector('.tools-menu-shortcut').textContent = navigator.platform.
 
     // Normal click on item when menu is already open (non-drag)
     menu.addEventListener('click', (e) => {
-        if (e.target.closest('.tools-menu-item')) menu.classList.remove('open');
+        const item = e.target.closest('.tools-menu-item');
+        if (item && !item.disabled) menu.classList.remove('open');
     });
 
     // Close when clicking outside
@@ -3771,6 +3870,18 @@ document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         saveLayout();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        performUndo();
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
+        e.preventDefault();
+        performRedo();
+    }
+    if (e.ctrlKey && e.key === 'y' && !e.metaKey) {
+        e.preventDefault();
+        performRedo();
     }
 });
 
@@ -3919,6 +4030,7 @@ function renderColMgrList(filter) {
     // Checkbox toggle
     list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
         cb.addEventListener('change', () => {
+            pushUndo(cb.checked ? 'Show Column' : 'Hide Column');
             const col = cb.dataset.col;
             if (cb.checked) hiddenColumns.delete(col);
             else hiddenColumns.add(col);
@@ -3936,9 +4048,11 @@ function renderColMgrList(filter) {
             const idx = columns.indexOf(col);
             const dir = btn.dataset.dir;
             if (dir === 'up' && idx > 0) {
+                pushUndo('Move Column');
                 columns.splice(idx, 1);
                 columns.splice(idx - 1, 0, col);
             } else if (dir === 'down' && idx < columns.length - 1) {
+                pushUndo('Move Column');
                 columns.splice(idx, 1);
                 columns.splice(idx + 1, 0, col);
             }
@@ -3972,6 +4086,7 @@ function renderColMgrList(filter) {
             if (colMgrDragIdx === null) return;
             const toIdx = columns.indexOf(item.dataset.col);
             if (colMgrDragIdx !== toIdx) {
+                pushUndo('Move Column');
                 const moved = columns.splice(colMgrDragIdx, 1)[0];
                 columns.splice(toIdx, 0, moved);
             }
@@ -3987,26 +4102,26 @@ $('colMgrDone').addEventListener('click', closeColMgr);
 $('colMgrOverlay').addEventListener('click', e => { if (e.target === $('colMgrOverlay')) closeColMgr(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('colMgrOverlay').classList.contains('visible')) closeColMgr(); });
 $('colMgrSearch').addEventListener('input', e => renderColMgrList(e.target.value));
-$('colMgrShowAll').addEventListener('click', () => { hiddenColumns.clear(); renderColMgrList($('colMgrSearch').value); });
-$('colMgrHideAll').addEventListener('click', () => { columns.forEach(c => hiddenColumns.add(c)); renderColMgrList($('colMgrSearch').value); });
+$('colMgrShowAll').addEventListener('click', () => { pushUndo('Show All Columns'); hiddenColumns.clear(); renderColMgrList($('colMgrSearch').value); });
+$('colMgrHideAll').addEventListener('click', () => { pushUndo('Hide All Columns'); columns.forEach(c => hiddenColumns.add(c)); renderColMgrList($('colMgrSearch').value); });
 
 // ── Column Context Menu ──
 document.addEventListener('click', () => $('colCtxMenu').classList.remove('visible'));
 $('colCtxHide').addEventListener('click', () => {
     const col = $('colCtxMenu')._col;
-    if (col) { hiddenColumns.add(col); renderTable(); }
+    if (col) { pushUndo('Hide Column'); hiddenColumns.add(col); renderTable(); }
 });
 $('colCtxMoveStart').addEventListener('click', () => {
     const col = $('colCtxMenu')._col;
     if (!col) return;
     const idx = columns.indexOf(col);
-    if (idx > 0) { columns.splice(idx, 1); columns.unshift(col); renderTable(); }
+    if (idx > 0) { pushUndo('Move Column'); columns.splice(idx, 1); columns.unshift(col); renderTable(); }
 });
 $('colCtxMoveEnd').addEventListener('click', () => {
     const col = $('colCtxMenu')._col;
     if (!col) return;
     const idx = columns.indexOf(col);
-    if (idx < columns.length - 1) { columns.splice(idx, 1); columns.push(col); renderTable(); }
+    if (idx < columns.length - 1) { pushUndo('Move Column'); columns.splice(idx, 1); columns.push(col); renderTable(); }
 });
 $('colCtxManage').addEventListener('click', openColMgr);
 
