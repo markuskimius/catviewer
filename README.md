@@ -14,7 +14,7 @@ Supports CAT Technical Specifications for Industry Members v4.1.0 r15.
 
 Open `index.html` in any modern browser. No server, build step, or dependencies required.
 
-1. Drag and drop a CAT data file (JSON, CSV, or ZIP) onto the page (or click to browse). Multiple files supported; hold Shift while dropping to append.
+1. Drag and drop a CAT data file (JSON, CSV, ZIP, or GZIP) onto the page (or click to browse). Multiple files supported; hold Shift while dropping to append.
 2. Browse, filter, sort, and inspect records
 3. Export filtered results to CSV
 
@@ -23,6 +23,7 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 - **JSON** — NDJSON (one JSON object per line) or JSON arrays, per the CAT Technical Specifications
 - **CSV** — Positional field format (no header row) as defined in the CAT spec. All 99 event types (39 equity, 35 options, 25 multi-leg) are mapped to named fields per the spec, with each event type having its own distinct field schema.
 - **ZIP** — ZIP archives containing JSON or CSV CAT files (extracted in-browser using native APIs)
+- **GZIP** — Gzip-compressed JSON or CSV files (`.json.gz`, `.csv.gz`, etc.), decompressed in-browser
 
 ## Features
 
@@ -36,7 +37,7 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 - **Clickable linkage fields** — navigate between related records via orderID, tradeID, parentOrderID, priorOrderID, etc.
 - **Order chain view** — hierarchy tree showing parent/child order relationships
 - **URL deep linking** — hash-based URL state with direct links to selected records
-- **Multi-file support** — load multiple files (JSON, CSV, ZIP) via drag-and-drop or file picker; hold Shift to append
+- **Multi-file support** — load multiple files (JSON, CSV, ZIP, GZIP) via drag-and-drop or file picker; hold Shift to append
 - **File validation** — verifies files are CAT format before loading
 - **Tools menu** — keyboard-accessible dropdown with layout export/import for sharing between users/machines, drag-and-drop layout reordering, and validation toggle
 - **Event Summary tab** — counts by event type and action type
