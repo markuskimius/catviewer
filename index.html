@@ -142,6 +142,26 @@
         .toolbar input[type="text"] { width: 240px; }
         .toolbar input[type="text"]:focus,
         .toolbar select:focus { border-color: var(--accent); }
+        .search-wrap {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+        }
+        .search-wrap input[type="text"] { padding-right: 28px; }
+        .search-clear {
+            position: absolute;
+            right: 6px;
+            background: none;
+            border: none;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            padding: 2px 4px;
+            display: none;
+        }
+        .search-clear:hover { color: var(--text); }
+        .search-wrap.has-value .search-clear { display: block; }
         .toolbar select { cursor: pointer; }
         .toolbar-spacer { flex: 1; }
         .toolbar .btn-secondary {
@@ -851,7 +871,10 @@
 
     <div id="tabTable">
         <div class="toolbar">
-            <input type="text" id="searchInput" placeholder="Search all fields...">
+            <div class="search-wrap" id="searchWrap">
+                <input type="text" id="searchInput" placeholder="Search all fields...">
+                <button class="search-clear" id="searchClear" title="Clear search">&times;</button>
+            </div>
             <div class="filter-bar" id="filterBar"></div>
             <span class="toolbar-spacer"></span>
             <div class="col-order-controls">
@@ -1823,6 +1846,7 @@ function syncURL(push) {
 function restoreFilterState(state) {
     if (!state) state = {};
     $('searchInput').value = state.search || '';
+    syncSearchClear();
 
     // Ensure filter columns from URL state are visible and set modes
     const filters = state.filters || {};
@@ -1974,6 +1998,7 @@ function loadFiltersFromURL() {
     if (!state) return;
 
     $('searchInput').value = state.search;
+    syncSearchClear();
 
     // Ensure filter columns from URL are visible and set modes
     const filters = state.filters || {};
@@ -2028,6 +2053,7 @@ function handleLinkClick(el) {
     if (records && records.length) {
         showDetail(records[0]);
         $('searchInput').value = value;
+        syncSearchClear();
         applyFilters();
     }
 }
@@ -2085,6 +2111,7 @@ function initializeUI() {
     selectedRow = -1;
     sortKeys = [];
     $('searchInput').value = '';
+    syncSearchClear();
     // Restore saved filter columns or use defaults
     const savedFilterCols = getSavedFilterColumns();
     activeFilters = savedFilterCols ? [...savedFilterCols] : [...DEFAULT_FILTERS];
@@ -3557,7 +3584,17 @@ $('tabBar').addEventListener('click', e => {
 });
 
 // ── Filter listeners ──
+function syncSearchClear() {
+    $('searchWrap').classList.toggle('has-value', $('searchInput').value.length > 0);
+}
 $('searchInput').addEventListener('input', debounce(applyFilters, 200));
+$('searchInput').addEventListener('input', syncSearchClear);
+$('searchClear').addEventListener('click', () => {
+    $('searchInput').value = '';
+    syncSearchClear();
+    $('searchInput').focus();
+    applyFilters();
+});
 
 // ── Order chain controls ──
 $('clearChain').addEventListener('click', clearOrderChain);
