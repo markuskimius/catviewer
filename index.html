@@ -169,6 +169,13 @@
             padding: 8px 16px; font-size: 14px; cursor: pointer; font-weight: 500;
         }
         .toolbar .btn-secondary:hover { background: var(--border); }
+        .btn-clear-all {
+            background: none; border: 1px solid var(--border); border-radius: 6px;
+            color: var(--muted); padding: 4px 10px; font-size: 12px; cursor: pointer;
+            white-space: nowrap; display: none;
+        }
+        .btn-clear-all:hover { color: var(--text); border-color: var(--text); }
+        .btn-clear-all.visible { display: inline-block; }
 
         .tabs {
             margin: 0 24px;
@@ -877,6 +884,7 @@
                 <button class="search-clear" id="searchClear" title="Clear search">&times;</button>
             </div>
             <div class="filter-bar" id="filterBar"></div>
+            <button class="btn-clear-all" id="clearAllFilters" title="Clear all filters and search">Clear All</button>
             <span class="toolbar-spacer"></span>
             <div class="col-order-controls">
                 <span class="col-order-saved" id="colOrderSaved">Saved</span>
@@ -2140,6 +2148,43 @@ function enterOrderChain(orderID) {
     applyFilters();
 }
 
+function hasActiveFilters() {
+    if ($('searchInput').value) return true;
+    if (orderChainRoot) return true;
+    const fv = getFilterValues();
+    return Object.keys(fv).length > 0;
+}
+
+function updateClearAllButton() {
+    $('clearAllFilters').classList.toggle('visible', hasActiveFilters());
+}
+
+function clearAllFilters() {
+    // Clear search
+    $('searchInput').value = '';
+    syncSearchClear();
+    // Clear order chain
+    orderChainRoot = null;
+    orderChainDepth = Infinity;
+    chainDisplayData = null;
+    $('orderChainBar').classList.remove('visible');
+    // Clear all filter combo selections
+    document.querySelectorAll('.filter-item .combo-box').forEach(box => {
+        if (box._selectedValues) box._selectedValues.length = 0;
+        box.dataset.rawValue = '';
+        const tags = box.querySelectorAll('.combo-tag');
+        tags.forEach(t => t.remove());
+        const items = box.querySelectorAll('.combo-item.selected');
+        items.forEach(i => i.classList.remove('selected'));
+        // Clear range inputs
+        const input = box.querySelector('input');
+        if (input) input.value = '';
+    });
+    expandedFilters.clear();
+    document.querySelectorAll('.filter-item').forEach(updateFilterLabel);
+    applyFilters();
+}
+
 function clearOrderChain() {
     orderChainRoot = null;
     orderChainDepth = Infinity;
@@ -3072,6 +3117,7 @@ function applyFilters(skipSync) {
     currentPage = 0;
     renderTable();
     $('recordCount').textContent = `${filteredRecords.length.toLocaleString()} of ${allRecords.length.toLocaleString()} records`;
+    updateClearAllButton();
     if (!skipSync) syncURL(false);
 }
 
@@ -3688,6 +3734,9 @@ $('searchClear').addEventListener('click', () => {
     $('searchInput').focus();
     applyFilters();
 });
+
+// ── Clear all filters ──
+$('clearAllFilters').addEventListener('click', clearAllFilters);
 
 // ── Order chain controls ──
 $('clearChain').addEventListener('click', clearOrderChain);
