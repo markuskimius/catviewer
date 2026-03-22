@@ -3009,6 +3009,19 @@ function updateChainBar() {
     });
 }
 
+function updateValidationStat() {
+    const el = $('validationStat');
+    if (!el) return;
+    if (!validationEnabled) { el.innerHTML = ''; return; }
+    const errRecCount = allRecords.filter(r => r._errors && Object.keys(r._errors).length).length;
+    const totalErrs = allRecords.reduce((s, r) => s + (r._errors ? Object.keys(r._errors).length : 0), 0);
+    if (errRecCount > 0) {
+        el.innerHTML = `<div class="stat"><span class="stat-label">Validation:</span><span class="stat-value val-stat-error">${totalErrs.toLocaleString()} error${totalErrs !== 1 ? 's' : ''} in ${errRecCount.toLocaleString()} record${errRecCount !== 1 ? 's' : ''}</span></div>`;
+    } else {
+        el.innerHTML = `<div class="stat"><span class="stat-label">Validation:</span><span class="stat-value val-stat-ok">&#10003; All valid</span></div>`;
+    }
+}
+
 function initializeUI() {
     dropZone.style.display = 'none';
     app.classList.add('visible');
@@ -3113,21 +3126,10 @@ function initializeUI() {
             <span class="stat-label">Size:</span>
             <span class="stat-value">${formatSize(totalSize)}</span>
         </div>
-        ${validationEnabled ? (() => {
-            const errRecCount = allRecords.filter(r => r._errors && Object.keys(r._errors).length).length;
-            const totalErrs = allRecords.reduce((s, r) => s + (r._errors ? Object.keys(r._errors).length : 0), 0);
-            if (errRecCount > 0) {
-                return `<div class="stat">
-                    <span class="stat-label">Validation:</span>
-                    <span class="stat-value val-stat-error">${totalErrs.toLocaleString()} error${totalErrs !== 1 ? 's' : ''} in ${errRecCount.toLocaleString()} record${errRecCount !== 1 ? 's' : ''}</span>
-                </div>`;
-            }
-            return `<div class="stat">
-                <span class="stat-label">Validation:</span>
-                <span class="stat-value val-stat-ok">&#10003; All valid</span>
-            </div>`;
-        })() : ''}
+        <span id="validationStat"></span>
     `;
+
+    updateValidationStat();
 
     // Render dynamic filter bar
     renderFilterBar();
@@ -4609,6 +4611,7 @@ $('validationToggle').addEventListener('click', () => {
         showErrorsOnly = false;
         $('errorsToggle').classList.remove('active');
     }
+    updateValidationStat();
     applyFilters();
     // Refresh detail panel if open
     if (currentDetailRecord) {
