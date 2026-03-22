@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.03.21
+  CAT File Viewer v2026.03.22
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -211,6 +211,85 @@
         .col-order-controls .btn { font-size: 12px; padding: 4px 10px; }
         .col-order-saved { color: var(--green); font-size: 12px; opacity: 0; transition: opacity 0.3s; }
         .col-order-saved.visible { opacity: 1; }
+
+        /* Column Manager Modal */
+        .col-mgr-overlay {
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200;
+            align-items: center; justify-content: center;
+        }
+        .col-mgr-overlay.visible { display: flex; }
+        .col-mgr {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+            width: 420px; max-height: 80vh; display: flex; flex-direction: column;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .col-mgr-header {
+            padding: 16px 20px 12px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .col-mgr-header h3 { font-size: 16px; font-weight: 600; }
+        .col-mgr-header .close-btn {
+            margin-left: auto; background: none; border: none;
+            color: var(--text-muted); cursor: pointer; font-size: 18px;
+        }
+        .col-mgr-search {
+            margin: 12px 20px 0; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border);
+            border-radius: 6px; color: var(--text); font-size: 13px; outline: none; width: calc(100% - 40px);
+        }
+        .col-mgr-search:focus { border-color: var(--accent); }
+        .col-mgr-actions {
+            padding: 8px 20px; display: flex; gap: 8px; align-items: center; font-size: 12px;
+        }
+        .col-mgr-actions button {
+            background: none; border: none; color: var(--accent); cursor: pointer; font-size: 12px; padding: 2px 4px;
+        }
+        .col-mgr-actions button:hover { text-decoration: underline; }
+        .col-mgr-actions .col-mgr-count { color: var(--text-muted); margin-left: auto; }
+        .col-mgr-list {
+            flex: 1; overflow-y: auto; padding: 4px 0; min-height: 0;
+        }
+        .col-mgr-item {
+            display: flex; align-items: center; gap: 8px; padding: 5px 20px; cursor: grab;
+            font-size: 13px; user-select: none;
+        }
+        .col-mgr-item:hover { background: var(--surface2); }
+        .col-mgr-item.dragging { opacity: 0.4; }
+        .col-mgr-item.drag-over { box-shadow: inset 0 -2px 0 var(--accent); }
+        .col-mgr-item .col-mgr-grip {
+            color: var(--text-muted); font-size: 14px; cursor: grab; flex-shrink: 0; width: 16px; text-align: center;
+        }
+        .col-mgr-item input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+        .col-mgr-item .col-mgr-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .col-mgr-item .col-mgr-arrows {
+            display: flex; gap: 2px; opacity: 0; transition: opacity 0.1s; flex-shrink: 0;
+        }
+        .col-mgr-item:hover .col-mgr-arrows { opacity: 1; }
+        .col-mgr-item .col-mgr-arrows button {
+            background: none; border: none; color: var(--text-muted); cursor: pointer;
+            font-size: 14px; padding: 0 3px; line-height: 1;
+        }
+        .col-mgr-item .col-mgr-arrows button:hover { color: var(--text); }
+        .col-mgr-footer {
+            padding: 12px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px;
+        }
+        .col-mgr-footer .btn-secondary {
+            background: var(--surface2); color: var(--text); border: none; border-radius: 6px;
+            padding: 8px 16px; font-size: 14px; cursor: pointer; font-weight: 500;
+        }
+        .col-mgr-footer .btn-secondary:hover { background: var(--border); }
+
+        /* Context menu for column headers */
+        .col-ctx-menu {
+            display: none; position: fixed; background: var(--surface); border: 1px solid var(--border);
+            border-radius: 6px; padding: 4px 0; z-index: 300; box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+            min-width: 160px;
+        }
+        .col-ctx-menu.visible { display: block; }
+        .col-ctx-menu button {
+            display: block; width: 100%; text-align: left; padding: 8px 16px; background: none;
+            border: none; color: var(--text); font-size: 13px; cursor: pointer;
+        }
+        .col-ctx-menu button:hover { background: var(--surface2); }
 
         .filter-bar { display: contents; }
         .filter-item { display: flex; align-items: center; gap: 0; position: relative; }
@@ -716,7 +795,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.03.21</span>
+    <span class="subtitle">v2026.03.22</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -745,6 +824,7 @@
             <span class="toolbar-spacer"></span>
             <div class="col-order-controls">
                 <span class="col-order-saved" id="colOrderSaved">Saved</span>
+                <button class="btn btn-secondary" id="colMgrBtn" title="Show, hide, and reorder columns">Columns...</button>
                 <button class="btn btn-secondary" id="saveLayoutBtn" title="Save column order and filters">Save Layout</button>
                 <button class="btn btn-secondary" id="resetLayoutBtn" title="Reset columns and filters to defaults">Reset Layout</button>
             </div>
@@ -795,6 +875,34 @@
             <div class="detail-grid" id="detailGrid"></div>
         </div>
     </div>
+</div>
+
+<!-- Column Manager Modal -->
+<div class="col-mgr-overlay" id="colMgrOverlay">
+    <div class="col-mgr">
+        <div class="col-mgr-header">
+            <h3>Manage Columns</h3>
+            <button class="close-btn" id="colMgrClose">&times;</button>
+        </div>
+        <input type="text" class="col-mgr-search" id="colMgrSearch" placeholder="Search columns...">
+        <div class="col-mgr-actions">
+            <button id="colMgrShowAll">Show All</button>
+            <button id="colMgrHideAll">Hide All</button>
+            <span class="col-mgr-count" id="colMgrCount"></span>
+        </div>
+        <div class="col-mgr-list" id="colMgrList"></div>
+        <div class="col-mgr-footer">
+            <button class="btn btn-secondary" id="colMgrDone">Done</button>
+        </div>
+    </div>
+</div>
+
+<!-- Column header context menu -->
+<div class="col-ctx-menu" id="colCtxMenu">
+    <button id="colCtxHide">Hide column</button>
+    <button id="colCtxMoveStart">Move to start</button>
+    <button id="colCtxMoveEnd">Move to end</button>
+    <button id="colCtxManage">Manage columns...</button>
 </div>
 
 <script>
@@ -891,9 +999,13 @@ let orderChainDepth = Infinity;
 let chainDisplayData = null;
 let activeTab = 'table';
 let dragSrcColIdx = null;
+let colMgrDragIdx = null;
+let hiddenColumns = new Set();
 const DEFAULT_FILTERS = ['type', 'symbol'];
 let activeFilters = [...DEFAULT_FILTERS]; // column names currently shown as filter dropdowns
 const expandedFilters = new Set(); // filters currently showing their combobox
+
+function visibleColumns() { return columns.filter(c => !hiddenColumns.has(c)); }
 
 // ── DOM ──
 const $ = id => document.getElementById(id);
@@ -926,23 +1038,23 @@ document.querySelector('header h1').addEventListener('click', () => {
 });
 
 document.addEventListener('dragenter', e => {
-    if (dragSrcColIdx !== null) return;
+    if (dragSrcColIdx !== null || colMgrDragIdx !== null) return;
     e.preventDefault();
     dragCounter++;
     dragOverlay.classList.add('visible');
 });
 document.addEventListener('dragover', e => {
-    if (dragSrcColIdx !== null) return;
+    if (dragSrcColIdx !== null || colMgrDragIdx !== null) return;
     e.preventDefault();
 });
 document.addEventListener('dragleave', e => {
-    if (dragSrcColIdx !== null) return;
+    if (dragSrcColIdx !== null || colMgrDragIdx !== null) return;
     e.preventDefault();
     dragCounter--;
     if (dragCounter <= 0) { dragCounter = 0; dragOverlay.classList.remove('visible'); }
 });
 document.addEventListener('drop', e => {
-    if (dragSrcColIdx !== null) return;
+    if (dragSrcColIdx !== null || colMgrDragIdx !== null) return;
     e.preventDefault();
     dragCounter = 0;
     dragOverlay.classList.remove('visible');
@@ -1949,6 +2061,18 @@ function initializeUI() {
         }
     }
 
+    // Restore hidden columns from saved state
+    hiddenColumns.clear();
+    try {
+        const savedHidden = localStorage.getItem('catViewer_hiddenColumns');
+        if (savedHidden) {
+            for (const col of JSON.parse(savedHidden)) {
+                if (columns.includes(col)) hiddenColumns.add(col);
+            }
+        }
+    } catch {}
+
+
     // File info bar
     const eventTypes = new Set(allRecords.map(r => r.type).filter(Boolean));
     const symbols = new Set(allRecords.map(r => r.symbol).filter(Boolean));
@@ -2746,11 +2870,12 @@ function renderTable() {
     const start = PAGE_SIZE === Infinity ? 0 : currentPage * PAGE_SIZE;
     const pageRecords = PAGE_SIZE === Infinity ? filteredRecords : filteredRecords.slice(start, start + PAGE_SIZE);
 
+    const visCols = visibleColumns();
     let html = '<table><thead><tr>';
     html += '<th>#</th>';
     if (chainDisplayData) html += '<th style="width:1px;padding:0 8px"></th>';
-    for (let ci = 0; ci < columns.length; ci++) {
-        const col = columns[ci];
+    for (let ci = 0; ci < visCols.length; ci++) {
+        const col = visCols[ci];
         const arrow = sortCol === col ? (sortAsc ? ' \u25B2' : ' \u25BC') : '';
         html += `<th data-col="${escapeHtml(col)}" data-col-idx="${ci}" draggable="true">${escapeHtml(col)}<span class="sort-arrow">${arrow}</span></th>`;
     }
@@ -2767,7 +2892,7 @@ function renderTable() {
         if (chainDisplayData) {
             html += `<td class="tree-cell">${chainEntry ? escapeHtml(chainEntry.treePrefix) : ''}</td>`;
         }
-        for (const col of columns) {
+        for (const col of visCols) {
             html += `<td>${formatCell(col, record[col])}</td>`;
         }
         html += '</tr>';
@@ -2842,7 +2967,7 @@ function renderTable() {
         });
     });
 
-    // Column drag-to-reorder handlers
+    // Column drag-to-reorder handlers (visible index → full columns array)
     $('tableContainer').querySelectorAll('th[draggable="true"]').forEach(th => {
         th.addEventListener('dragstart', e => {
             dragSrcColIdx = parseInt(th.dataset.colIdx);
@@ -2874,13 +2999,29 @@ function renderTable() {
         });
         th.addEventListener('drop', e => {
             e.preventDefault();
-            const fromIdx = dragSrcColIdx;
-            const toIdx = parseInt(th.dataset.colIdx);
-            if (fromIdx === null || fromIdx === toIdx) return;
-            const moved = columns.splice(fromIdx, 1)[0];
-            columns.splice(toIdx, 0, moved);
+            const visFromIdx = dragSrcColIdx;
+            const visToIdx = parseInt(th.dataset.colIdx);
+            if (visFromIdx === null || visFromIdx === visToIdx) return;
+            const vc = visibleColumns();
+            const fromCol = vc[visFromIdx];
+            const toCol = vc[visToIdx];
+            const fromFull = columns.indexOf(fromCol);
+            const toFull = columns.indexOf(toCol);
+            columns.splice(fromFull, 1);
+            const newToFull = columns.indexOf(toCol);
+            columns.splice(visFromIdx < visToIdx ? newToFull + 1 : newToFull, 0, fromCol);
             th._wasDragged = true;
             renderTable();
+        });
+        // Right-click context menu on column header
+        th.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            const col = th.dataset.col;
+            const menu = $('colCtxMenu');
+            menu._col = col;
+            menu.style.left = e.clientX + 'px';
+            menu.style.top = e.clientY + 'px';
+            menu.classList.add('visible');
         });
     });
 }
@@ -3363,6 +3504,7 @@ function getSavedColumnOrder() {
 
 $('saveLayoutBtn').addEventListener('click', () => {
     localStorage.setItem('catViewer_columnOrder', JSON.stringify(columns));
+    localStorage.setItem('catViewer_hiddenColumns', JSON.stringify([...hiddenColumns]));
     localStorage.setItem('catViewer_filterColumns', JSON.stringify(activeFilters));
     const msg = $('colOrderSaved');
     msg.classList.add('visible');
@@ -3371,7 +3513,9 @@ $('saveLayoutBtn').addEventListener('click', () => {
 
 $('resetLayoutBtn').addEventListener('click', () => {
     localStorage.removeItem('catViewer_columnOrder');
+    localStorage.removeItem('catViewer_hiddenColumns');
     localStorage.removeItem('catViewer_filterColumns');
+    hiddenColumns.clear();
     if (!allRecords.length) return;
     const colSet = new Set();
     allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx') colSet.add(k); }));
@@ -3389,12 +3533,141 @@ $('resetLayoutBtn').addEventListener('click', () => {
     applyFilters();
 });
 
+// ── Column Manager ──
+function openColMgr() {
+    $('colMgrSearch').value = '';
+    renderColMgrList();
+    $('colMgrOverlay').classList.add('visible');
+    $('colMgrSearch').focus();
+}
+
+function closeColMgr() {
+    $('colMgrOverlay').classList.remove('visible');
+    renderTable();
+}
+
+function renderColMgrList(filter) {
+    const list = $('colMgrList');
+    const q = (filter || '').toLowerCase();
+    const matching = columns.filter(c => !q || c.toLowerCase().includes(q));
+    const visCount = columns.filter(c => !hiddenColumns.has(c)).length;
+    $('colMgrCount').textContent = `${visCount} of ${columns.length} visible`;
+
+    list.innerHTML = matching.map((col, i) => {
+        const fullIdx = columns.indexOf(col);
+        const checked = !hiddenColumns.has(col) ? 'checked' : '';
+        return `<div class="col-mgr-item" data-col="${escapeHtml(col)}" data-full-idx="${fullIdx}" draggable="true">
+            <span class="col-mgr-grip">\u2261</span>
+            <input type="checkbox" ${checked} data-col="${escapeHtml(col)}">
+            <span class="col-mgr-name">${escapeHtml(col)}</span>
+            <span class="col-mgr-arrows">
+                <button data-dir="up" title="Move up">\u25B2</button>
+                <button data-dir="down" title="Move down">\u25BC</button>
+            </span>
+        </div>`;
+    }).join('');
+
+    // Checkbox toggle
+    list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.addEventListener('change', () => {
+            const col = cb.dataset.col;
+            if (cb.checked) hiddenColumns.delete(col);
+            else hiddenColumns.add(col);
+            const visCount2 = columns.filter(c => !hiddenColumns.has(c)).length;
+            $('colMgrCount').textContent = `${visCount2} of ${columns.length} visible`;
+        });
+    });
+
+    // Arrow buttons
+    list.querySelectorAll('.col-mgr-arrows button').forEach(btn => {
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            const item = btn.closest('.col-mgr-item');
+            const col = item.dataset.col;
+            const idx = columns.indexOf(col);
+            const dir = btn.dataset.dir;
+            if (dir === 'up' && idx > 0) {
+                columns.splice(idx, 1);
+                columns.splice(idx - 1, 0, col);
+            } else if (dir === 'down' && idx < columns.length - 1) {
+                columns.splice(idx, 1);
+                columns.splice(idx + 1, 0, col);
+            }
+            renderColMgrList($('colMgrSearch').value);
+        });
+    });
+
+    // Drag reorder within list
+    list.querySelectorAll('.col-mgr-item').forEach(item => {
+        item.addEventListener('dragstart', e => {
+            colMgrDragIdx = columns.indexOf(item.dataset.col);
+            item.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', '');
+        });
+        item.addEventListener('dragend', () => {
+            item.classList.remove('dragging');
+            list.querySelectorAll('.col-mgr-item').forEach(i => i.classList.remove('drag-over'));
+            colMgrDragIdx = null;
+        });
+        item.addEventListener('dragover', e => {
+            if (colMgrDragIdx === null) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            list.querySelectorAll('.col-mgr-item').forEach(i => i.classList.remove('drag-over'));
+            item.classList.add('drag-over');
+        });
+        item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+        item.addEventListener('drop', e => {
+            e.preventDefault();
+            if (colMgrDragIdx === null) return;
+            const toIdx = columns.indexOf(item.dataset.col);
+            if (colMgrDragIdx !== toIdx) {
+                const moved = columns.splice(colMgrDragIdx, 1)[0];
+                columns.splice(toIdx, 0, moved);
+            }
+            colMgrDragIdx = null;
+            renderColMgrList($('colMgrSearch').value);
+        });
+    });
+}
+
+$('colMgrBtn').addEventListener('click', openColMgr);
+$('colMgrClose').addEventListener('click', closeColMgr);
+$('colMgrDone').addEventListener('click', closeColMgr);
+$('colMgrOverlay').addEventListener('click', e => { if (e.target === $('colMgrOverlay')) closeColMgr(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('colMgrOverlay').classList.contains('visible')) closeColMgr(); });
+$('colMgrSearch').addEventListener('input', e => renderColMgrList(e.target.value));
+$('colMgrShowAll').addEventListener('click', () => { hiddenColumns.clear(); renderColMgrList($('colMgrSearch').value); });
+$('colMgrHideAll').addEventListener('click', () => { columns.forEach(c => hiddenColumns.add(c)); renderColMgrList($('colMgrSearch').value); });
+
+// ── Column Context Menu ──
+document.addEventListener('click', () => $('colCtxMenu').classList.remove('visible'));
+$('colCtxHide').addEventListener('click', () => {
+    const col = $('colCtxMenu')._col;
+    if (col) { hiddenColumns.add(col); renderTable(); }
+});
+$('colCtxMoveStart').addEventListener('click', () => {
+    const col = $('colCtxMenu')._col;
+    if (!col) return;
+    const idx = columns.indexOf(col);
+    if (idx > 0) { columns.splice(idx, 1); columns.unshift(col); renderTable(); }
+});
+$('colCtxMoveEnd').addEventListener('click', () => {
+    const col = $('colCtxMenu')._col;
+    if (!col) return;
+    const idx = columns.indexOf(col);
+    if (idx < columns.length - 1) { columns.splice(idx, 1); columns.push(col); renderTable(); }
+});
+$('colCtxManage').addEventListener('click', openColMgr);
+
 // ── Export ──
 $('exportBtn').addEventListener('click', () => {
     if (!filteredRecords.length) return;
-    const header = columns.join(',');
+    const exportCols = visibleColumns();
+    const header = exportCols.join(',');
     const rows = filteredRecords.map(r =>
-        columns.map(c => {
+        exportCols.map(c => {
             const v = r[c];
             if (v === undefined || v === null) return '';
             const s = String(v);
@@ -3433,7 +3706,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.03.21 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.03.22 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
