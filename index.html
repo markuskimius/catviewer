@@ -4346,6 +4346,10 @@ function renderDetailGrid(record, mode, showAll) {
         const keySet = new Set(keys);
         for (const errField of Object.keys(record._errors)) {
             if (!keySet.has(errField)) {
+                // In original mode, timeInForce errors are shown on _timeInForce_original
+                if (errField === 'timeInForce' && keySet.has('_timeInForce_original')) continue;
+                // In translated mode, timeInForce errors are shown on timeInForce.name
+                if (errField === 'timeInForce' && keySet.has('timeInForce.name')) continue;
                 keys.push(errField);
             }
         }
