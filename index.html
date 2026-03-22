@@ -2935,6 +2935,7 @@ function enterOrderChain(orderID) {
 function hasActiveFilters() {
     if ($('searchInput').value) return true;
     if (orderChainRoot) return true;
+    if (showErrorsOnly) return true;
     const fv = getFilterValues();
     return Object.keys(fv).length > 0;
 }
