@@ -1614,6 +1614,18 @@ const CAT_SCHEMA = {
 const CAT_ALLOWED_EXCHANGES = new Set(["AMER", "AMEROP", "ARCA", "ARCAOP", "BOX", "BSTX", "BX", "BYX", "BZX", "BZXOP", "C2", "CBOE", "CHX", "EDGA", "EDGX", "EDGXOP", "EMLD", "GEMX", "IEX", "ISE", "LTSE", "MEMX", "MEMXOP", "MIAMI", "MRX", "NOBO", "NOM", "NSDQ", "NSX", "NYSE", "PEARL", "PEARLEQ", "PHLX", "PSX", "SPHR", "24X", "TXSE"]);
 const CAT_ALLOWED_TYPES = new Set(["MENO", "MENOS", "MEOR", "MEMR", "MECR", "MEORS", "MEMRS", "MECRS", "MEOA", "MEIR", "MEIM", "MEIC", "MEIMR", "MEICR", "MECO", "MECOM", "MECOC", "MEOM", "MEOMS", "MEOMR", "MEOJ", "MEOC", "MEOCR", "MENQ", "MENQS", "MERQ", "MERQS", "MEQR", "MEQC", "MEQM", "MEQS", "MEOT", "MEOTS", "MEOF", "MEOFS", "MEFA", "MEPA", "MEAA", "MEOE", "MONO", "MONOS", "MOOR", "MOMR", "MOCR", "MOORS", "MOMRS", "MOCRS", "MOOA", "MOIR", "MOIM", "MOIC", "MOIMR", "MOICR", "MOCO", "MOCOM", "MOCOC", "MOOM", "MOOMS", "MOOMR", "MOOJ", "MOOC", "MOOCR", "MONQ", "MORQ", "MOQR", "MOQC", "MOQM", "MOOT", "MOOF", "MOOFS", "MOFA", "MOPA", "MOAA", "MOOE", "MLNO", "MLOR", "MLMR", "MLCR", "MLOA", "MLIR", "MLIM", "MLIC", "MLIMR", "MLICR", "MLCO", "MLCOM", "MLCOC", "MLOM", "MLOMR", "MLOC", "MLOCR", "MLNQ", "MLRQ", "MLQS", "MLQR", "MLQC", "MLQM", "MLOS", "MLOE"]);
 
+// Array element schemas per event type per compound field: [fieldName, required, typeCode, ...constraints]
+const CAT_ARRAY_ELEMENTS = {"MENO":{"aggregatedOrders":[["orderID","R","S",64],["orderKeyDate","R","SN"],["quantity","C","N",12,6],["originatingIMID","C","S",7]]},"MENOS":{"aggregatedOrders":[["orderID","R","S",64],["orderKeyDate","R","SN"],["quantity","C","N",12,6],["originatingIMID","C","S",7]]},"MEOM":{"aggregatedOrders":[["orderID","R","S",64],["orderKeyDate","R","SN"],["quantity","C","N",12,6],["originatingIMID","C","S",7]]},"MEOMS":{"aggregatedOrders":[["orderID","R","S",64],["orderKeyDate","R","SN"],["quantity","C","N",12,6],["originatingIMID","C","S",7]]},"MENQ":{"askAggregatedOrders":[["orderID","R","S",64],["orderKeyDate","R","SN"],["quantity","C","N",12,6],["originatingIMID","C","S",7]],"bidAggregatedOrders":[["orderID","R","S",64],["orderKeyDate","R","SN"],["quantity","C","N",12,6],["originatingIMID","C","S",7]]},"MENQS":{"askAggregatedOrders":[["orderID","R","S",64],["orderKeyDate","R","SN"],["quantity","C","N",12,6],["originatingIMID","C","S",7]],"bidAggregatedOrders":[["orderID","R","S",64],["orderKeyDate","R","SN"],["quantity","C","N",12,6],["originatingIMID","C","S",7]]},"MEOT":{"buyDetails":[["orderKeyDate","C","SN"],["orderID","C","S",64],["side","R","S"],["retiredFieldPosition","O","S"],["firmDesignatedID","C","S",40],["accountHolderType","C","S"],["originatingIMID","C","S",7],["BFMMFlag","C","B"]],"sellDetails":[["orderKeyDate","C","SN"],["orderID","C","S",64],["side","R","S"],["retiredFieldPosition","O","S"],["firmDesignatedID","C","S",40],["accountHolderType","C","S"],["originatingIMID","C","S",7],["BFMMFlag","C","B"]]},"MEOTS":{"buyDetails":[["orderKeyDate","C","SN"],["orderID","C","S",64],["side","R","S"],["quantity","R","N",12,6],["originatingIMID","C","S",7],["firmDesignatedID","C","S",40],["accountHolderType","C","S"],["BFMMFlag","C","B"]],"sellDetails":[["orderKeyDate","C","SN"],["orderID","C","S",64],["side","R","S"],["quantity","R","N",12,6],["originatingIMID","C","S",7],["firmDesignatedID","C","S",40],["accountHolderType","C","S"],["BFMMFlag","C","B"]]},"MEOF":{"clientDetails":[["orderKeyDate","C","SN"],["orderID","C","S",64],["side","R","S"],["retiredFieldPosition","O","S"],["firmDesignatedID","C","S",40],["accountHolderType","C","S"],["originatingIMID","C","S",7]],"firmDetails":[["orderKeyDate","C","SN"],["orderID","C","S",64],["side","R","S"],["retiredFieldPosition","O","S"],["firmDesignatedID","C","S",40],["accountHolderType","C","S"],["originatingIMID","C","S",7]]},"MEOFS":{"firmDetails":[["orderKeyDate","R","SN"],["orderID","R","S",64],["side","R","S"],["quantity","R","N",12,6],["originatingIMID","C","S",7]]},"MEFA":{"clientDetails":[["orderKeyDate","C","SN"],["orderID","C","S",64],["side","R","S"],["retiredFieldPosition","O","S"],["firmDesignatedID","C","S",40],["accountHolderType","C","S"],["originatingIMID","C","S",7]],"firmDetails":[["orderKeyDate","C","SN"],["orderID","C","S",64],["side","R","S"],["retiredFieldPosition","O","S"],["firmDesignatedID","C","S",40],["accountHolderType","C","S"],["originatingIMID","C","S",7]]},"MONO":{"aggregatedOrders":[["orderID","R","S",64],["orderKeyDate","R","SN"],["quantity","C","N",12,6],["originatingIMID","C","S",7]]},"MONOS":{"aggregatedOrders":[["orderID","R","S",64],["orderKeyDate","R","SN"],["quantity","C","N",12,6],["originatingIMID","C","S",7]]},"MOOM":{"aggregatedOrders":[["orderID","R","S",64],["orderKeyDate","R","SN"],["quantity","C","N",12,6],["originatingIMID","C","S",7]]},"MOOMS":{"aggregatedOrders":[["orderID","R","S",64],["orderKeyDate","R","SN"],["quantity","C","N",12,6],["originatingIMID","C","S",7]]},"MOOT":{"buyDetails":[["orderKeyDate","C","SN"],["orderID","C","S",64],["side","R","S"],["reservedForFutureUse","O","S"],["originatingIMID","C","S",7],["firmDesignatedID","C","S",40],["accountHolderType","C","S"]],"sellDetails":[["orderKeyDate","C","SN"],["orderID","C","S",64],["side","R","S"],["reservedForFutureUse","O","S"],["originatingIMID","C","S",7],["firmDesignatedID","C","S",40],["accountHolderType","C","S"]]},"MOOF":{"clientDetails":[["orderKeyDate","C","SN"],["orderID","C","S",64],["side","R","S"],["retiredFieldPosition","O","S"],["originatingIMID","C","S",7],["firmDesignatedID","C","S",40],["accountHolderType","C","S"]],"firmDetails":[["orderKeyDate","C","SN"],["orderID","C","S",64],["side","R","S"],["retiredFieldPosition","O","S"],["originatingIMID","C","S",7],["firmDesignatedID","C","S",40],["accountHolderType","C","S"]]},"MOOFS":{"firmDetails":[["orderKeyDate","R","SN"],["orderID","R","S",64],["side","R","S"],["quantity","R","N",12,6],["originatingIMID","C","S",7]]},"MOFA":{"clientDetails":[["orderKeyDate","C","SN"],["orderID","C","S",64],["side","R","S"],["retiredFieldPosition","O","S"],["originatingIMID","C","S",7],["firmDesignatedID","C","S",40],["accountHolderType","C","S"]],"firmDetails":[["orderKeyDate","C","SN"],["orderID","C","S",64],["side","R","S"],["retiredFieldPosition","O","S"],["originatingIMID","C","S",7],["firmDesignatedID","C","S",40],["accountHolderType","C","S"]]},"MLNO":{"aggregatedOrders":[["orderID","R","S",64],["orderKeyDate","R","SN"],["quantity","C","N",12,6],["originatingIMID","C","S",7]],"legDetails":[["legRefID","O","S",64],["symbol","C","S",22],["optionID","C","S",22],["openCloseIndicator","C","S"],["side","R","S"],["legRatioQuantity","R","N",12,6]]},"MLOR":{"legDetails":[["legRefID","O","S",64],["symbol","C","S",22],["optionID","C","S",22],["openCloseIndicator","C","S"],["side","R","S"],["legRatioQuantity","R","N",12,6]]},"MLMR":{"legDetails":[["legRefID","O","S",64],["symbol","C","S",22],["optionID","C","S",22],["openCloseIndicator","C","S"],["side","R","S"],["legRatioQuantity","R","N",12,6]]},"MLOA":{"legDetails":[["legRefID","O","S",64],["symbol","C","S",22],["optionID","C","S",22],["openCloseIndicator","C","S"],["side","R","S"],["legRatioQuantity","R","N",12,6]]},"MLIR":{"legDetails":[["legRefID","O","S",64],["symbol","C","S",22],["optionID","C","S",22],["openCloseIndicator","C","S"],["side","R","S"],["legRatioQuantity","R","N",12,6]]},"MLIM":{"legDetails":[["legRefID","O","S",64],["symbol","C","S",22],["optionID","C","S",22],["openCloseIndicator","C","S"],["side","R","S"],["legRatioQuantity","R","N",12,6]]},"MLIMR":{"legDetails":[["legRefID","O","S",64],["symbol","C","S",22],["optionID","C","S",22],["openCloseIndicator","C","S"],["side","R","S"],["legRatioQuantity","R","N",12,6]]},"MLCO":{"legDetails":[["legRefID","O","S",64],["symbol","C","S",22],["optionID","C","S",22],["openCloseIndicator","C","S"],["side","R","S"],["legRatioQuantity","R","N",12,6]]},"MLCOM":{"legDetails":[["legRefID","O","S",64],["symbol","C","S",22],["optionID","C","S",22],["openCloseIndicator","C","S"],["side","R","S"],["legRatioQuantity","R","N",12,6]]},"MLOM":{"aggregatedOrders":[["orderID","R","S",64],["orderKeyDate","R","SN"],["quantity","C","N",12,6],["originatingIMID","C","S",7]],"legDetails":[["legRefID","O","S",64],["symbol","C","S",22],["optionID","C","S",22],["openCloseIndicator","C","S"],["side","R","S"],["legRatioQuantity","R","N",12,6]]},"MLOMR":{"legDetails":[["legRefID","O","S",64],["symbol","C","S",22],["optionID","C","S",22],["openCloseIndicator","C","S"],["side","R","S"],["legRatioQuantity","R","N",12,6]]},"MLNQ":{"legDetails":[["legRefID","O","S",64],["symbol","C","S",22],["optionID","C","S",22],["reservedForFutureUse","O","S"],["side","R","S"],["legRatioQuantity","R","N",12,6]]},"MLRQ":{"legDetails":[["legRefID","O","S",64],["symbol","C","S",22],["optionID","C","S",22],["reservedForFutureUse","O","S"],["side","R","S"],["legRatioQuantity","R","N",12,6]]},"MLQS":{"legDetails":[["legRefID","O","S",64],["symbol","C","S",22],["optionID","C","S",22],["reservedForFutureUse","O","S"],["side","R","S"],["legRatioQuantity","R","N",12,6]]},"MLQR":{"legDetails":[["legRefID","O","S",64],["symbol","C","S",22],["optionID","C","S",22],["reservedForFutureUse","O","S"],["side","R","S"],["legRatioQuantity","R","N",12,6]]},"MLQM":{"legDetails":[["legRefID","O","S",64],["symbol","C","S",22],["optionID","C","S",22],["reservedForFutureUse","O","S"],["side","R","S"],["legRatioQuantity","R","N",12,6]]},"MLOS":{"aggregatedOrders":[["orderID","R","S",64],["orderKeyDate","R","SN"],["quantity","C","N",12,6],["originatingIMID","C","S",7]],"legDetails":[["legRefID","O","S",64],["symbol","C","S",22],["optionID","C","S",22],["openCloseIndicator","C","S"],["side","R","S"],["legRatioQuantity","R","N",12,6]]},"MLOE":{"legDetails":[["legRefID","O","S",64],["symbol","C","S",22],["optionID","C","S",22],["openCloseIndicator","C","S"],["side","R","S"],["legRatioQuantity","R","N",12,6]]}};
+
+// timeInForce: boolean names require value=true; non-boolean names require a paired value
+const TIF_BOOLEAN = new Set(['GTC', 'GTM', 'IOC', 'IOR']);
+const TIF_NON_BOOLEAN = { DAY: 'Date', GFD: 'Unsigned', GTD: 'Date', GTT: 'Timestamp', GTX: 'Date' };
+const TIF_ALL = new Set([...TIF_BOOLEAN, ...Object.keys(TIF_NON_BOOLEAN)]);
+
+// handlingInstructions: boolean and non-boolean attribute names
+const HI_BOOLEAN = new Set(['ADD','AIP','ALG','ALGMod','ALGS','ALO','AOK','AON','APCM','AUC','ATT','BIN','CAC','CMC','CMPX','CND','CPR','CTR','CSC','CSH','d','DAC','DIR','DIV','DNI','DNR','DNRT','ERP','EW','FB','FBA','FOK','FS','FUT','G','GP','IO','LOC','LOO','M','MAX','MOC','MOO','MRP','MTL','NAV','NCTR','NH','OCP','OFF','OPO','OPT','OVD','P','PBG','PCS','PCTPX','PEG','QCC','R','RAR','RLO','RSV','SCL','SLD','SLL','SLQ','SLR','SOQ','STOPF','STP','TS','TTF','TTO','TTS','TTSO','TTU','UNP','UNS','WDP','WRK']);
+const HI_NON_BOOLEAN = new Set(['APCL','AucResp','CASH','DISP','DISQ','DLVF','DLVT','STOP','SW','SWQ','TMO']);
+
 
 function parseCSV(text) {
     const lines = text.split(/\r?\n/).filter(l => l.trim());
@@ -1974,11 +1986,174 @@ function validateRecord(record, format) {
             // Array type — check it's actually an array (JSON) or non-empty string (CSV)
             if (!isCSV && !Array.isArray(value) && typeof value !== 'string') {
                 addError(fieldName, 'error', `Expected array, got ${typeof value}`);
+            } else if (!isCSV && Array.isArray(value)) {
+                // Deep validation of array elements
+                const elemSchema = CAT_ARRAY_ELEMENTS[type] && CAT_ARRAY_ELEMENTS[type][fieldName];
+                if (elemSchema) {
+                    for (let ei = 0; ei < value.length; ei++) {
+                        const elem = value[ei];
+                        if (!elem || typeof elem !== 'object') {
+                            addError(fieldName, 'error', `Element [${ei}]: expected object, got ${typeof elem}`);
+                            continue;
+                        }
+                        for (const [eName, eReq, eType, ...eCons] of elemSchema) {
+                            if (eName === 'retiredFieldPosition' || eName === 'reservedForFutureUse') continue;
+                            const eVal = elem[eName];
+                            const eEmpty = eVal === undefined || eVal === null || eVal === '';
+                            // Required check (only for NEW)
+                            if (eReq === 'R' && eEmpty && isNew) {
+                                addError(fieldName, 'error', `Element [${ei}]: required field "${eName}" is missing`);
+                                continue;
+                            }
+                            if (eEmpty) continue;
+                            // Type checks
+                            if (eType === 'B') {
+                                if (typeof eVal !== 'boolean') {
+                                    addError(fieldName, 'error', `Element [${ei}].${eName}: expected boolean, got ${typeof eVal}`);
+                                }
+                            } else if (eType === 'N') {
+                                if (typeof eVal !== 'number') {
+                                    addError(fieldName, 'error', `Element [${ei}].${eName}: expected number, got ${typeof eVal}`);
+                                } else if (eCons.length >= 2) {
+                                    const [maxInt, maxFrac] = eCons;
+                                    const parts = String(eVal).replace('-', '').split('.');
+                                    const intP = (parts[0].replace(/^0+/, '') || '0');
+                                    const fracP = parts[1] || '';
+                                    if (intP.length > maxInt) {
+                                        addError(fieldName, 'warn', `Element [${ei}].${eName}: integer part exceeds max ${maxInt} digits`);
+                                    }
+                                    if (fracP.length > maxFrac && maxFrac >= 0) {
+                                        addError(fieldName, 'warn', `Element [${ei}].${eName}: decimal places exceed max ${maxFrac}`);
+                                    }
+                                }
+                            } else if (eType === 'S') {
+                                if (typeof eVal !== 'string') {
+                                    addError(fieldName, 'error', `Element [${ei}].${eName}: expected string, got ${typeof eVal}`);
+                                } else if (eCons.length >= 1 && eCons[0] > 0 && eVal.length > eCons[0]) {
+                                    addError(fieldName, 'error', `Element [${ei}].${eName}: exceeds max length ${eCons[0]}`);
+                                }
+                                // Choice value validation for known fields inside array elements
+                                if (typeof eVal === 'string' && CAT_CHOICE_VALUES[eName]) {
+                                    if (!CAT_CHOICE_VALUES[eName].has(eVal)) {
+                                        addError(fieldName, 'warn', `Element [${ei}].${eName}: unexpected value "${eVal.slice(0, 20)}"`);
+                                    }
+                                }
+                            } else if (eType === 'SN') {
+                                if (typeof eVal !== 'string' && typeof eVal !== 'number') {
+                                    addError(fieldName, 'error', `Element [${ei}].${eName}: expected string or number, got ${typeof eVal}`);
+                                }
+                            }
+                        }
+                    }
+                }
             }
         } else if (typeCode === 'O') {
             // Object type (timeInForce, handlingInstructions)
             if (!isCSV && typeof value !== 'object') {
                 addError(fieldName, 'error', `Expected object, got ${typeof value}`);
+            } else if (fieldName === 'timeInForce') {
+                // Validate timeInForce Name/Value Pairs
+                let tifName, tifValue;
+                if (!isCSV && typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                    const keys = Object.keys(value);
+                    if (keys.length === 0) {
+                        // empty object — skip
+                    } else if (keys.length > 1) {
+                        addError(fieldName, 'warn', `timeInForce should have exactly one key, got ${keys.length}`);
+                    } else {
+                        tifName = keys[0];
+                        tifValue = value[keys[0]];
+                    }
+                } else if (isCSV && typeof value === 'string') {
+                    const eqIdx = value.indexOf('=');
+                    if (eqIdx >= 0) {
+                        tifName = value.slice(0, eqIdx);
+                        tifValue = value.slice(eqIdx + 1);
+                    } else {
+                        tifName = value;
+                        tifValue = undefined;
+                    }
+                }
+                if (tifName !== undefined) {
+                    if (!TIF_ALL.has(tifName)) {
+                        addError(fieldName, 'error', `Unknown timeInForce name: "${tifName}"`);
+                    } else if (TIF_BOOLEAN.has(tifName)) {
+                        // Boolean TIF: value must be true (JSON) or absent/empty (CSV)
+                        if (!isCSV && tifValue !== true) {
+                            addError(fieldName, 'error', `timeInForce "${tifName}" must have value true, got ${JSON.stringify(tifValue)}`);
+                        }
+                    } else if (TIF_NON_BOOLEAN[tifName]) {
+                        // Non-boolean TIF: value must be present and match expected type
+                        const expectedType = TIF_NON_BOOLEAN[tifName];
+                        if (tifValue === undefined || tifValue === null || tifValue === '') {
+                            addError(fieldName, 'error', `timeInForce "${tifName}" requires a ${expectedType} value`);
+                        } else if (expectedType === 'Date') {
+                            // Date: YYYYMMDD (8 digits)
+                            const ds = String(tifValue);
+                            if (!/^\d{8}$/.test(ds)) {
+                                addError(fieldName, 'warn', `timeInForce "${tifName}" value should be a Date (YYYYMMDD), got: ${ds.slice(0, 20)}`);
+                            }
+                        } else if (expectedType === 'Unsigned') {
+                            // Unsigned integer
+                            if (isCSV) {
+                                if (!/^\d+$/.test(String(tifValue))) {
+                                    addError(fieldName, 'warn', `timeInForce "${tifName}" value should be an unsigned integer, got: ${String(tifValue).slice(0, 20)}`);
+                                }
+                            } else {
+                                if (typeof tifValue !== 'number' || tifValue < 0 || !Number.isInteger(tifValue)) {
+                                    addError(fieldName, 'warn', `timeInForce "${tifName}" value should be an unsigned integer, got: ${JSON.stringify(tifValue)}`);
+                                }
+                            }
+                        } else if (expectedType === 'Timestamp') {
+                            // Timestamp: YYYYMMDDTHHMMSS.ffffff or epoch nanos
+                            const ts = String(tifValue);
+                            if (!/^\d{8}[T ]\d{6}(\.\d{1,9})?$/.test(ts) && !/^\d{13,20}$/.test(ts)) {
+                                addError(fieldName, 'warn', `timeInForce "${tifName}" value should be a Timestamp, got: ${ts.slice(0, 30)}`);
+                            }
+                        }
+                    }
+                }
+            } else if (fieldName === 'handlingInstructions') {
+                // Validate handlingInstructions Name/Value Pairs
+                let hiObj = null;
+                if (!isCSV && typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                    hiObj = value;
+                } else if (isCSV && typeof value === 'string') {
+                    // CSV format: "key1=val1;key2;key3=val3" or similar
+                    // Parse into object
+                    hiObj = {};
+                    const parts = value.split(';');
+                    for (const part of parts) {
+                        const trimmed = part.trim();
+                        if (!trimmed) continue;
+                        const eqIdx = trimmed.indexOf('=');
+                        if (eqIdx >= 0) {
+                            hiObj[trimmed.slice(0, eqIdx)] = trimmed.slice(eqIdx + 1);
+                        } else {
+                            hiObj[trimmed] = true;
+                        }
+                    }
+                }
+                if (hiObj) {
+                    for (const [hiKey, hiVal] of Object.entries(hiObj)) {
+                        if (HI_BOOLEAN.has(hiKey)) {
+                            // Boolean attribute: value must be true
+                            if (!isCSV && hiVal !== true) {
+                                addError(fieldName, 'error', `handlingInstructions "${hiKey}" must have value true, got ${JSON.stringify(hiVal)}`);
+                            }
+                        } else if (HI_NON_BOOLEAN.has(hiKey)) {
+                            // Non-boolean: value must be present (not true/boolean)
+                            if (!isCSV && hiVal === true) {
+                                addError(fieldName, 'warn', `handlingInstructions "${hiKey}" requires a non-boolean value`);
+                            }
+                            if (hiVal === undefined || hiVal === null || hiVal === '') {
+                                addError(fieldName, 'warn', `handlingInstructions "${hiKey}" requires a value`);
+                            }
+                        } else {
+                            addError(fieldName, 'warn', `Unknown handlingInstructions attribute: "${hiKey}"`);
+                        }
+                    }
+                }
             }
         }
 
@@ -2069,7 +2244,7 @@ function processFileText(file, text, append) {
 }
 
 // Fields that contain multi-dimensional arrays and should be preserved as-is
-const COMPOUND_FIELDS = new Set(['legDetails', 'buyDetails', 'sellDetails', 'aggregatedOrders', 'clientDetails', 'firmDetails']);
+const COMPOUND_FIELDS = new Set(['legDetails', 'buyDetails', 'sellDetails', 'aggregatedOrders', 'clientDetails', 'firmDetails', 'askAggregatedOrders', 'bidAggregatedOrders', 'atsOrderType']);
 
 const LEG_DETAIL_FIELDS = ['legRefID', 'symbol', 'optionID', 'openCloseIndicator', 'side', 'legRatioQuantity'];
 const TRADE_SIDE_FIELDS = ['orderKeyDate', 'orderID', 'side', 'retiredFieldPosition', 'firmDesignatedID', 'accountHolderType', 'originatingIMID', 'BFMMFlag'];

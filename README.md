@@ -42,7 +42,7 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 - **Event Summary tab** — counts by event type and action type
 - **Raw Data tab** — parsed JSON view of loaded records
 - **CSV export** — download filtered results
-- **Schema validation** — automatic field-level validation against the CAT spec with highlighted cells, error tooltips, detail panel badges, summary stats, and "Errors Only" filter
+- **Schema validation** — automatic field-level validation against the CAT spec with highlighted cells, error tooltips, detail panel badges, summary stats, and "Errors Only" filter. Validates nested compound fields (legDetails, buyDetails, sellDetails, aggregatedOrders, etc.), timeInForce name/value pairs, and handlingInstructions attributes.
 
 ## Sample Data
 
