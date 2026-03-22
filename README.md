@@ -26,7 +26,7 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 
 ## Features
 
-- **Sortable, paginated records table** with priority column ordering and configurable page size (50/100/250/500/All)
+- **Sortable, paginated records table** with multi-column sort (Shift+click), 3-state cycle (asc/desc/unsort), priority column ordering, and configurable page size (50/100/250/500/All)
 - **Column manager** — show, hide, and reorder columns with layout persistence
 - **Sticky header** — stays visible while scrolling through records
 - **Color-coded event types** — orders, routes, trades, cancels, modifications, quotes, and allocations are visually distinguished

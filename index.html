@@ -207,6 +207,7 @@
         th.drag-over-right { box-shadow: inset -3px 0 0 var(--accent); }
         th.dragging { opacity: 0.4; }
         th .sort-arrow { margin-left: 4px; font-size: 10px; }
+        th .sort-num { font-size: 9px; vertical-align: super; opacity: 0.7; }
         .col-order-controls { display: flex; gap: 6px; align-items: center; }
         .col-order-controls .btn { font-size: 12px; padding: 4px 10px; }
         .col-order-saved { color: var(--green); font-size: 12px; opacity: 0; transition: opacity 0.3s; }
@@ -1025,8 +1026,7 @@ let loadedFiles = [];
 let filteredRecords = [];
 let columns = [];
 let fileFormat = '';
-let sortCol = null;
-let sortAsc = true;
+let sortKeys = []; // [{col, asc}, ...] multi-column sort
 let currentPage = 0;
 let PAGE_SIZE = 100;
 let selectedRow = -1;
@@ -2056,8 +2056,7 @@ function initializeUI() {
     // Reset view state
     currentPage = 0;
     selectedRow = -1;
-    sortCol = null;
-    sortAsc = true;
+    sortKeys = [];
     $('searchInput').value = '';
     // Restore saved filter columns or use defaults
     const savedFilterCols = getSavedFilterColumns();
@@ -2901,16 +2900,21 @@ function applyFilters(skipSync) {
         filteredRecords = chainDisplayData.map(d => d.record);
     } else {
         chainDisplayData = null;
-        if (sortCol !== null) {
+        if (sortKeys.length) {
             filteredRecords.sort((a, b) => {
-                let va = a[sortCol] ?? '';
-                let vb = b[sortCol] ?? '';
-                const na = Number(va), nb = Number(vb);
-                if (!isNaN(na) && !isNaN(nb)) {
-                    return sortAsc ? na - nb : nb - na;
+                for (const {col, asc} of sortKeys) {
+                    let va = a[col] ?? '';
+                    let vb = b[col] ?? '';
+                    const na = Number(va), nb = Number(vb);
+                    if (!isNaN(na) && !isNaN(nb)) {
+                        if (na !== nb) return asc ? na - nb : nb - na;
+                        continue;
+                    }
+                    va = String(va); vb = String(vb);
+                    const cmp = va.localeCompare(vb);
+                    if (cmp !== 0) return asc ? cmp : -cmp;
                 }
-                va = String(va); vb = String(vb);
-                return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+                return 0;
             });
         }
     }
@@ -2931,8 +2935,10 @@ function renderTable() {
     if (chainDisplayData) html += '<th style="width:1px;padding:0 8px"></th>';
     for (let ci = 0; ci < visCols.length; ci++) {
         const col = visCols[ci];
-        const arrow = sortCol === col ? (sortAsc ? ' \u25B2' : ' \u25BC') : '';
-        html += `<th data-col="${escapeHtml(col)}" data-col-idx="${ci}" draggable="true">${escapeHtml(col)}<span class="sort-arrow">${arrow}</span></th>`;
+        const si = sortKeys.findIndex(s => s.col === col);
+        const arrow = si >= 0 ? (sortKeys[si].asc ? ' \u25B2' : ' \u25BC') : '';
+        const sortNum = si >= 0 && sortKeys.length > 1 ? `<span class="sort-num">${si + 1}</span>` : '';
+        html += `<th data-col="${escapeHtml(col)}" data-col-idx="${ci}" draggable="true">${escapeHtml(col)}<span class="sort-arrow">${arrow}${sortNum}</span></th>`;
     }
     html += '</tr></thead><tbody>';
 
@@ -3007,16 +3013,22 @@ function renderTable() {
         el.addEventListener('click', e => e.stopPropagation());
     });
 
-    // Column sort handlers
+    // Column sort handlers (click cycles asc→desc→unsort; Shift+click adds secondary sort)
     $('tableContainer').querySelectorAll('th[data-col]').forEach(th => {
-        th.addEventListener('click', () => {
+        th.addEventListener('click', (e) => {
             if (th._wasDragged) { th._wasDragged = false; return; }
             const col = th.dataset.col;
-            if (sortCol === col) {
-                sortAsc = !sortAsc;
+            const idx = sortKeys.findIndex(s => s.col === col);
+            if (idx >= 0) {
+                if (sortKeys[idx].asc) {
+                    sortKeys[idx].asc = false; // asc → desc
+                } else {
+                    sortKeys.splice(idx, 1); // desc → remove
+                }
+            } else if (e.shiftKey && sortKeys.length) {
+                sortKeys.push({col, asc: true}); // Shift+click adds column
             } else {
-                sortCol = col;
-                sortAsc = true;
+                sortKeys = [{col, asc: true}]; // plain click replaces
             }
             applyFilters();
         });

@@ -24,7 +24,7 @@ A single-file web application for compliance officers to inspect CAT data files.
 ### Key features
 - Drag-and-drop or file picker for JSON (NDJSON), CSV, and ZIP format CAT files (multiple files supported; hold Shift to append)
 - Auto-detects format from extension and content; validates files are CAT format before loading
-- Sortable, paginated record table with priority column ordering and configurable page size (50/100/250/500/All)
+- Sortable, paginated record table with multi-column sort (Shift+click), 3-state cycle (asc/desc/unsort), priority column ordering, and configurable page size (50/100/250/500/All)
 - Column manager to show/hide/reorder columns, with layout persistence
 - Sticky header that stays visible while scrolling
 - Dynamic searchable filters with collapsible comboboxes, range support, and layout persistence
