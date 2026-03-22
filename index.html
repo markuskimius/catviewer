@@ -212,6 +212,33 @@
         .col-order-saved { color: var(--green); font-size: 12px; opacity: 0; transition: opacity 0.3s; }
         .col-order-saved.visible { opacity: 1; }
 
+        /* Tools menu */
+        .tools-menu-wrap { position: relative; }
+        .tools-menu-btn {
+            display: flex; align-items: center; gap: 5px;
+            font-size: 12px; padding: 4px 10px;
+            background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+            border-radius: 6px; cursor: pointer; font-weight: 500;
+        }
+        .tools-menu-btn:hover { background: var(--border); }
+        .tools-menu-btn .arrow { font-size: 8px; }
+        .tools-menu {
+            display: none; position: absolute; right: 0; top: calc(100% + 4px);
+            background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.25); z-index: 100;
+            min-width: 180px; padding: 4px 0; white-space: nowrap;
+        }
+        .tools-menu.open { display: block; }
+        .tools-menu-item {
+            display: flex; justify-content: space-between; align-items: center;
+            width: 100%; padding: 7px 14px; font-size: 13px;
+            background: none; border: none; color: var(--text); cursor: pointer;
+            text-align: left;
+        }
+        .tools-menu-item:hover { background: var(--surface2); }
+        .tools-menu-sep { height: 1px; background: var(--border); margin: 4px 0; }
+        .tools-menu-shortcut { color: var(--text-muted); font-size: 11px; margin-left: 24px; }
+
         /* Column Manager Modal */
         .col-mgr-overlay {
             display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200;
@@ -824,11 +851,19 @@
             <span class="toolbar-spacer"></span>
             <div class="col-order-controls">
                 <span class="col-order-saved" id="colOrderSaved">Saved</span>
-                <button class="btn btn-secondary" id="colMgrBtn" title="Show, hide, and reorder columns">Columns...</button>
-                <button class="btn btn-secondary" id="saveLayoutBtn" title="Save column order and filters">Save Layout</button>
-                <button class="btn btn-secondary" id="resetLayoutBtn" title="Reset columns and filters to defaults">Reset Layout</button>
-                <button class="btn btn-secondary" id="exportLayoutBtn" title="Export layout to file">Export Layout</button>
-                <button class="btn btn-secondary" id="importLayoutBtn" title="Import layout from file">Import Layout</button>
+                <div class="tools-menu-wrap">
+                    <button class="tools-menu-btn" id="toolsMenuBtn">Tools <span class="arrow">&#9662;</span></button>
+                    <div class="tools-menu" id="toolsMenu">
+                        <button class="tools-menu-item" id="colMgrBtn">Columns&#8230;</button>
+                        <div class="tools-menu-sep"></div>
+                        <button class="tools-menu-item" id="saveLayoutBtn">Save Layout<span class="tools-menu-shortcut"></span></button>
+                        <button class="tools-menu-item" id="resetLayoutBtn">Reset Layout</button>
+                        <button class="tools-menu-item" id="exportLayoutBtn">Export Layout</button>
+                        <button class="tools-menu-item" id="importLayoutBtn">Import Layout</button>
+                        <div class="tools-menu-sep"></div>
+                        <button class="tools-menu-item" id="exportBtn">Export CSV</button>
+                    </div>
+                </div>
                 <input type="file" id="importLayoutInput" accept=".json" style="display:none">
             </div>
         </div>
@@ -847,7 +882,6 @@
         <div class="table-container" id="tableContainer"></div>
         <div class="bottom-bar">
             <span class="record-count" id="recordCount"></span>
-            <button class="btn btn-secondary" id="exportBtn">Export CSV</button>
             <span class="spacer"></span>
             <div class="pagination" id="pagination"></div>
         </div>
@@ -1061,6 +1095,7 @@ document.addEventListener('drop', e => {
     e.preventDefault();
     dragCounter = 0;
     dragOverlay.classList.remove('visible');
+    $('toolsMenu').classList.remove('open');
     const files = Array.from(e.dataTransfer.files);
     if (files.length) handleFiles(files, e.shiftKey);
 });
@@ -1427,6 +1462,16 @@ function processFileText(file, text, append) {
         // Validate that the file contains CAT records
         const validCount = validateCATFile(newRecords);
         if (validCount === 0) {
+            // Check if it's a layout file (single JSON object parsed as one-element array)
+            if (fmt === 'json') {
+                try {
+                    const parsed = JSON.parse(text);
+                    if (isLayoutFile(parsed)) {
+                        applyLayout(parsed);
+                        return;
+                    }
+                } catch { /* not a layout file */ }
+            }
             showError('This does not appear to be a CAT file. No records with a valid CAT event type (ME/MO/ML) were found.');
             return;
         }
@@ -3497,6 +3542,49 @@ $('detailGrid').addEventListener('click', e => {
     handleLinkClick(link);
 });
 
+// ── Tools Menu ──
+document.querySelector('.tools-menu-shortcut').textContent = navigator.platform.includes('Mac') ? '\u2318S' : 'Ctrl+S';
+(function() {
+    const btn = $('toolsMenuBtn'), menu = $('toolsMenu');
+    let dragging = false;
+
+    btn.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (menu.classList.contains('open')) {
+            menu.classList.remove('open');
+            return;
+        }
+        menu.classList.add('open');
+        dragging = true;
+    });
+
+    // Prevent the btn click from re-toggling during drag release
+    btn.addEventListener('click', (e) => { e.stopPropagation(); });
+
+    document.addEventListener('mouseup', (e) => {
+        if (!dragging) return;
+        dragging = false;
+        const item = e.target.closest('.tools-menu-item');
+        if (item && menu.contains(item)) {
+            item.click();
+            menu.classList.remove('open');
+        }
+        // Released over button or elsewhere — menu stays open for normal clicking
+    });
+
+    // Normal click on item when menu is already open (non-drag)
+    menu.addEventListener('click', (e) => {
+        if (e.target.closest('.tools-menu-item')) menu.classList.remove('open');
+    });
+
+    // Close when clicking outside
+    document.addEventListener('mousedown', (e) => {
+        if (!e.target.closest('.tools-menu-wrap')) menu.classList.remove('open');
+    });
+})();
+
 // ── Column Order Persistence ──
 function getSavedColumnOrder() {
     try {
@@ -3505,13 +3593,20 @@ function getSavedColumnOrder() {
     } catch { return null; }
 }
 
-$('saveLayoutBtn').addEventListener('click', () => {
+function saveLayout() {
     localStorage.setItem('catViewer_columnOrder', JSON.stringify(columns));
     localStorage.setItem('catViewer_hiddenColumns', JSON.stringify([...hiddenColumns]));
     localStorage.setItem('catViewer_filterColumns', JSON.stringify(activeFilters));
     const msg = $('colOrderSaved');
     msg.classList.add('visible');
     setTimeout(() => msg.classList.remove('visible'), 1500);
+}
+$('saveLayoutBtn').addEventListener('click', saveLayout);
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveLayout();
+    }
 });
 
 $('resetLayoutBtn').addEventListener('click', () => {
@@ -3538,6 +3633,7 @@ $('resetLayoutBtn').addEventListener('click', () => {
 
 $('exportLayoutBtn').addEventListener('click', () => {
     const layout = {
+        _catviewerLayout: true,
         version: 1,
         columnOrder: columns,
         hiddenColumns: [...hiddenColumns],
@@ -3552,6 +3648,51 @@ $('exportLayoutBtn').addEventListener('click', () => {
     URL.revokeObjectURL(url);
 });
 
+function isLayoutFile(obj) {
+    return obj && obj._catviewerLayout === true && Array.isArray(obj.columnOrder);
+}
+function isLegacyLayoutFile(obj) {
+    return obj && !obj._catviewerLayout && Array.isArray(obj.columnOrder) && typeof obj.version === 'number';
+}
+
+function applyLayout(layout) {
+    // Apply column order — keep any columns from current data that aren't in the file
+    if (allRecords.length) {
+        const colSet = new Set();
+        allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx') colSet.add(k); }));
+        const allCols = Array.from(colSet);
+        columns = [];
+        for (const col of layout.columnOrder) {
+            if (allCols.includes(col)) columns.push(col);
+        }
+        for (const col of allCols.sort()) {
+            if (!columns.includes(col)) columns.push(col);
+        }
+    } else {
+        columns = layout.columnOrder;
+    }
+    // Apply hidden columns
+    hiddenColumns.clear();
+    if (Array.isArray(layout.hiddenColumns)) {
+        for (const col of layout.hiddenColumns) hiddenColumns.add(col);
+    }
+    // Apply filter columns
+    if (Array.isArray(layout.filterColumns)) {
+        activeFilters = layout.filterColumns;
+    }
+    filterModes = {};
+    // Save to localStorage so it persists
+    localStorage.setItem('catViewer_columnOrder', JSON.stringify(columns));
+    localStorage.setItem('catViewer_hiddenColumns', JSON.stringify([...hiddenColumns]));
+    localStorage.setItem('catViewer_filterColumns', JSON.stringify(activeFilters));
+    renderFilterBar();
+    applyFilters();
+    const msg = $('colOrderSaved');
+    msg.textContent = 'Imported';
+    msg.classList.add('visible');
+    setTimeout(() => { msg.classList.remove('visible'); msg.textContent = 'Saved'; }, 1500);
+}
+
 $('importLayoutBtn').addEventListener('click', () => $('importLayoutInput').click());
 $('importLayoutInput').addEventListener('change', e => {
     const file = e.target.files[0];
@@ -3560,45 +3701,11 @@ $('importLayoutInput').addEventListener('change', e => {
     reader.onload = () => {
         try {
             const layout = JSON.parse(reader.result);
-            if (!layout.columnOrder || !Array.isArray(layout.columnOrder)) {
-                showError('Invalid layout file: missing columnOrder');
+            if (!isLayoutFile(layout) && !isLegacyLayoutFile(layout)) {
+                showError('Invalid layout file: not a CAT Viewer layout.');
                 return;
             }
-            // Apply column order — keep any columns from current data that aren't in the file
-            if (allRecords.length) {
-                const colSet = new Set();
-                allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx') colSet.add(k); }));
-                const allCols = Array.from(colSet);
-                columns = [];
-                for (const col of layout.columnOrder) {
-                    if (allCols.includes(col)) columns.push(col);
-                }
-                for (const col of allCols.sort()) {
-                    if (!columns.includes(col)) columns.push(col);
-                }
-            } else {
-                columns = layout.columnOrder;
-            }
-            // Apply hidden columns
-            hiddenColumns.clear();
-            if (Array.isArray(layout.hiddenColumns)) {
-                for (const col of layout.hiddenColumns) hiddenColumns.add(col);
-            }
-            // Apply filter columns
-            if (Array.isArray(layout.filterColumns)) {
-                activeFilters = layout.filterColumns;
-            }
-            filterModes = {};
-            // Save to localStorage so it persists
-            localStorage.setItem('catViewer_columnOrder', JSON.stringify(columns));
-            localStorage.setItem('catViewer_hiddenColumns', JSON.stringify([...hiddenColumns]));
-            localStorage.setItem('catViewer_filterColumns', JSON.stringify(activeFilters));
-            renderFilterBar();
-            applyFilters();
-            const msg = $('colOrderSaved');
-            msg.textContent = 'Imported';
-            msg.classList.add('visible');
-            setTimeout(() => { msg.classList.remove('visible'); msg.textContent = 'Saved'; }, 1500);
+            applyLayout(layout);
         } catch (err) {
             showError('Failed to parse layout file: ' + err.message);
         }
