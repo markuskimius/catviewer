@@ -1901,109 +1901,195 @@ function validateRecord(record, format) {
     const schema = CAT_SCHEMA[type];
     const errors = {};
 
-    function addError(field, severity, message) {
+    function addError(field, severity, message, code) {
         if (!errors[field]) errors[field] = [];
-        errors[field].push({ severity, message });
+        errors[field].push({ severity, message, code: code || null });
+    }
+
+    // Error code lookup by field name (from CAT Table 177)
+    const FIELD_ERROR_CODES = {
+        accountHolderType: 2001, actionType: 2002, affiliateFlag: 2003, aggregatedOrders: 2004,
+        askPrice: 2005, askQty: 2006, atsDisplayInd: 2007, atsOrderType: 2008,
+        bidPrice: 2009, bidQty: 2010, CATReporterIMID: 2011, cancelQty: 2012,
+        cancelFlag: 2013, cancelTimestamp: 2014, capacity: 2015, custDspIntrFlag: 2017,
+        deptType: 2018, destinationType: 2020, displayPrice: 2021, displayQty: 2022,
+        dupROIDCond: 2023, electronicDupFlag: 2024, electronicTimestamp: 2025,
+        errorROEID: 2026, eventTimestamp: 2027, fillKeyDate: 2030,
+        firmDesignatedID: 2031, firmROEID: 2032, fulfillmentID: 2034,
+        fulfillmentLinkType: 2035, handlingInstructions: 2036, infoBarrierID: 2037,
+        initiator: 2038, isoInd: 2039, leavesQty: 2040, manualFlag: 2041,
+        manualOrderKeyDate: 2042, manualOrderID: 2043, marketCenterID: 2044,
+        minQty: 2045, mpStatusCode: 2046, nbboSource: 2047, nbboTimestamp: 2048,
+        nbbPrice: 2049, nbbQty: 2050, nboPrice: 2051, nboQty: 2052,
+        negotiatedTradeFlag: 2053, sideDetailsInd: 2054, onlyOneQuoteFlag: 2056,
+        openCloseIndicator: 2057, optionID: 2058, orderID: 2061, orderType: 2062,
+        orderKeyDate: 2063, originatingIMID: 2064, parentOrderID: 2065,
+        parentOrderKeyDate: 2066, price: 2067, priorFillKeyDate: 2068,
+        priorFulfillmentID: 2070, priorOrderID: 2071, priorOrderKeyDate: 2072,
+        priorQuoteKeyDate: 2073, priorQuoteID: 2074, quantity: 2076,
+        quoteID: 2077, quoteKeyDate: 2078, quoteRejectedFlag: 2080,
+        receivedQuoteID: 2081, receiverIMID: 2082, receivingDeskType: 2083,
+        reportingExceptionCode: 2084, representativeInd: 2085, routedOrderID: 2086,
+        routedQuoteID: 2087, routeRejectedFlag: 2088, senderType: 2090,
+        senderIMID: 2091, seqNum: 2092, session: 2093, side: 2095,
+        symbol: 2096, tapeTradeID: 2100, timeInForce: 2101, tradeID: 2102,
+        tradeKeyDate: 2103, tradingSession: 2104, type: 2105, unsolicitedInd: 2106,
+        workingPrice: 2107, buyDetails: 2108, sellDetails: 2115,
+        clientDetails: 2146, firmDetails: 2147, allocationKeyDate: 2170,
+        allocationID: 2171, priorAllocationKeyDate: 2172, priorAllocationID: 2173,
+        institutionFlag: 2175, tradeDate: 2176, settlementDate: 2177,
+        allocationType: 2178, DVPCustodianID: 2179, correspondentCRD: 2180,
+        newOrderFDID: 2181, allocationInstructionTime: 2182, solicitationFlag: 2186,
+        RFQID: 2187, unpricedInd: 2188, triggerPrice: 2192,
+        legDetails: 2200, numberOfLegs: 2203, pairedOrderID: 2204,
+        requestTimestamp: 2205, multiLegInd: 2206, priorRoutedOrderID: 2208,
+        netPrice: 2211, priceType: 2216, destination: 2217,
+        occClearingMemberID: 2218, clearingFirm: 2222, deskOrderID: 2229,
+        priorDeskOrderID: 2230, representativeQuoteInd: 2231,
+        askAggregatedOrders: 2232, bidAggregatedOrders: 2238,
+        RFQFlag: 2249, quotePriceType: 2250, askRelativePrice: 2254,
+        bidRelativePrice: 2255, validUntilDuration: 2256, BFMMFlag: 2260,
+    };
+
+    function fieldCode(fieldName) { return FIELD_ERROR_CODES[fieldName] || null; }
+
+    // Helper: check if value contains invalid ASCII characters (error 2136)
+    // Text fields: printable ASCII 32-126, excluding comma(44), pipe(124), double-quote(34), @(64)
+    const INVALID_TEXT_CHARS = /[^\x20-\x7E]|[,|"@]/;
+    // Alphanumeric fields: only [a-zA-Z0-9]
+    const ALPHANUM_RE = /^[a-zA-Z0-9]*$/;
+
+    // Helper: extract date from eventTimestamp string
+    function extractTimestampDate(ts) {
+        const s = String(ts);
+        if (/^\d{8}[T ]/.test(s)) return s.slice(0, 8);
+        // Epoch nanos — convert to date string
+        if (/^\d{13,20}$/.test(s)) {
+            const ms = Number(s.length > 13 ? s.slice(0, 13) : s);
+            const d = new Date(ms);
+            const yyyy = d.getUTCFullYear();
+            const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+            const dd = String(d.getUTCDate()).padStart(2, '0');
+            return `${yyyy}${mm}${dd}`;
+        }
+        return null;
     }
 
     // 1. Unknown event type
     if (!schema) {
         if (type) {
-            addError('type', 'error', `Unknown event type: ${type}`);
+            addError('type', 'error', `Unknown event type: ${type}`, 2105);
         } else {
-            addError('type', 'error', 'Missing event type');
+            addError('type', 'error', 'Missing event type', 2105);
         }
         return Object.keys(errors).length ? errors : null;
     }
 
     const isNew = record.actionType === 'NEW';
     const isCSV = format === 'csv';
+    const val = (fn) => { const v = record[fn]; return v === undefined || v === null || v === '' ? undefined : v; };
+    const strVal = (fn) => { const v = val(fn); return v !== undefined ? String(v) : undefined; };
 
     // 2. Check each field defined in the schema
     for (const [fieldName, rules] of Object.entries(schema)) {
         const [req, typeCode, ...constraints] = rules;
         const value = record[fieldName];
         const isEmpty = value === undefined || value === null || value === '';
+        const fc = fieldCode(fieldName);
 
-        // Skip retired/reserved fields
-        if (fieldName === 'retiredFieldPosition' || fieldName === 'reservedForFutureUse') continue;
+        // 2156: reservedForFutureUse must not be populated
+        if (fieldName === 'reservedForFutureUse') {
+            if (!isEmpty) addError(fieldName, 'error', 'reservedForFutureUse must not be populated', 2156);
+            continue;
+        }
+        // 2207: retiredFieldPosition must not be populated
+        if (fieldName === 'retiredFieldPosition') {
+            if (!isEmpty) addError(fieldName, 'error', 'retiredFieldPosition must not be populated', 2207);
+            continue;
+        }
 
         // Required field missing (only for NEW action type)
         if (req === 'R' && isEmpty && isNew) {
-            addError(fieldName, 'error', `Required field is missing`);
+            addError(fieldName, 'error', `Required field is missing`, fc);
             continue;
         }
 
         // Skip further checks if empty
         if (isEmpty) continue;
 
+        // 2136: Invalid alphanumeric character check for string fields
+        if (typeCode === 'S' && typeof value === 'string') {
+            // Check for non-printable or delimiter characters in Text fields
+            if (INVALID_TEXT_CHARS.test(value)) {
+                addError(fieldName, 'error', `Contains delimiter or non-allowable ASCII character`, 2136);
+            }
+        }
+
         // Type checking
         if (typeCode === 'B') {
             if (isCSV) {
                 if (value !== 'true' && value !== 'false') {
-                    addError(fieldName, 'error', `Expected boolean (true/false), got: ${String(value).slice(0, 20)}`);
+                    addError(fieldName, 'error', `Expected boolean (true/false), got: ${String(value).slice(0, 20)}`, fc);
                 }
             } else {
                 if (typeof value !== 'boolean') {
-                    addError(fieldName, 'error', `Expected boolean, got ${typeof value}`);
+                    addError(fieldName, 'error', `Expected boolean, got ${typeof value}`, fc);
                 }
             }
         } else if (typeCode === 'N') {
             const numStr = String(value);
             if (isCSV) {
                 if (!/^-?\d+(\.\d+)?$/.test(numStr)) {
-                    addError(fieldName, 'error', `Expected number, got: ${numStr.slice(0, 20)}`);
+                    addError(fieldName, 'error', `Expected number, got: ${numStr.slice(0, 20)}`, fc);
                     continue;
                 }
             } else {
                 if (typeof value !== 'number') {
-                    addError(fieldName, 'error', `Expected number, got ${typeof value}`);
+                    addError(fieldName, 'error', `Expected number, got ${typeof value}`, fc);
                     continue;
                 }
             }
             // Precision/scale check
             if (constraints.length >= 2) {
-                // CAT spec: precision = max digits before decimal, scale = max digits after decimal
                 const [maxIntDigits, maxFracDigits] = constraints;
                 const parts = numStr.replace('-', '').split('.');
                 const intPart = parts[0].replace(/^0+/, '') || '0';
                 const fracPart = parts[1] || '';
                 if (intPart.length > maxIntDigits) {
-                    addError(fieldName, 'warn', `Integer part exceeds max ${maxIntDigits} digits (got ${intPart.length})`);
+                    addError(fieldName, 'warn', `Integer part exceeds max ${maxIntDigits} digits (got ${intPart.length})`, fc);
                 }
                 if (fracPart.length > maxFracDigits && maxFracDigits >= 0) {
-                    addError(fieldName, 'warn', `Decimal places exceed max ${maxFracDigits} (got ${fracPart.length})`);
+                    addError(fieldName, 'warn', `Decimal places exceed max ${maxFracDigits} (got ${fracPart.length})`, fc);
                 }
             }
         } else if (typeCode === 'S') {
             if (!isCSV && typeof value !== 'string') {
-                addError(fieldName, 'error', `Expected string, got ${typeof value}`);
+                addError(fieldName, 'error', `Expected string, got ${typeof value}`, fc);
                 continue;
             }
             // Max length check
             if (constraints.length >= 1) {
                 const maxLen = constraints[0];
                 if (maxLen > 0 && String(value).length > maxLen) {
-                    addError(fieldName, 'error', `Exceeds max length ${maxLen} (got ${String(value).length})`);
+                    addError(fieldName, 'error', `Exceeds max length ${maxLen} (got ${String(value).length})`, fc);
                 }
             }
         } else if (typeCode === 'SN') {
             // Timestamp: accepts string or number
             if (!isCSV && typeof value !== 'string' && typeof value !== 'number') {
-                addError(fieldName, 'error', `Expected string or number timestamp, got ${typeof value}`);
+                addError(fieldName, 'error', `Expected string or number timestamp, got ${typeof value}`, fc);
             }
             // Validate timestamp format
             const s = String(value);
             if (typeof value === 'string' || isCSV) {
-                // String format: YYYYMMDDTHHMMSS.ffffff (15-25 chars) or epoch number string
                 if (!/^\d{8}[T ]\d{6}(\.\d{1,9})?$/.test(s) && !/^\d{13,20}$/.test(s)) {
-                    addError(fieldName, 'warn', `Invalid timestamp format: ${s.slice(0, 30)}`);
+                    addError(fieldName, 'warn', `Invalid timestamp format: ${s.slice(0, 30)}`, fc);
                 }
             }
         } else if (typeCode === 'A') {
             // Array type — check it's actually an array (JSON) or non-empty string (CSV)
             if (!isCSV && !Array.isArray(value) && typeof value !== 'string') {
-                addError(fieldName, 'error', `Expected array, got ${typeof value}`);
+                addError(fieldName, 'error', `Expected array, got ${typeof value}`, fc);
             } else if (!isCSV && Array.isArray(value)) {
                 // Deep validation of array elements
                 const elemSchema = CAT_ARRAY_ELEMENTS[type] && CAT_ARRAY_ELEMENTS[type][fieldName];
@@ -2011,54 +2097,56 @@ function validateRecord(record, format) {
                     for (let ei = 0; ei < value.length; ei++) {
                         const elem = value[ei];
                         if (!elem || typeof elem !== 'object') {
-                            addError(fieldName, 'error', `Element [${ei}]: expected object, got ${typeof elem}`);
+                            addError(fieldName, 'error', `Element [${ei}]: expected object, got ${typeof elem}`, 2134);
                             continue;
                         }
                         for (const [eName, eReq, eType, ...eCons] of elemSchema) {
                             if (eName === 'retiredFieldPosition' || eName === 'reservedForFutureUse') continue;
                             const eVal = elem[eName];
                             const eEmpty = eVal === undefined || eVal === null || eVal === '';
+                            // Nested field error code lookup
+                            const nestedCode = FIELD_ERROR_CODES[eName] || fc;
                             // Required check (only for NEW)
                             if (eReq === 'R' && eEmpty && isNew) {
-                                addError(fieldName, 'error', `Element [${ei}]: required field "${eName}" is missing`);
+                                addError(fieldName, 'error', `Element [${ei}]: required field "${eName}" is missing`, nestedCode);
                                 continue;
                             }
                             if (eEmpty) continue;
                             // Type checks
                             if (eType === 'B') {
                                 if (typeof eVal !== 'boolean') {
-                                    addError(fieldName, 'error', `Element [${ei}].${eName}: expected boolean, got ${typeof eVal}`);
+                                    addError(fieldName, 'error', `Element [${ei}].${eName}: expected boolean, got ${typeof eVal}`, nestedCode);
                                 }
                             } else if (eType === 'N') {
                                 if (typeof eVal !== 'number') {
-                                    addError(fieldName, 'error', `Element [${ei}].${eName}: expected number, got ${typeof eVal}`);
+                                    addError(fieldName, 'error', `Element [${ei}].${eName}: expected number, got ${typeof eVal}`, nestedCode);
                                 } else if (eCons.length >= 2) {
                                     const [maxInt, maxFrac] = eCons;
                                     const parts = String(eVal).replace('-', '').split('.');
                                     const intP = (parts[0].replace(/^0+/, '') || '0');
                                     const fracP = parts[1] || '';
                                     if (intP.length > maxInt) {
-                                        addError(fieldName, 'warn', `Element [${ei}].${eName}: integer part exceeds max ${maxInt} digits`);
+                                        addError(fieldName, 'warn', `Element [${ei}].${eName}: integer part exceeds max ${maxInt} digits`, nestedCode);
                                     }
                                     if (fracP.length > maxFrac && maxFrac >= 0) {
-                                        addError(fieldName, 'warn', `Element [${ei}].${eName}: decimal places exceed max ${maxFrac}`);
+                                        addError(fieldName, 'warn', `Element [${ei}].${eName}: decimal places exceed max ${maxFrac}`, nestedCode);
                                     }
                                 }
                             } else if (eType === 'S') {
                                 if (typeof eVal !== 'string') {
-                                    addError(fieldName, 'error', `Element [${ei}].${eName}: expected string, got ${typeof eVal}`);
+                                    addError(fieldName, 'error', `Element [${ei}].${eName}: expected string, got ${typeof eVal}`, nestedCode);
                                 } else if (eCons.length >= 1 && eCons[0] > 0 && eVal.length > eCons[0]) {
-                                    addError(fieldName, 'error', `Element [${ei}].${eName}: exceeds max length ${eCons[0]}`);
+                                    addError(fieldName, 'error', `Element [${ei}].${eName}: exceeds max length ${eCons[0]}`, nestedCode);
                                 }
                                 // Choice value validation for known fields inside array elements
                                 if (typeof eVal === 'string' && CAT_CHOICE_VALUES[eName]) {
                                     if (!CAT_CHOICE_VALUES[eName].has(eVal)) {
-                                        addError(fieldName, 'warn', `Element [${ei}].${eName}: unexpected value "${eVal.slice(0, 20)}"`);
+                                        addError(fieldName, 'warn', `Element [${ei}].${eName}: unexpected value "${eVal.slice(0, 20)}"`, nestedCode);
                                     }
                                 }
                             } else if (eType === 'SN') {
                                 if (typeof eVal !== 'string' && typeof eVal !== 'number') {
-                                    addError(fieldName, 'error', `Element [${ei}].${eName}: expected string or number, got ${typeof eVal}`);
+                                    addError(fieldName, 'error', `Element [${ei}].${eName}: expected string or number, got ${typeof eVal}`, nestedCode);
                                 }
                             }
                         }
@@ -2068,7 +2156,7 @@ function validateRecord(record, format) {
         } else if (typeCode === 'O') {
             // Object type (timeInForce, handlingInstructions)
             if (!isCSV && typeof value !== 'object') {
-                addError(fieldName, 'error', `Expected object, got ${typeof value}`);
+                addError(fieldName, 'error', `Expected object, got ${typeof value}`, fc);
             } else if (fieldName === 'timeInForce') {
                 // Validate timeInForce Name/Value Pairs
                 let tifName, tifValue;
@@ -2077,7 +2165,7 @@ function validateRecord(record, format) {
                     if (keys.length === 0) {
                         // empty object — skip
                     } else if (keys.length > 1) {
-                        addError(fieldName, 'warn', `timeInForce should have exactly one key, got ${keys.length}`);
+                        addError(fieldName, 'warn', `timeInForce should have exactly one key, got ${keys.length}`, 2101);
                     } else {
                         tifName = keys[0];
                         tifValue = value[keys[0]];
@@ -2094,39 +2182,36 @@ function validateRecord(record, format) {
                 }
                 if (tifName !== undefined) {
                     if (!TIF_ALL.has(tifName)) {
-                        addError(fieldName, 'error', `Unknown timeInForce name: "${tifName}"`);
+                        addError(fieldName, 'error', `Unknown timeInForce name: "${tifName}"`, 2101);
                     } else if (TIF_BOOLEAN.has(tifName)) {
                         // Boolean TIF: value must be true (JSON) or absent/empty (CSV)
                         if (!isCSV && tifValue !== true) {
-                            addError(fieldName, 'error', `timeInForce "${tifName}" must have value true, got ${JSON.stringify(tifValue)}`);
+                            addError(fieldName, 'error', `timeInForce "${tifName}" must have value true, got ${JSON.stringify(tifValue)}`, 2101);
                         }
                     } else if (TIF_NON_BOOLEAN[tifName]) {
                         // Non-boolean TIF: value must be present and match expected type
                         const expectedType = TIF_NON_BOOLEAN[tifName];
                         if (tifValue === undefined || tifValue === null || tifValue === '') {
-                            addError(fieldName, 'error', `timeInForce "${tifName}" requires a ${expectedType} value`);
+                            addError(fieldName, 'error', `timeInForce "${tifName}" requires a ${expectedType} value`, 2101);
                         } else if (expectedType === 'Date') {
-                            // Date: YYYYMMDD (8 digits)
                             const ds = String(tifValue);
                             if (!/^\d{8}$/.test(ds)) {
-                                addError(fieldName, 'warn', `timeInForce "${tifName}" value should be a Date (YYYYMMDD), got: ${ds.slice(0, 20)}`);
+                                addError(fieldName, 'warn', `timeInForce "${tifName}" value should be a Date (YYYYMMDD), got: ${ds.slice(0, 20)}`, 2101);
                             }
                         } else if (expectedType === 'Unsigned') {
-                            // Unsigned integer
                             if (isCSV) {
                                 if (!/^\d+$/.test(String(tifValue))) {
-                                    addError(fieldName, 'warn', `timeInForce "${tifName}" value should be an unsigned integer, got: ${String(tifValue).slice(0, 20)}`);
+                                    addError(fieldName, 'warn', `timeInForce "${tifName}" value should be an unsigned integer, got: ${String(tifValue).slice(0, 20)}`, 2101);
                                 }
                             } else {
                                 if (typeof tifValue !== 'number' || tifValue < 0 || !Number.isInteger(tifValue)) {
-                                    addError(fieldName, 'warn', `timeInForce "${tifName}" value should be an unsigned integer, got: ${JSON.stringify(tifValue)}`);
+                                    addError(fieldName, 'warn', `timeInForce "${tifName}" value should be an unsigned integer, got: ${JSON.stringify(tifValue)}`, 2101);
                                 }
                             }
                         } else if (expectedType === 'Timestamp') {
-                            // Timestamp: YYYYMMDDTHHMMSS.ffffff or epoch nanos
                             const ts = String(tifValue);
                             if (!/^\d{8}[T ]\d{6}(\.\d{1,9})?$/.test(ts) && !/^\d{13,20}$/.test(ts)) {
-                                addError(fieldName, 'warn', `timeInForce "${tifName}" value should be a Timestamp, got: ${ts.slice(0, 30)}`);
+                                addError(fieldName, 'warn', `timeInForce "${tifName}" value should be a Timestamp, got: ${ts.slice(0, 30)}`, 2101);
                             }
                         }
                     }
@@ -2137,8 +2222,6 @@ function validateRecord(record, format) {
                 if (!isCSV && typeof value === 'object' && value !== null && !Array.isArray(value)) {
                     hiObj = value;
                 } else if (isCSV && typeof value === 'string') {
-                    // CSV format: "key1=val1;key2;key3=val3" or similar
-                    // Parse into object
                     hiObj = {};
                     const parts = value.split(';');
                     for (const part of parts) {
@@ -2155,20 +2238,18 @@ function validateRecord(record, format) {
                 if (hiObj) {
                     for (const [hiKey, hiVal] of Object.entries(hiObj)) {
                         if (HI_BOOLEAN.has(hiKey)) {
-                            // Boolean attribute: value must be true
                             if (!isCSV && hiVal !== true) {
-                                addError(fieldName, 'error', `handlingInstructions "${hiKey}" must have value true, got ${JSON.stringify(hiVal)}`);
+                                addError(fieldName, 'error', `handlingInstructions "${hiKey}" must have value true, got ${JSON.stringify(hiVal)}`, 2036);
                             }
                         } else if (HI_NON_BOOLEAN.has(hiKey)) {
-                            // Non-boolean: value must be present (not true/boolean)
                             if (!isCSV && hiVal === true) {
-                                addError(fieldName, 'warn', `handlingInstructions "${hiKey}" requires a non-boolean value`);
+                                addError(fieldName, 'warn', `handlingInstructions "${hiKey}" requires a non-boolean value`, 2036);
                             }
                             if (hiVal === undefined || hiVal === null || hiVal === '') {
-                                addError(fieldName, 'warn', `handlingInstructions "${hiKey}" requires a value`);
+                                addError(fieldName, 'warn', `handlingInstructions "${hiKey}" requires a value`, 2036);
                             }
                         } else {
-                            addError(fieldName, 'warn', `Unknown handlingInstructions attribute: "${hiKey}"`);
+                            addError(fieldName, 'warn', `Unknown handlingInstructions attribute: "${hiKey}"`, 2036);
                         }
                     }
                 }
@@ -2179,22 +2260,368 @@ function validateRecord(record, format) {
         if (typeCode === 'S' && CAT_CHOICE_VALUES[fieldName]) {
             const sv = String(value);
             if (!CAT_CHOICE_VALUES[fieldName].has(sv)) {
-                addError(fieldName, 'warn', `Unexpected value "${sv.slice(0, 20)}" for ${fieldName}`);
+                addError(fieldName, 'warn', `Unexpected value "${sv.slice(0, 20)}" for ${fieldName}`, fc);
             }
         }
 
         // Message type validation
         if (fieldName === 'type' && !CAT_ALLOWED_TYPES.has(String(value))) {
-            addError(fieldName, 'error', `Unknown message type: ${String(value)}`);
+            addError(fieldName, 'error', `Unknown message type: ${String(value)}`, 2105);
         }
     }
 
-    // 3. Check for unknown fields
+    // 3. Check for unknown fields (2133)
     for (const key of Object.keys(record)) {
         if (VALIDATION_SKIP_FIELDS.has(key)) continue;
         if (key.startsWith('retiredFieldPosition') || key.startsWith('reservedForFutureUse')) continue;
         if (!schema[key]) {
-            addError(key, 'warn', `Unknown field for ${type}`);
+            addError(key, 'warn', `Unknown field for ${type}`, 2133);
+        }
+    }
+
+    // ── Cross-field validations (Table 177) ──
+
+    // 2026: errorROEID must be blank when actionType is NEW; must be populated when actionType is RPR
+    if (schema.errorROEID) {
+        const at = strVal('actionType');
+        const errROE = val('errorROEID');
+        if (at === 'NEW' && errROE !== undefined) {
+            addError('errorROEID', 'error', 'errorROEID must be blank when actionType is NEW', 2026);
+        }
+        if (at === 'RPR' && errROE === undefined) {
+            addError('errorROEID', 'error', 'errorROEID must be populated when actionType is RPR', 2026);
+        }
+    }
+
+    // 2033: Event Date in firmROEID must match date portion of eventTimestamp
+    if (schema.firmROEID && schema.eventTimestamp) {
+        const roe = strVal('firmROEID');
+        const ets = val('eventTimestamp');
+        if (roe && ets) {
+            const roeDate = roe.split('_')[0];
+            const tsDate = extractTimestampDate(ets);
+            if (roeDate && tsDate && /^\d{8}$/.test(roeDate) && roeDate !== tsDate) {
+                addError('firmROEID', 'error', `Event date in firmROEID (${roeDate}) does not match eventTimestamp date (${tsDate})`, 2033);
+            }
+        }
+    }
+
+    // 2032: firmROEID format: <YYYYMMDD>_<identifier>
+    if (schema.firmROEID) {
+        const roe = strVal('firmROEID');
+        if (roe && !/^\d{8}_.+$/.test(roe)) {
+            addError('firmROEID', 'warn', 'firmROEID should be formatted as YYYYMMDD_<identifier>', 2032);
+        }
+    }
+
+    // 2027: eventTimestamp precision based on manualFlag
+    if (schema.eventTimestamp && schema.manualFlag) {
+        const ets = strVal('eventTimestamp');
+        const mf = val('manualFlag');
+        if (ets && mf !== undefined) {
+            const isManual = mf === true || mf === 'true';
+            // String timestamp format: YYYYMMDDTHHMMSS.CCC...
+            const tsMatch = ets.match(/^\d{8}[T ]\d{6}(\.(\d+))?$/);
+            if (tsMatch) {
+                const fracDigits = tsMatch[2] ? tsMatch[2].length : 0;
+                if (!isManual && fracDigits < 3) {
+                    addError('eventTimestamp', 'warn', 'Non-manual events must report eventTimestamp in at least millisecond precision', 2027);
+                }
+            }
+        }
+    }
+
+    // 2040: leavesQty must be <= quantity
+    if (schema.leavesQty && schema.quantity) {
+        const lq = val('leavesQty');
+        const qty = val('quantity');
+        if (lq !== undefined && qty !== undefined) {
+            const lqNum = Number(lq);
+            const qtyNum = Number(qty);
+            if (!isNaN(lqNum) && !isNaN(qtyNum) && lqNum > qtyNum) {
+                addError('leavesQty', 'error', `leavesQty (${lqNum}) must be <= quantity (${qtyNum})`, 2040);
+            }
+        }
+    }
+
+    // 2042: manualOrderKeyDate required if manualOrderID is populated
+    if (schema.manualOrderKeyDate && schema.manualOrderID) {
+        if (val('manualOrderID') !== undefined && val('manualOrderKeyDate') === undefined) {
+            addError('manualOrderKeyDate', 'error', 'manualOrderKeyDate is required when manualOrderID is populated', 2042);
+        }
+    }
+
+    // 2005/2006: askPrice/askQty co-dependency
+    if (schema.askPrice && schema.askQty) {
+        if (val('askQty') !== undefined && val('askPrice') === undefined) {
+            addError('askPrice', 'error', 'askPrice is required when askQty is populated', 2005);
+        }
+        if (val('askPrice') !== undefined && val('askQty') === undefined) {
+            addError('askQty', 'error', 'askQty is required when askPrice is populated', 2006);
+        }
+    }
+
+    // 2009/2010: bidPrice/bidQty co-dependency
+    if (schema.bidPrice && schema.bidQty) {
+        if (val('bidQty') !== undefined && val('bidPrice') === undefined) {
+            addError('bidPrice', 'error', 'bidPrice is required when bidQty is populated', 2009);
+        }
+        if (val('bidPrice') !== undefined && val('bidQty') === undefined) {
+            addError('bidQty', 'error', 'bidQty is required when bidPrice is populated', 2010);
+        }
+    }
+
+    // 2093: session required when destinationType is 'E' or 'D'
+    if (schema.session && schema.destinationType) {
+        const dt = strVal('destinationType');
+        if ((dt === 'E' || dt === 'D') && val('session') === undefined) {
+            addError('session', 'error', `session is required when destinationType is '${dt}'`, 2093);
+        }
+    }
+
+    // 2108: buyDetails + sideDetailsInd
+    if (schema.buyDetails && schema.sideDetailsInd) {
+        const sdi = strVal('sideDetailsInd');
+        const bd = val('buyDetails');
+        if (sdi === 'BUY' && (bd === undefined || (Array.isArray(bd) && bd.length === 0))) {
+            addError('buyDetails', 'error', 'buyDetails must be populated when sideDetailsInd is BUY', 2108);
+        }
+        if (sdi === 'SELL' && bd !== undefined && !(Array.isArray(bd) && bd.length === 0)) {
+            addError('buyDetails', 'error', 'buyDetails must not be populated when sideDetailsInd is SELL', 2108);
+        }
+    }
+
+    // 2115: sellDetails + sideDetailsInd
+    if (schema.sellDetails && schema.sideDetailsInd) {
+        const sdi = strVal('sideDetailsInd');
+        const sd = val('sellDetails');
+        if (sdi === 'SELL' && (sd === undefined || (Array.isArray(sd) && sd.length === 0))) {
+            addError('sellDetails', 'error', 'sellDetails must be populated when sideDetailsInd is SELL', 2115);
+        }
+        if (sdi === 'BUY' && sd !== undefined && !(Array.isArray(sd) && sd.length === 0)) {
+            addError('sellDetails', 'error', 'sellDetails must not be populated when sideDetailsInd is BUY', 2115);
+        }
+    }
+
+    // 2124/2125: clientDetails - firmDesignatedID and accountHolderType must be blank
+    if (schema.clientDetails) {
+        const cd = val('clientDetails');
+        if (cd && Array.isArray(cd)) {
+            for (let ci = 0; ci < cd.length; ci++) {
+                if (cd[ci] && cd[ci].firmDesignatedID) {
+                    addError('clientDetails', 'error', `Element [${ci}].firmDesignatedID: must be blank in clientDetails`, 2124);
+                }
+                if (cd[ci] && cd[ci].accountHolderType) {
+                    addError('clientDetails', 'error', `Element [${ci}].accountHolderType: must be blank in clientDetails`, 2125);
+                }
+            }
+        }
+    }
+
+    // 2143: electronicDupFlag and manualFlag combination
+    if (schema.electronicDupFlag && schema.manualFlag) {
+        const edf = val('electronicDupFlag');
+        const mf = val('manualFlag');
+        const edfBool = edf === true || edf === 'true';
+        const mfBool = mf === true || mf === 'true';
+        // electronicDupFlag cannot be true if manualFlag is true
+        if (edfBool && mfBool) {
+            addError('electronicDupFlag', 'error', 'electronicDupFlag cannot be true when manualFlag is true', 2143);
+        }
+    }
+
+    // 2144: electronicTimestamp and manualFlag combination
+    if (schema.electronicTimestamp && schema.manualFlag) {
+        const et = val('electronicTimestamp');
+        const mf = val('manualFlag');
+        const mfBool = mf === true || mf === 'true';
+        // If manualFlag is true, electronicTimestamp should not be populated (for non-child events)
+        if (mfBool && et !== undefined) {
+            addError('electronicTimestamp', 'warn', 'electronicTimestamp should not be populated when manualFlag is true', 2144);
+        }
+    }
+
+    // 2189: senderIMID must not equal destination (routes) or receiverIMID (accepts)
+    if (schema.senderIMID && schema.destination) {
+        const sid = strVal('senderIMID');
+        const dest = strVal('destination');
+        if (sid && dest && sid === dest) {
+            addError('senderIMID', 'error', 'senderIMID must not equal destination', 2189);
+        }
+    }
+    if (schema.senderIMID && schema.receiverIMID) {
+        const sid = strVal('senderIMID');
+        const rid = strVal('receiverIMID');
+        if (sid && rid && sid === rid) {
+            addError('senderIMID', 'error', 'senderIMID must not equal receiverIMID', 2189);
+        }
+    }
+
+    // 2190: orderID/orderKeyDate must not equal parentOrderID/parentOrderKeyDate or priorOrderID/priorOrderKeyDate
+    if (schema.orderID && schema.orderKeyDate) {
+        const oid = strVal('orderID');
+        const okd = strVal('orderKeyDate');
+        if (oid && okd) {
+            if (schema.parentOrderID && schema.parentOrderKeyDate) {
+                const poid = strVal('parentOrderID');
+                const pokd = strVal('parentOrderKeyDate');
+                if (poid && pokd && oid === poid && okd === pokd) {
+                    addError('parentOrderID', 'error', 'parentOrderID/parentOrderKeyDate must not equal orderID/orderKeyDate', 2190);
+                }
+            }
+            if (schema.priorOrderID && schema.priorOrderKeyDate) {
+                const prid = strVal('priorOrderID');
+                const prkd = strVal('priorOrderKeyDate');
+                if (prid && prkd && oid === prid && okd === prkd) {
+                    addError('priorOrderID', 'error', 'priorOrderID/priorOrderKeyDate must not equal orderID/orderKeyDate', 2190);
+                }
+            }
+        }
+    }
+
+    // 2191: orderID/orderKeyDate must not equal any aggregatedOrders orderID/orderKeyDate
+    if (schema.aggregatedOrders && schema.orderID && schema.orderKeyDate) {
+        const oid = strVal('orderID');
+        const okd = strVal('orderKeyDate');
+        const agg = val('aggregatedOrders');
+        if (oid && okd && Array.isArray(agg)) {
+            for (let ai = 0; ai < agg.length; ai++) {
+                const a = agg[ai];
+                if (a && String(a.orderID) === oid && String(a.orderKeyDate) === okd) {
+                    addError('aggregatedOrders', 'error', `Element [${ai}]: orderID/orderKeyDate must not equal the event's orderID/orderKeyDate`, 2191);
+                }
+            }
+        }
+    }
+
+    // 2209: routedOrderID must not equal priorRoutedOrderID
+    if (schema.routedOrderID && schema.priorRoutedOrderID) {
+        const roid = strVal('routedOrderID');
+        const proid = strVal('priorRoutedOrderID');
+        if (roid && proid && roid === proid) {
+            addError('priorRoutedOrderID', 'error', 'routedOrderID and priorRoutedOrderID must not be equal', 2209);
+        }
+    }
+
+    // 2226: price must be blank or zero when netPrice is populated
+    if (schema.price && schema.netPrice) {
+        const np = val('netPrice');
+        const p = val('price');
+        if (np !== undefined && p !== undefined && Number(p) !== 0) {
+            addError('price', 'error', 'price must be blank or zero when netPrice is populated', 2226);
+        }
+    }
+
+    // 2247: quantity must be 0 for CASH handlingInstructions
+    if (schema.handlingInstructions && schema.quantity) {
+        const hi = val('handlingInstructions');
+        let hasCash = false;
+        if (hi && typeof hi === 'object' && !Array.isArray(hi)) {
+            hasCash = hi.CASH === true || hi.CASH !== undefined;
+        } else if (typeof hi === 'string') {
+            hasCash = /\bCASH\b/.test(hi);
+        }
+        if (hasCash) {
+            const qty = val('quantity');
+            if (qty !== undefined && Number(qty) !== 0) {
+                addError('quantity', 'error', 'quantity must be 0 for orders with CASH handlingInstructions', 2247);
+            }
+        }
+    }
+
+    // 2273-2276: buyDetails/sellDetails/clientDetails/firmDetails limited to one element
+    for (const [arrField, code] of [['buyDetails', 2273], ['sellDetails', 2274], ['clientDetails', 2275], ['firmDetails', 2276]]) {
+        if (schema[arrField]) {
+            const arr = val(arrField);
+            if (Array.isArray(arr) && arr.length > 1) {
+                addError(arrField, 'error', `${arrField} is limited to one set of details (got ${arr.length})`, code);
+            }
+        }
+    }
+
+    // 2227: buyDetails.orderID and sellDetails.orderID must not be the same
+    if (schema.buyDetails && schema.sellDetails) {
+        const bd = val('buyDetails');
+        const sd = val('sellDetails');
+        if (Array.isArray(bd) && bd.length > 0 && Array.isArray(sd) && sd.length > 0) {
+            const boid = bd[0] && bd[0].orderID;
+            const soid = sd[0] && sd[0].orderID;
+            if (boid && soid && String(boid) === String(soid)) {
+                addError('buyDetails', 'error', 'buyDetails.orderID and sellDetails.orderID must not be the same', 2227);
+            }
+        }
+    }
+
+    // 2228: firmDetails.orderID and clientDetails.orderID must not be the same
+    if (schema.firmDetails && schema.clientDetails) {
+        const fd = val('firmDetails');
+        const cd = val('clientDetails');
+        if (Array.isArray(fd) && fd.length > 0 && Array.isArray(cd) && cd.length > 0) {
+            const foid = fd[0] && fd[0].orderID;
+            const coid = cd[0] && cd[0].orderID;
+            if (foid && coid && String(foid) === String(coid)) {
+                addError('firmDetails', 'error', 'firmDetails.orderID and clientDetails.orderID must not be the same', 2228);
+            }
+        }
+    }
+
+    // 2223: firmDesignatedID and orderID in firmDetails are mutually exclusive
+    if (schema.firmDetails) {
+        const fd = val('firmDetails');
+        if (Array.isArray(fd)) {
+            for (let fi = 0; fi < fd.length; fi++) {
+                if (fd[fi] && fd[fi].orderID && fd[fi].firmDesignatedID) {
+                    addError('firmDetails', 'error', `Element [${fi}]: firmDesignatedID and orderID in firmDetails are mutually exclusive`, 2223);
+                }
+            }
+        }
+    }
+
+    // 2230: priorDeskOrderID must not equal deskOrderID
+    if (schema.deskOrderID && schema.priorDeskOrderID) {
+        const doid = strVal('deskOrderID');
+        const pdoid = strVal('priorDeskOrderID');
+        if (doid && pdoid && doid === pdoid) {
+            addError('priorDeskOrderID', 'error', 'priorDeskOrderID must not equal deskOrderID', 2230);
+        }
+    }
+
+    // 2142: aggregatedOrders and representativeInd combination
+    if (schema.aggregatedOrders && schema.representativeInd) {
+        const ri = strVal('representativeInd');
+        const agg = val('aggregatedOrders');
+        const hasAgg = Array.isArray(agg) ? agg.length > 0 : (agg !== undefined);
+        // If representativeInd is 'N', aggregatedOrders should not be populated
+        if (ri === 'N' && hasAgg) {
+            addError('aggregatedOrders', 'error', 'aggregatedOrders must not be populated when representativeInd is N', 2142);
+        }
+    }
+
+    // 2028: exchOriginCode and destinationType combination
+    if (schema.exchOriginCode && schema.destinationType) {
+        const dt = strVal('destinationType');
+        const eoc = val('exchOriginCode');
+        if (dt !== 'E' && eoc !== undefined) {
+            addError('exchOriginCode', 'error', 'exchOriginCode must be blank when destinationType is not E', 2028);
+        }
+    }
+
+    // 2107: workingPrice must be blank if atsDisplayInd is blank
+    if (schema.workingPrice && schema.atsDisplayInd) {
+        const adi = val('atsDisplayInd');
+        const wp = val('workingPrice');
+        if (adi === undefined && wp !== undefined) {
+            addError('workingPrice', 'error', 'workingPrice must be blank when atsDisplayInd is blank', 2107);
+        }
+    }
+
+    // 2257: RFQFlag and RFQID combination
+    if (schema.RFQFlag && schema.RFQID) {
+        const flag = val('RFQFlag');
+        const id = val('RFQID');
+        const flagBool = flag === true || flag === 'true';
+        if (!flagBool && id !== undefined) {
+            addError('RFQID', 'warn', 'RFQID should not be populated when RFQFlag is false', 2257);
         }
     }
 
@@ -2380,13 +2807,15 @@ function parseArrayFieldErrors(errors) {
 }
 
 // Build <td> with optional validation error highlighting and tooltip
+function formatErrorWithCode(e) {
+    const msg = e.message.replace(/^Element \[\d+\](?:\.\w+)?:\s*/, '');
+    return e.code ? `[${e.code}] ${msg}` : msg;
+}
+
 function renderCellWithErrors(content, cellErrors) {
     if (!cellErrors || !cellErrors.length) return `<td>${content}</td>`;
     const cls = cellErrors.some(e => e.severity === 'error') ? 'val-error' : 'val-warn';
-    const tip = cellErrors.map(e => {
-        // Strip "Element [N].field: " prefix for cleaner tooltips
-        return e.message.replace(/^Element \[\d+\](?:\.\w+)?:\s*/, '');
-    }).join('; ');
+    const tip = cellErrors.map(formatErrorWithCode).join('; ');
     return `<td class="${cls}" data-tooltip="${escapeHtml(tip)}">${content}</td>`;
 }
 
@@ -2414,7 +2843,7 @@ function renderLegDetailsHTML(value, mode, fieldErrors) {
         html += '<tr>';
         // Row number cell — show warning icon if row-level errors
         if (rowErrs && rowErrs._row) {
-            const tip = rowErrs._row.map(e => e.message).join('; ');
+            const tip = rowErrs._row.map(formatErrorWithCode).join('; ');
             html += `<td class="val-error" data-tooltip="${escapeHtml(tip)}">${i + 1}</td>`;
         } else {
             html += `<td>${i + 1}</td>`;
@@ -3993,7 +4422,7 @@ function renderTable() {
             const parentErrs = validationEnabled && !errs && col.includes('.') && record._errors && record._errors[col.split('.')[0]];
             const allErrs = errs || parentErrs;
             const errCls = allErrs ? (allErrs.some(e => e.severity === 'error') ? ' val-error' : ' val-warn') : '';
-            const errTip = allErrs ? allErrs.map(e => e.message).join('; ') : '';
+            const errTip = allErrs ? allErrs.map(formatErrorWithCode).join('; ') : '';
             html += `<td${errCls ? ` class="${errCls}"` : ''}${errTip ? ` data-tooltip="${escapeHtml(errTip)}"` : ''}>${formatCell(col, record[col])}</td>`;
         }
         html += '</tr>';
@@ -4427,7 +4856,7 @@ function renderDetailGrid(record, mode, showAll) {
         // Show empty fields if "show all" is checked, or if the field has validation errors (e.g. missing required)
         if (!showAll && isEmpty && !fieldErrors) continue;
         const errBadges = fieldErrors ? fieldErrors.map(e =>
-            `<span class="val-badge val-badge-${e.severity}">${escapeHtml(e.message)}</span>`
+            `<span class="val-badge val-badge-${e.severity}">${e.code ? `<b>[${e.code}]</b> ` : ''}${escapeHtml(e.message)}</span>`
         ).join('') : '';
 
         if (isEmpty) {
@@ -4446,7 +4875,7 @@ function renderDetailGrid(record, mode, showAll) {
                 // Element errors shown inside cells; only show non-element errors as badges above
                 const elemErrs = fieldErrors ? fieldErrors.filter(e => /^Element \[/.test(e.message)) : [];
                 const otherErrs = fieldErrors ? fieldErrors.filter(e => !/^Element \[/.test(e.message)) : [];
-                const topBadges = otherErrs.length ? otherErrs.map(e => `<span class="val-badge val-badge-${e.severity}">${escapeHtml(e.message)}</span>`).join('') : '';
+                const topBadges = otherErrs.length ? otherErrs.map(e => `<span class="val-badge val-badge-${e.severity}">${e.code ? `<b>[${e.code}]</b> ` : ''}${escapeHtml(e.message)}</span>`).join('') : '';
                 const topClass = otherErrs.length ? (otherErrs.some(e => e.severity === 'error') ? ' has-val-error' : ' has-val-warn') : '';
                 html += `<div class="detail-field-wide${topClass}">
                     <div class="field-name">${escapeHtml(key)}</div>
@@ -4463,7 +4892,7 @@ function renderDetailGrid(record, mode, showAll) {
             if (items.length) {
                 const elemErrs = fieldErrors ? fieldErrors.filter(e => /^Element \[/.test(e.message)) : [];
                 const otherErrs = fieldErrors ? fieldErrors.filter(e => !/^Element \[/.test(e.message)) : [];
-                const topBadges = otherErrs.length ? otherErrs.map(e => `<span class="val-badge val-badge-${e.severity}">${escapeHtml(e.message)}</span>`).join('') : '';
+                const topBadges = otherErrs.length ? otherErrs.map(e => `<span class="val-badge val-badge-${e.severity}">${e.code ? `<b>[${e.code}]</b> ` : ''}${escapeHtml(e.message)}</span>`).join('') : '';
                 const topClass = otherErrs.length ? (otherErrs.some(e => e.severity === 'error') ? ' has-val-error' : ' has-val-warn') : '';
                 html += `<div class="detail-field-wide${topClass}">
                     <div class="field-name">${escapeHtml(key)}</div>
@@ -4476,7 +4905,7 @@ function renderDetailGrid(record, mode, showAll) {
         if (COMPOUND_FIELDS.has(key) && key !== 'legDetails' && key !== 'buyDetails' && key !== 'sellDetails' && mode === 'translated' && Array.isArray(value) && value.length) {
             const elemErrs = fieldErrors ? fieldErrors.filter(e => /^Element \[/.test(e.message)) : [];
             const otherErrs = fieldErrors ? fieldErrors.filter(e => !/^Element \[/.test(e.message)) : [];
-            const topBadges = otherErrs.length ? otherErrs.map(e => `<span class="val-badge val-badge-${e.severity}">${escapeHtml(e.message)}</span>`).join('') : '';
+            const topBadges = otherErrs.length ? otherErrs.map(e => `<span class="val-badge val-badge-${e.severity}">${e.code ? `<b>[${e.code}]</b> ` : ''}${escapeHtml(e.message)}</span>`).join('') : '';
             const topClass = otherErrs.length ? (otherErrs.some(e => e.severity === 'error') ? ' has-val-error' : ' has-val-warn') : '';
             html += `<div class="detail-field-wide${topClass}">
                 <div class="field-name">${escapeHtml(key)}${topBadges}</div>
