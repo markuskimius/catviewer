@@ -487,7 +487,7 @@
         .val-icon { color: var(--orange); font-size: 11px; cursor: help; margin-right: 2px; }
         .detail-field.has-val-error { border: 1px solid var(--red); border-radius: 4px; background: rgba(239,68,68,0.08); }
         .detail-field.has-val-warn  { border: 1px solid var(--orange); border-radius: 4px; background: rgba(245,158,11,0.05); }
-        .val-badge { display: inline-block; font-size: 9px; padding: 1px 5px; border-radius: 3px; margin-left: 4px; font-weight: normal; vertical-align: middle; }
+        .val-badge { display: inline-block; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: normal; vertical-align: middle; }
         .val-badge-error { background: var(--red); color: #fff; }
         .val-badge-warn  { background: var(--orange); color: #000; }
         .val-stat-error { color: var(--orange); }
@@ -631,6 +631,7 @@
             font-size: 12px;
             margin-bottom: 6px;
         }
+        .detail-field-wide .val-badges { display: flex; flex-wrap: wrap; gap: 3px; }
 
         .detail-panel {
             position: fixed;
@@ -753,11 +754,13 @@
         }
         .detail-field {
             display: flex;
-            gap: 8px;
+            flex-wrap: wrap;
+            gap: 4px 8px;
             padding: 6px 10px;
             border-radius: 4px;
             font-size: 13px;
         }
+        .detail-field .val-badges { width: 100%; display: flex; flex-wrap: wrap; gap: 3px; }
         .detail-field:hover { background: var(--surface2); }
         .detail-field .field-name {
             color: var(--text-muted);
@@ -4414,8 +4417,9 @@ function renderDetailGrid(record, mode, showAll) {
 
         if (isEmpty) {
             html += `<div class="detail-field${errClass}">
-                <span class="field-name">${escapeHtml(displayKey)}${errBadges}</span>
+                <span class="field-name">${escapeHtml(displayKey)}</span>
                 <span class="field-value"><span style="color:var(--surface2)">&mdash;</span></span>
+                ${errBadges ? `<div class="val-badges">${errBadges}</div>` : ''}
             </div>`;
             continue;
         }
@@ -4430,7 +4434,8 @@ function renderDetailGrid(record, mode, showAll) {
                 const topBadges = otherErrs.length ? otherErrs.map(e => `<span class="val-badge val-badge-${e.severity}">${escapeHtml(e.message)}</span>`).join('') : '';
                 const topClass = otherErrs.length ? (otherErrs.some(e => e.severity === 'error') ? ' has-val-error' : ' has-val-warn') : '';
                 html += `<div class="detail-field-wide${topClass}">
-                    <div class="field-name">${escapeHtml(key)}${topBadges}</div>
+                    <div class="field-name">${escapeHtml(key)}</div>
+                    ${topBadges ? `<div class="val-badges" style="margin-bottom:4px">${topBadges}</div>` : ''}
                     ${renderLegDetailsHTML(value, mode, elemErrs.length ? elemErrs : null)}
                 </div>`;
                 continue;
@@ -4446,7 +4451,8 @@ function renderDetailGrid(record, mode, showAll) {
                 const topBadges = otherErrs.length ? otherErrs.map(e => `<span class="val-badge val-badge-${e.severity}">${escapeHtml(e.message)}</span>`).join('') : '';
                 const topClass = otherErrs.length ? (otherErrs.some(e => e.severity === 'error') ? ' has-val-error' : ' has-val-warn') : '';
                 html += `<div class="detail-field-wide${topClass}">
-                    <div class="field-name">${escapeHtml(key)}${topBadges}</div>
+                    <div class="field-name">${escapeHtml(key)}</div>
+                    ${topBadges ? `<div class="val-badges" style="margin-bottom:4px">${topBadges}</div>` : ''}
                     ${renderSideDetailsHTML(value, fields, mode, elemErrs.length ? elemErrs : null)}
                 </div>`;
                 continue;
@@ -4472,8 +4478,9 @@ function renderDetailGrid(record, mode, showAll) {
             display = escapeHtml(raw);
         }
         html += `<div class="detail-field${errClass}">
-            <span class="field-name">${escapeHtml(displayKey)}${errBadges}</span>
+            <span class="field-name">${escapeHtml(displayKey)}</span>
             <span class="field-value">${display}</span>
+            ${errBadges ? `<div class="val-badges">${errBadges}</div>` : ''}
         </div>`;
     }
     grid.innerHTML = html;
