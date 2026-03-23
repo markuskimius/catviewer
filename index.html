@@ -1947,9 +1947,23 @@ function validateRecord(record, format) {
         netPrice: 2211, priceType: 2216, destination: 2217,
         occClearingMemberID: 2218, clearingFirm: 2222, deskOrderID: 2229,
         priorDeskOrderID: 2230, representativeQuoteInd: 2231,
+        quoteWantedInd: 2154,
         askAggregatedOrders: 2232, bidAggregatedOrders: 2238,
         RFQFlag: 2249, quotePriceType: 2250, askRelativePrice: 2254,
         bidRelativePrice: 2255, validUntilDuration: 2256, BFMMFlag: 2260,
+        underlying: 2210, quoteWantedInd: 2154,
+    };
+
+    // Nested field error codes: parent → child → code (from Table 177)
+    const NESTED_FIELD_CODES = {
+        buyDetails: { orderID: 2109, orderKeyDate: 2110, side: 2111, firmDesignatedID: 2112, accountHolderType: 2113, quantity: 2157, originatingIMID: 2158, BFMMFlag: 2263 },
+        sellDetails: { orderID: 2116, orderKeyDate: 2117, side: 2118, firmDesignatedID: 2119, accountHolderType: 2120, quantity: 2159, originatingIMID: 2160, BFMMFlag: 2264 },
+        clientDetails: { orderID: 2121, orderKeyDate: 2122, side: 2123, firmDesignatedID: 2124, accountHolderType: 2125, quantity: 2161, originatingIMID: 2162 },
+        firmDetails: { orderID: 2126, orderKeyDate: 2127, side: 2128, firmDesignatedID: 2129, accountHolderType: 2130, quantity: 2163, originatingIMID: 2164 },
+        aggregatedOrders: { orderID: 2165, orderKeyDate: 2166, quantity: 2167, originatingIMID: 2168 },
+        askAggregatedOrders: { orderID: 2233, orderKeyDate: 2234, quantity: 2235, originatingIMID: 2236 },
+        bidAggregatedOrders: { orderID: 2239, orderKeyDate: 2240, quantity: 2241, originatingIMID: 2242 },
+        legDetails: { legRefID: 2201, legRatioQuantity: 2202, symbol: 2224, optionID: 2225, openCloseIndicator: 2214, side: 2215 },
     };
 
     function fieldCode(fieldName) { return FIELD_ERROR_CODES[fieldName] || null; }
@@ -2105,8 +2119,8 @@ function validateRecord(record, format) {
                             if (eName === 'retiredFieldPosition' || eName === 'reservedForFutureUse') continue;
                             const eVal = elem[eName];
                             const eEmpty = eVal === undefined || eVal === null || eVal === '';
-                            // Nested field error code lookup
-                            const nestedCode = FIELD_ERROR_CODES[eName] || fc;
+                            // Nested field error code lookup — prefer parent→child specific codes from Table 177
+                            const nestedCode = (NESTED_FIELD_CODES[fieldName] && NESTED_FIELD_CODES[fieldName][eName]) || FIELD_ERROR_CODES[eName] || fc;
                             // Required check (only for NEW)
                             if (eReq === 'R' && eEmpty && isNew) {
                                 addError(fieldName, 'error', `Element [${ei}]: required field "${eName}" is missing`, nestedCode);
@@ -3040,6 +3054,45 @@ function validateRecord(record, format) {
         }
         if (mcid !== undefined && rec2 !== undefined && rec2 !== 'C') {
             addError('reportingExceptionCode', 'error', 'reportingExceptionCode must be blank or C when marketCenterID is populated', 2084);
+        }
+    }
+
+    // 2132: Record exceeds maximum length (8190 bytes)
+    try {
+        const recLen = JSON.stringify(rec).length;
+        if (recLen > 8190) {
+            addError('type', 'error', `Record exceeds maximum length of 8190 bytes (~${recLen} chars)`, 2132);
+        }
+    } catch(e) { /* skip if not serializable */ }
+
+    // 2271: MLOS supplement — firmDesignatedID/aggregatedOrders/routeRejectedFlag/legDetails combination
+    // When routeRejectedFlag is false, at least one of firmDesignatedID, aggregatedOrders, or legDetails must be populated
+    // When all three are blank, routeRejectedFlag must be true
+    if (type === 'MLOS' && schema.routeRejectedFlag && schema.firmDesignatedID && schema.aggregatedOrders && schema.legDetails) {
+        const rrf = val('routeRejectedFlag');
+        const fdid = val('firmDesignatedID');
+        const agg = val('aggregatedOrders');
+        const ld = val('legDetails');
+        const hasAgg = Array.isArray(agg) ? agg.length > 0 : (agg !== undefined);
+        const hasLd = Array.isArray(ld) ? ld.length > 0 : (ld !== undefined);
+        const hasFdid = fdid !== undefined && fdid !== '';
+        const isRejected = rrf === true || rrf === 'true';
+        if (!isRejected && !hasFdid && !hasAgg && !hasLd) {
+            addError('routeRejectedFlag', 'error', 'When firmDesignatedID, aggregatedOrders, and legDetails are all blank, routeRejectedFlag must be true', 2271);
+        }
+    }
+
+    // 2272: MLQS supplement — firmDesignatedID/quoteRejectedFlag/legDetails combination
+    // When quoteRejectedFlag is false, at least one of firmDesignatedID or legDetails must be populated
+    if (type === 'MLQS' && schema.quoteRejectedFlag && schema.firmDesignatedID && schema.legDetails) {
+        const qrf = val('quoteRejectedFlag');
+        const fdid = val('firmDesignatedID');
+        const ld = val('legDetails');
+        const hasLd = Array.isArray(ld) ? ld.length > 0 : (ld !== undefined);
+        const hasFdid = fdid !== undefined && fdid !== '';
+        const isRejected = qrf === true || qrf === 'true';
+        if (!isRejected && !hasFdid && !hasLd) {
+            addError('quoteRejectedFlag', 'error', 'When firmDesignatedID and legDetails are both blank, quoteRejectedFlag must be true', 2272);
         }
     }
 
