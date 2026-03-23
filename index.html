@@ -1884,16 +1884,17 @@ const CAT_CHOICE_VALUES = {
     isoInd: new Set(['ISOD', 'ISOI', 'NA']),
     atsDisplayInd: new Set(['S', 'A', 'Y', 'N']),
     sideDetailsInd: new Set(['BUY', 'SELL', 'NA']),
-    representativeInd: new Set(['Y', 'N']),
+    representativeInd: new Set(['Y', 'YS', 'YP', 'YE', 'N', 'O', 'OS', 'OE', 'OML', 'OMS', 'OME']),
     representativeQuoteInd: new Set(['Y', 'N']),
     nbboSource: new Set(['S', 'D', 'OPRA', 'NA']),
     quoteWantedInd: new Set(['Y', 'N']),
     mpStatusCode: new Set(['A', 'R', 'E']),
-    reportingExceptionCode: new Set(['P', 'N']),
+    reportingExceptionCode: new Set(['P', 'N', 'C']),
     priceType: new Set(['PER', 'NET', 'OTH']),
     quotePriceType: new Set(['PER', 'NET', 'OTH']),
-    fulfillmentLinkType: new Set(['TA', 'AA', 'PA']),
+    fulfillmentLinkType: new Set(['Y', 'YS', 'YP', 'YE', 'FOR', 'O', 'OS', 'OE', 'OML', 'OME']),
     unsolicitedInd: new Set(['Y', 'N']),
+    marketCenterID: new Set(['XNYS', 'XNAS', 'XASE', 'ARCX', 'XBOS', 'BATS', 'BATY', 'EDGA', 'EDGX', 'XCIS', 'XISE', 'GMNI', 'XPHL', 'XCHI', 'IEXG', 'EPRL', 'XCBO', 'C2OX', 'XNDQ', 'XBXO', 'EMLD', 'MCRY', 'MPRL', 'LTSE', 'MEMX', 'XISX', 'DASH', 'XNMS', 'FINN', 'FINC', 'FINY', 'OOTC', 'FINR']),
 };
 
 function validateRecord(record, format) {
@@ -2622,6 +2623,423 @@ function validateRecord(record, format) {
         const flagBool = flag === true || flag === 'true';
         if (!flagBool && id !== undefined) {
             addError('RFQID', 'warn', 'RFQID should not be populated when RFQFlag is false', 2257);
+        }
+    }
+
+    // 2014: cancelTimestamp required when cancelFlag is true
+    if (schema.cancelTimestamp && schema.cancelFlag) {
+        const cf = val('cancelFlag');
+        const cfBool = cf === true || cf === 'true';
+        if (cfBool && val('cancelTimestamp') === undefined) {
+            addError('cancelTimestamp', 'error', 'cancelTimestamp must be populated when cancelFlag is true', 2014);
+        }
+    }
+
+    // 2139: eventTimestamp must not be in the future
+    if (schema.eventTimestamp) {
+        const ets = val('eventTimestamp');
+        if (ets !== undefined) {
+            const s = String(ets);
+            let tsMs = null;
+            const m = s.match(/^(\d{4})(\d{2})(\d{2})[T ](\d{2})(\d{2})(\d{2})/);
+            if (m) {
+                // String timestamp in ET — approximate comparison (no TZ conversion needed for future check)
+                tsMs = new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]).getTime();
+            } else if (/^\d{13,20}$/.test(s)) {
+                tsMs = Number(s.length > 13 ? s.slice(0, 13) : s);
+            }
+            if (tsMs !== null && tsMs > Date.now() + 86400000) {
+                addError('eventTimestamp', 'warn', 'eventTimestamp is in the future', 2139);
+            }
+        }
+    }
+
+    // 2169: reportingExceptionCode and tapeTradeID combination
+    if (schema.reportingExceptionCode && schema.tapeTradeID) {
+        const rec2 = strVal('reportingExceptionCode');
+        const ttid = val('tapeTradeID');
+        if (ttid !== undefined && rec2 !== undefined) {
+            addError('reportingExceptionCode', 'error', 'reportingExceptionCode must be blank when tapeTradeID is populated', 2169);
+        }
+        if (ttid === undefined && rec2 === undefined && isNew) {
+            addError('tapeTradeID', 'error', 'tapeTradeID or reportingExceptionCode must be populated', 2169);
+        }
+    }
+
+    // 2184: clearingFirm required when reportingExceptionCode is 'C'
+    if (schema.clearingFirm && schema.reportingExceptionCode) {
+        const rec2 = strVal('reportingExceptionCode');
+        if (rec2 === 'C' && val('clearingFirm') === undefined) {
+            addError('clearingFirm', 'error', 'clearingFirm is required when reportingExceptionCode is C', 2184);
+        }
+    }
+
+    // 2185: counterparty required when reportingExceptionCode is 'C'
+    if (schema.counterparty && schema.reportingExceptionCode) {
+        const rec2 = strVal('reportingExceptionCode');
+        if (rec2 === 'C' && val('counterparty') === undefined) {
+            addError('counterparty', 'error', 'counterparty is required when reportingExceptionCode is C', 2185);
+        }
+    }
+
+    // 2114/2148: buyDetails/sellDetails firmDesignatedID and orderID mutual exclusion
+    for (const [arrField, code] of [['buyDetails', 2114], ['sellDetails', 2148]]) {
+        if (schema[arrField]) {
+            const arr = val(arrField);
+            if (Array.isArray(arr)) {
+                for (let si = 0; si < arr.length; si++) {
+                    if (arr[si] && arr[si].orderID && arr[si].firmDesignatedID) {
+                        addError(arrField, 'error', `Element [${si}]: firmDesignatedID and orderID are mutually exclusive`, code);
+                    }
+                }
+            }
+        }
+    }
+
+    // 2258/2259: capacity must be 'P' when firmDesignatedID in buyDetails/sellDetails is populated
+    if (schema.capacity) {
+        const cap = strVal('capacity');
+        for (const [arrField, code] of [['buyDetails', 2258], ['sellDetails', 2259]]) {
+            if (schema[arrField]) {
+                const arr = val(arrField);
+                if (Array.isArray(arr)) {
+                    for (let si = 0; si < arr.length; si++) {
+                        if (arr[si] && arr[si].firmDesignatedID && cap !== 'P') {
+                            addError(arrField, 'error', `Element [${si}]: capacity must be P when firmDesignatedID is populated`, code);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Capacity must be 'P' when top-level firmDesignatedID on trade events with sideDetailsInd
+    if (schema.capacity && schema.firmDesignatedID && schema.sideDetailsInd) {
+        const cap = strVal('capacity');
+        const fdid = val('firmDesignatedID');
+        if (fdid !== undefined && cap !== undefined && cap !== 'P') {
+            addError('capacity', 'error', 'capacity must be P when firmDesignatedID is populated', 2015);
+        }
+    }
+
+    // 2261: BFMMFlag + accountHolderType: when BFMMFlag=true, accountHolderType must be O, P, or X
+    if (schema.BFMMFlag && schema.accountHolderType) {
+        const bf = val('BFMMFlag');
+        const bfBool = bf === true || bf === 'true';
+        if (bfBool) {
+            const aht = strVal('accountHolderType');
+            if (aht && aht !== 'O' && aht !== 'P' && aht !== 'X') {
+                addError('accountHolderType', 'error', `accountHolderType must be O, P, or X when BFMMFlag is true (got ${aht})`, 2261);
+            }
+        }
+    }
+
+    // 2262: BFMMFlag + side: when BFMMFlag=true, side must be SS or SX
+    if (schema.BFMMFlag && schema.side) {
+        const bf = val('BFMMFlag');
+        const bfBool = bf === true || bf === 'true';
+        if (bfBool) {
+            const s = strVal('side');
+            if (s && s !== 'SS' && s !== 'SX') {
+                addError('side', 'error', `side must be SS or SX when BFMMFlag is true (got ${s})`, 2262);
+            }
+        }
+    }
+
+    // 2265-2268: BFMMFlag combinations in buyDetails/sellDetails
+    for (const [arrField, codeAHT, codeSide] of [['buyDetails', 2265, 2266], ['sellDetails', 2267, 2268]]) {
+        if (schema[arrField]) {
+            const arr = val(arrField);
+            if (Array.isArray(arr)) {
+                for (let si = 0; si < arr.length; si++) {
+                    const elem = arr[si];
+                    if (!elem) continue;
+                    const bf = elem.BFMMFlag;
+                    const bfBool = bf === true || bf === 'true';
+                    if (bfBool) {
+                        const aht = elem.accountHolderType ? String(elem.accountHolderType) : undefined;
+                        if (aht && aht !== 'O' && aht !== 'P' && aht !== 'X') {
+                            addError(arrField, 'error', `Element [${si}]: accountHolderType must be O, P, or X when BFMMFlag is true`, codeAHT);
+                        }
+                        const s = elem.side ? String(elem.side) : undefined;
+                        if (s && s !== 'SS' && s !== 'SX') {
+                            addError(arrField, 'error', `Element [${si}]: side must be SS or SX when BFMMFlag is true`, codeSide);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2145: fulfillmentLinkType + firmDetails combination
+    if (schema.fulfillmentLinkType && schema.firmDetails) {
+        const flt = strVal('fulfillmentLinkType');
+        const fd = val('firmDetails');
+        const hasFD = Array.isArray(fd) ? fd.length > 0 : (fd !== undefined);
+        // When fulfillmentLinkType is YS, OS, or FOR, firmDetails must be blank
+        if ((flt === 'YS' || flt === 'OS' || flt === 'FOR') && hasFD) {
+            addError('firmDetails', 'error', `firmDetails must be blank when fulfillmentLinkType is ${flt}`, 2145);
+        }
+        // When fulfillmentLinkType is Y, O, or OML, firmDetails.orderID is required
+        if ((flt === 'Y' || flt === 'O' || flt === 'OML') && isNew) {
+            if (!hasFD) {
+                addError('firmDetails', 'error', `firmDetails is required when fulfillmentLinkType is ${flt}`, 2145);
+            } else if (Array.isArray(fd) && fd.length > 0 && fd[0] && !fd[0].orderID) {
+                addError('firmDetails', 'error', `firmDetails.orderID is required when fulfillmentLinkType is ${flt}`, 2145);
+            }
+        }
+        // When fulfillmentLinkType is YE or OE or OME, firmDetails must have firmDesignatedID + accountHolderType
+        if ((flt === 'YE' || flt === 'OE' || flt === 'OME') && isNew) {
+            if (Array.isArray(fd) && fd.length > 0 && fd[0]) {
+                if (!fd[0].firmDesignatedID) {
+                    addError('firmDetails', 'error', `firmDetails.firmDesignatedID is required when fulfillmentLinkType is ${flt}`, 2145);
+                }
+                if (!fd[0].accountHolderType) {
+                    addError('firmDetails', 'error', `firmDetails.accountHolderType is required when fulfillmentLinkType is ${flt}`, 2145);
+                }
+            }
+        }
+    }
+
+    // 2213: legDetails - each leg must have symbol or optionID but not both
+    if (schema.legDetails) {
+        const ld = val('legDetails');
+        if (Array.isArray(ld)) {
+            for (let li = 0; li < ld.length; li++) {
+                const leg = ld[li];
+                if (!leg) continue;
+                const hasSym = leg.symbol !== undefined && leg.symbol !== null && leg.symbol !== '';
+                const hasOpt = leg.optionID !== undefined && leg.optionID !== null && leg.optionID !== '';
+                if (!hasSym && !hasOpt && isNew) {
+                    addError('legDetails', 'error', `Element [${li}]: symbol or optionID must be populated`, 2213);
+                }
+            }
+        }
+    }
+
+    // 2221: legDetails - openCloseIndicator must not be populated when symbol is populated
+    if (schema.legDetails) {
+        const ld = val('legDetails');
+        if (Array.isArray(ld)) {
+            for (let li = 0; li < ld.length; li++) {
+                const leg = ld[li];
+                if (!leg) continue;
+                const hasSym = leg.symbol !== undefined && leg.symbol !== null && leg.symbol !== '';
+                const hasOCI = leg.openCloseIndicator !== undefined && leg.openCloseIndicator !== null && leg.openCloseIndicator !== '';
+                if (hasSym && hasOCI) {
+                    addError('legDetails', 'error', `Element [${li}]: openCloseIndicator must not be populated when symbol is populated`, 2221);
+                }
+            }
+        }
+    }
+
+    // 2270: firmDesignatedID must not be 'PENDING' on supplement events
+    if (schema.firmDesignatedID && /S$/.test(type)) {
+        const fdid = strVal('firmDesignatedID');
+        if (fdid === 'PENDING') {
+            addError('firmDesignatedID', 'error', 'firmDesignatedID must not be PENDING on supplement events', 2270);
+        }
+    }
+
+    // 2269: firmDesignatedID + aggregatedOrders - when representativeInd is Y/YS/YP and firmDesignatedID populated, aggregatedOrders should also be populated
+    if (schema.firmDesignatedID && schema.aggregatedOrders && schema.representativeInd) {
+        const ri = strVal('representativeInd');
+        const fdid = val('firmDesignatedID');
+        const agg = val('aggregatedOrders');
+        const hasAgg = Array.isArray(agg) ? agg.length > 0 : (agg !== undefined);
+        // YE/OE: aggregatedOrders must be blank
+        if ((ri === 'YE' || ri === 'OE' || ri === 'OME') && hasAgg) {
+            addError('aggregatedOrders', 'error', `aggregatedOrders must be blank when representativeInd is ${ri}`, 2269);
+        }
+    }
+
+    // 2245: firmDesignatedID + accountHolderType: accountHolderType required when firmDesignatedID populated
+    if (schema.firmDesignatedID && schema.accountHolderType) {
+        const fdid = val('firmDesignatedID');
+        const aht = val('accountHolderType');
+        if (fdid !== undefined && aht === undefined) {
+            addError('accountHolderType', 'error', 'accountHolderType is required when firmDesignatedID is populated', 2245);
+        }
+    }
+
+    // 2244: firmDesignatedID + representativeQuoteInd: firmDesignatedID required when representativeQuoteInd is N
+    if (schema.firmDesignatedID && schema.representativeQuoteInd) {
+        const rqi = strVal('representativeQuoteInd');
+        const fdid = val('firmDesignatedID');
+        if (rqi === 'N' && fdid === undefined && isNew) {
+            addError('firmDesignatedID', 'error', 'firmDesignatedID is required when representativeQuoteInd is N', 2244);
+        }
+    }
+
+    // 2246: unsolicitedInd + representativeQuoteInd: unsolicitedInd must be N when representativeQuoteInd is Y
+    if (schema.unsolicitedInd && schema.representativeQuoteInd) {
+        const rqi = strVal('representativeQuoteInd');
+        const ui = strVal('unsolicitedInd');
+        if (rqi === 'Y' && ui !== undefined && ui !== 'N') {
+            addError('unsolicitedInd', 'error', 'unsolicitedInd must be N when representativeQuoteInd is Y', 2246);
+        }
+    }
+
+    // 2237: representativeQuoteInd + askAggregatedOrders combination
+    if (schema.representativeQuoteInd && schema.askAggregatedOrders) {
+        const rqi = strVal('representativeQuoteInd');
+        const aag = val('askAggregatedOrders');
+        const hasAAG = Array.isArray(aag) ? aag.length > 0 : (aag !== undefined);
+        if (rqi === 'Y' && !hasAAG && isNew) {
+            addError('askAggregatedOrders', 'error', 'askAggregatedOrders is required when representativeQuoteInd is Y', 2237);
+        }
+        if (rqi === 'N' && hasAAG) {
+            addError('askAggregatedOrders', 'error', 'askAggregatedOrders must be blank when representativeQuoteInd is N', 2237);
+        }
+    }
+
+    // 2243: representativeQuoteInd + bidAggregatedOrders combination
+    if (schema.representativeQuoteInd && schema.bidAggregatedOrders) {
+        const rqi = strVal('representativeQuoteInd');
+        const bag = val('bidAggregatedOrders');
+        const hasBAG = Array.isArray(bag) ? bag.length > 0 : (bag !== undefined);
+        if (rqi === 'Y' && !hasBAG && isNew) {
+            addError('bidAggregatedOrders', 'error', 'bidAggregatedOrders is required when representativeQuoteInd is Y', 2243);
+        }
+        if (rqi === 'N' && hasBAG) {
+            addError('bidAggregatedOrders', 'error', 'bidAggregatedOrders must be blank when representativeQuoteInd is N', 2243);
+        }
+    }
+
+    // ── Format validations ──
+
+    // IMID format: <CRD>:<identifier> for senderIMID, receiverIMID, counterparty
+    // Only check format when type indicates it's a firm IMID (senderType/destinationType = F/O)
+    const IMID_RE = /^\d+:[a-zA-Z0-9]+$/;
+    if (schema.senderIMID && schema.senderType) {
+        const st = strVal('senderType');
+        const sid = strVal('senderIMID');
+        if (sid && (st === 'F' || st === 'O') && !IMID_RE.test(sid)) {
+            addError('senderIMID', 'warn', `Invalid IMID format (expected CRD:identifier): ${sid.slice(0, 20)}`, 2089);
+        }
+    }
+    if (schema.receiverIMID) {
+        const rid = strVal('receiverIMID');
+        if (rid && !IMID_RE.test(rid) && rid.length > 7) {
+            addError('receiverIMID', 'warn', `Invalid IMID format (expected CRD:identifier): ${rid.slice(0, 20)}`, 2082);
+        }
+    }
+    if (schema.destination && schema.destinationType) {
+        const dt = strVal('destinationType');
+        const dest = strVal('destination');
+        if (dest && (dt === 'F' || dt === 'O') && !IMID_RE.test(dest)) {
+            addError('destination', 'warn', `Invalid IMID format for destination (expected CRD:identifier): ${dest.slice(0, 20)}`, 2019);
+        }
+    }
+    if (schema.counterparty) {
+        const cp = strVal('counterparty');
+        if (cp && !IMID_RE.test(cp)) {
+            addError('counterparty', 'warn', `Invalid IMID format (expected CRD:identifier): ${cp.slice(0, 20)}`, fieldCode('counterparty'));
+        }
+    }
+    // originatingIMID is CAT Reporter IMID type: Alphanumeric(7)
+    if (schema.originatingIMID) {
+        const oid = strVal('originatingIMID');
+        if (oid && !/^[a-zA-Z0-9]{1,7}$/.test(oid)) {
+            addError('originatingIMID', 'warn', `originatingIMID must be alphanumeric (1-7 chars): ${oid.slice(0, 10)}`, 2064);
+        }
+    }
+
+    // CATReporterIMID: Alphanumeric(7) — only [a-zA-Z0-9]
+    if (schema.CATReporterIMID) {
+        const crid = strVal('CATReporterIMID');
+        if (crid !== undefined && !/^[a-zA-Z0-9]{1,7}$/.test(crid)) {
+            addError('CATReporterIMID', 'warn', `CATReporterIMID must be alphanumeric (1-7 chars): ${crid.slice(0, 10)}`, 2011);
+        }
+    }
+
+    // Date field format: YYYYMMDD (8-digit number or string) with valid month/day ranges
+    const DATE_FIELDS = ['tradeDate', 'settlementDate'];
+    for (const df of DATE_FIELDS) {
+        if (schema[df]) {
+            const dv = val(df);
+            if (dv !== undefined) {
+                const ds = String(dv);
+                if (!/^\d{8}$/.test(ds)) {
+                    addError(df, 'error', `Must be a date in YYYYMMDD format (got ${ds.slice(0, 12)})`, fieldCode(df));
+                } else {
+                    const mm = parseInt(ds.slice(4, 6));
+                    const dd = parseInt(ds.slice(6, 8));
+                    if (mm < 1 || mm > 12) addError(df, 'error', `Invalid month ${mm} in date`, fieldCode(df));
+                    else if (dd < 1 || dd > 31) addError(df, 'error', `Invalid day ${dd} in date`, fieldCode(df));
+                }
+            }
+        }
+    }
+
+    // Timestamp component validation: check HH:MM:SS ranges in string timestamps
+    if (schema.eventTimestamp) {
+        const ets = strVal('eventTimestamp');
+        if (ets) {
+            const tm = ets.match(/^\d{4}(\d{2})(\d{2})[T ](\d{2})(\d{2})(\d{2})/);
+            if (tm) {
+                const mo = +tm[1], dy = +tm[2], hh = +tm[3], mi = +tm[4], ss = +tm[5];
+                if (mo < 1 || mo > 12) addError('eventTimestamp', 'error', `Invalid month (${mo}) in eventTimestamp`, 2027);
+                if (dy < 1 || dy > 31) addError('eventTimestamp', 'error', `Invalid day (${dy}) in eventTimestamp`, 2027);
+                if (hh > 23) addError('eventTimestamp', 'error', `Invalid hour (${hh}) in eventTimestamp`, 2027);
+                if (mi > 59) addError('eventTimestamp', 'error', `Invalid minute (${mi}) in eventTimestamp`, 2027);
+                if (ss > 59) addError('eventTimestamp', 'error', `Invalid second (${ss}) in eventTimestamp`, 2027);
+            }
+        }
+    }
+
+    // Quantity fields: must not be negative (Real Quantity and Whole Quantity)
+    for (const qf of ['quantity', 'cancelQty', 'leavesQty', 'minQty', 'displayQty', 'nbbQty', 'nboQty']) {
+        if (schema[qf]) {
+            const qv = val(qf);
+            if (qv !== undefined && Number(qv) < 0) {
+                addError(qf, 'error', `${qf} must not be negative`, fieldCode(qf));
+            }
+        }
+    }
+
+    // Price fields: validate no leading decimal (.25 invalid) and no trailing decimal (10. invalid)
+    for (const pf of ['price', 'netPrice', 'displayPrice', 'workingPrice', 'askPrice', 'bidPrice', 'nbbPrice', 'nboPrice', 'triggerPrice']) {
+        if (schema[pf]) {
+            const pv = val(pf);
+            if (pv !== undefined) {
+                const ps = String(pv);
+                if (/^\.\d/.test(ps)) addError(pf, 'error', `Invalid numeric format: leading decimal not allowed (${ps.slice(0, 10)})`, fieldCode(pf));
+                if (/\.$/.test(ps)) addError(pf, 'error', `Invalid numeric format: trailing decimal not allowed (${ps.slice(0, 10)})`, fieldCode(pf));
+            }
+        }
+    }
+
+    // numberOfLegs should match legDetails array length
+    if (schema.numberOfLegs && schema.legDetails) {
+        const nol = val('numberOfLegs');
+        const ld = val('legDetails');
+        if (nol !== undefined && Array.isArray(ld)) {
+            if (Number(nol) !== ld.length) {
+                addError('numberOfLegs', 'warn', `numberOfLegs (${nol}) does not match legDetails length (${ld.length})`, 2203);
+            }
+        }
+    }
+
+    // nbboSource=NA: NBBO fields must be 0 and nbboTimestamp blank
+    if (schema.nbboSource) {
+        const ns = strVal('nbboSource');
+        if (ns === 'NA') {
+            if (val('nbboTimestamp') !== undefined) {
+                addError('nbboTimestamp', 'error', 'nbboTimestamp must be blank when nbboSource is NA', 2048);
+            }
+        }
+    }
+
+    // marketCenterID + reportingExceptionCode combination
+    if (schema.marketCenterID && schema.reportingExceptionCode) {
+        const mcid = val('marketCenterID');
+        const rec2 = strVal('reportingExceptionCode');
+        if (mcid === undefined && rec2 !== undefined && rec2 !== 'C' && rec2 !== 'P' && rec2 !== 'N') {
+            // marketCenterID blank → reportingExceptionCode must be populated (already covered)
+        }
+        if (mcid !== undefined && rec2 !== undefined && rec2 !== 'C') {
+            addError('reportingExceptionCode', 'error', 'reportingExceptionCode must be blank or C when marketCenterID is populated', 2084);
         }
     }
 
