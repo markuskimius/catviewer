@@ -4392,6 +4392,21 @@ function renderDetailGrid(record, mode, showAll) {
         }
     }
 
+    // Move fields that render as embedded tables to the end
+    {
+        const regular = [];
+        const tables = [];
+        for (const k of keys) {
+            const v = record[k];
+            if (COMPOUND_FIELDS.has(k) && Array.isArray(v) && v.length) {
+                tables.push(k);
+            } else {
+                regular.push(k);
+            }
+        }
+        if (tables.length) keys = regular.concat(tables);
+    }
+
     let html = '';
     for (const key of keys) {
         if (key === '_idx' || key === '_errors' || key === '_original') continue;
