@@ -1,3 +1,5 @@
 .DS_Store
 *.bz2
+*.swp
+*.swo
 .claude/
