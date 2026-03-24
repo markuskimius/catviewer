@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.03.22
+  CAT File Viewer v2026.03.23
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -916,7 +916,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.03.22</span>
+    <span class="subtitle">v2026.03.23</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -1050,54 +1050,50 @@
 // ── CAT Event Type Metadata ──
 const EVENT_CATEGORIES = {
     // Equity Order Events
-    MENO: 'order', MENOS: 'order', MEOA: 'order', MEOAS: 'order',
-    MEOIR: 'order', MEOIRM: 'modify', MEOIRC: 'cancel',
-    MEOIMRQ: 'modify', MEOICRQ: 'cancel',
-    MEOJ: 'order', MEOJM: 'modify', MEOJC: 'cancel',
+    MENO: 'order', MENOS: 'order', MEOA: 'order', MEOJ: 'order', MEOE: 'order',
+    // Equity Internal Route Events
+    MEIR: 'order', MEIM: 'modify', MEIMR: 'modify', MEIC: 'cancel', MEICR: 'cancel',
     // Equity Route Events
-    MEOR: 'route', MEORS: 'route', MEORM: 'modify', MEORC: 'cancel',
-    MEORMS: 'modify', MEORCS: 'cancel',
+    MEOR: 'route', MEORS: 'route', MEMR: 'route', MEMRS: 'route', MECR: 'route', MECRS: 'route',
     // Equity Modify/Cancel Events
-    MEOM: 'modify', MEOMS: 'modify', MEOMRQ: 'modify',
-    MECO: 'cancel', MECOCRQ: 'cancel',
+    MEOM: 'modify', MEOMS: 'modify', MEOMR: 'modify',
+    MEOC: 'cancel', MEOCR: 'cancel',
+    MECO: 'cancel', MECOC: 'cancel', MECOM: 'modify',
     // Equity Quote Events
     MENQ: 'quote', MENQS: 'quote', MERQ: 'quote', MERQS: 'quote',
-    MEQR: 'quote', MEQC: 'cancel', MEQM: 'modify', MEQS: 'quote',
-    // Equity Trade Events
-    MEOT: 'trade', MEOTS: 'trade',
-    // Equity Fulfillment/Allocation
-    MEOF: 'trade', MEOFS: 'trade', MEOA: 'alloc',
-    MEIC: 'trade',
-    // Option Events
-    MONO: 'order', MONOS: 'order', MOOA: 'order', MOOAS: 'order',
-    MOOIR: 'order', MOOIRM: 'modify', MOOIRC: 'cancel',
-    MOOIMRQ: 'modify', MOOICRQ: 'cancel',
-    MOOJ: 'order', MOOJM: 'modify', MOOJC: 'cancel',
-    MOOR: 'route', MOORS: 'route', MOORM: 'modify', MOORC: 'cancel',
-    MOORMS: 'modify', MOORCS: 'cancel',
-    MOOM: 'modify', MOOMS: 'modify', MOOMRQ: 'modify',
-    MOCO: 'cancel', MOCOCRQ: 'cancel',
-    MONQ: 'quote', MORQ: 'quote', MOQR: 'quote', MOQC: 'cancel', MOQM: 'modify',
-    MOOT: 'trade', MOOTS: 'trade',
-    MOOF: 'trade', MOOFS: 'trade', MOOA: 'alloc',
-    // Multi-Leg Events
-    MLNO: 'order', MLNOS: 'order', MLOA: 'order', MLOAS: 'order',
-    MLOIR: 'order', MLOIRM: 'modify', MLOIRC: 'cancel',
-    MLOIMRQ: 'modify', MLOICRQ: 'cancel',
-    MLOJ: 'order', MLOJM: 'modify', MLOJC: 'cancel',
-    MLOR: 'route', MLORS: 'route', MLORM: 'modify', MLORC: 'cancel',
-    MLORMS: 'modify', MLORCS: 'cancel',
-    MLOM: 'modify', MLOMS: 'modify', MLOMRQ: 'modify',
-    MLCO: 'cancel', MLCOCRQ: 'cancel',
-    MLNQ: 'quote', MLNQS: 'quote', MLRQ: 'quote', MLRQS: 'quote',
-    MLQR: 'quote', MLQC: 'cancel', MLQM: 'modify', MLQS: 'quote',
-    MLOT: 'trade', MLOTS: 'trade',
-    MLOF: 'trade', MLOFS: 'trade',
-    MEOJ: 'order',
-    MLOA: 'alloc', MOOA: 'alloc',
-    MEOPA: 'alloc', MOOPA: 'alloc', MLOPA: 'alloc',
-    MEOPAA: 'alloc', MOOPAA: 'alloc', MLOPAA: 'alloc',
-    MEOE: 'order', MOOE: 'order',
+    MEQR: 'quote', MEQC: 'quote', MEQM: 'quote', MEQS: 'quote',
+    // Equity Trade/Fulfillment Events
+    MEOT: 'trade', MEOTS: 'trade', MEOF: 'trade', MEOFS: 'trade', MEFA: 'trade',
+    // Equity Allocation Events
+    MEPA: 'alloc', MEAA: 'alloc',
+    // Option Order Events
+    MONO: 'order', MONOS: 'order', MOOA: 'order', MOOJ: 'order', MOOE: 'order',
+    // Option Internal Route Events
+    MOIR: 'order', MOIM: 'modify', MOIMR: 'modify', MOIC: 'cancel', MOICR: 'cancel',
+    // Option Route Events
+    MOOR: 'route', MOORS: 'route', MOMR: 'route', MOMRS: 'route', MOCR: 'route', MOCRS: 'route',
+    // Option Modify/Cancel Events
+    MOOM: 'modify', MOOMS: 'modify', MOOMR: 'modify',
+    MOOC: 'cancel', MOOCR: 'cancel',
+    MOCO: 'cancel', MOCOC: 'cancel', MOCOM: 'modify',
+    // Option Quote Events
+    MONQ: 'quote', MORQ: 'quote', MOQR: 'quote', MOQC: 'quote', MOQM: 'quote',
+    // Option Trade/Fulfillment Events
+    MOOT: 'trade', MOOF: 'trade', MOOFS: 'trade', MOFA: 'trade',
+    // Option Allocation Events
+    MOPA: 'alloc', MOAA: 'alloc',
+    // Multi-Leg Order Events
+    MLNO: 'order', MLOA: 'order', MLOS: 'order', MLOE: 'order',
+    // Multi-Leg Internal Route Events
+    MLIR: 'order', MLIM: 'modify', MLIMR: 'modify', MLIC: 'cancel', MLICR: 'cancel',
+    // Multi-Leg Route Events
+    MLOR: 'route', MLMR: 'route', MLCR: 'route',
+    // Multi-Leg Modify/Cancel Events
+    MLOM: 'modify', MLOMR: 'modify',
+    MLOC: 'cancel', MLOCR: 'cancel',
+    MLCO: 'cancel', MLCOC: 'cancel', MLCOM: 'modify',
+    // Multi-Leg Quote Events
+    MLNQ: 'quote', MLRQ: 'quote', MLQR: 'quote', MLQC: 'quote', MLQM: 'quote', MLQS: 'quote',
 };
 
 const CATEGORY_CLASS = {
@@ -1117,32 +1113,26 @@ const FIELD_TOOLTIPS = {
     type: {
         // Equity Order Events
         MENO: 'New Order', MENOS: 'New Order Supplement',
-        MEOA: 'Order Accepted', MEOAS: 'Order Accepted Supplement',
-        MEOJ: 'Order Adjusted', MEOJM: 'Order Adjusted Modified', MEOJC: 'Order Adjusted Cancelled',
+        MEOA: 'Order Accepted',
+        MEOJ: 'Order Adjusted',
         MEOE: 'Order Effective',
-        // Equity Order Internal Route Events
+        // Equity Internal Route Events
         MEIR: 'Order Internal Route Accepted',
         MEIM: 'Order Internal Route Modified', MEIMR: 'Order Internal Route Modification Request',
         MEIC: 'Order Internal Route Cancelled', MEICR: 'Order Internal Route Cancel Request',
-        MEOIR: 'Order Internal Route', MEOIRM: 'Order Internal Route Modified',
-        MEOIRC: 'Order Internal Route Cancelled',
-        MEOIMRQ: 'Order Internal Route Modification Request', MEOICRQ: 'Order Internal Route Cancel Request',
         // Equity Route Events
         MEOR: 'Order Route', MEORS: 'Order Route Supplement',
         MEMR: 'Route Modified', MEMRS: 'Route Modified Supplement',
         MECR: 'Route Cancelled', MECRS: 'Route Cancelled Supplement',
-        MEORM: 'Order Route Modified', MEORC: 'Order Route Cancelled',
-        MEORMS: 'Order Route Modified Supplement', MEORCS: 'Order Route Cancelled Supplement',
         // Equity Modify/Cancel Events
         MEOM: 'Order Modified (Cancel/Replace)', MEOMS: 'Order Modified (Cancel/Replace) Supplement',
-        MEOMR: 'Order Modification Request', MEOMRQ: 'Order Modification Request',
+        MEOMR: 'Order Modification Request',
         MEOC: 'Order Cancelled', MEOCR: 'Order Cancel Request',
         MECO: 'Child Order', MECOC: 'Child Order Cancelled', MECOM: 'Child Order Modified',
-        MECOCRQ: 'Child Order Cancel Request',
         // Equity Quote Events
         MENQ: 'New Quote', MENQS: 'New Quote Supplement',
         MERQ: 'Routed Quote', MERQS: 'Routed Quote Supplement',
-        MEQR: 'Quote Received/Replaced', MEQRS: 'Quote Received/Replaced Supplement',
+        MEQR: 'Quote Received/Replaced',
         MEQC: 'Quote Cancelled', MEQM: 'Quote Modified', MEQS: 'Quote Status',
         // Equity Trade Events
         MEOT: 'Order Trade', MEOTS: 'Order Trade Supplement',
@@ -1150,76 +1140,56 @@ const FIELD_TOOLTIPS = {
         MEOF: 'Order Fulfillment', MEOFS: 'Order Fulfillment Supplement',
         MEFA: 'Order Fulfillment Amendment',
         MEPA: 'Post-Trade Allocation', MEAA: 'Amended Allocation',
-        MEOPA: 'Post-Trade Allocation', MEOPAA: 'Post-Trade Allocation Accept',
         // Option Order Events
         MONO: 'New Option Order', MONOS: 'Option Order Supplement',
-        MOOA: 'Option Order Accepted', MOOAS: 'Option Order Accepted Supplement',
-        MOOJ: 'Option Order Adjusted', MOOJM: 'Option Order Adjusted Modified', MOOJC: 'Option Order Adjusted Cancelled',
+        MOOA: 'Option Order Accepted',
+        MOOJ: 'Option Order Adjusted',
         MOOE: 'Option Order Effective',
-        // Option Order Internal Route Events
+        // Option Internal Route Events
         MOIR: 'Option Order Internal Route Accepted',
         MOIM: 'Option Order Internal Route Modified', MOIMR: 'Option Order Internal Route Modification Request',
         MOIC: 'Option Order Internal Route Cancelled', MOICR: 'Option Order Internal Route Cancel Request',
-        MOOIR: 'Option Order Internal Route', MOOIRM: 'Option Order Internal Route Modified',
-        MOOIRC: 'Option Order Internal Route Cancelled',
-        MOOIMRQ: 'Option Order Internal Route Modification Request', MOOICRQ: 'Option Order Internal Route Cancel Request',
         // Option Route Events
         MOOR: 'Option Order Route', MOORS: 'Option Order Route Supplement',
         MOMR: 'Option Route Modified', MOMRS: 'Option Route Modified Supplement',
         MOCR: 'Option Route Cancelled', MOCRS: 'Option Route Cancelled Supplement',
-        MOORM: 'Option Order Route Modified', MOORC: 'Option Order Route Cancelled',
-        MOORMS: 'Option Order Route Modified Supplement', MOORCS: 'Option Order Route Cancelled Supplement',
         // Option Modify/Cancel Events
         MOOM: 'Option Order Modified (Cancel/Replace)', MOOMS: 'Option Order Modified Supplement',
-        MOOMR: 'Option Order Modification Request', MOOMRQ: 'Option Order Modification Request',
+        MOOMR: 'Option Order Modification Request',
         MOOC: 'Option Order Cancelled', MOOCR: 'Option Order Cancel Request',
         MOCO: 'Child Option Order', MOCOC: 'Child Option Order Cancelled', MOCOM: 'Child Option Order Modified',
-        MOCOCRQ: 'Child Option Order Cancel Request',
         // Option Quote Events
         MONQ: 'New Option Quote', MORQ: 'Option Routed Quote',
         MOQR: 'Option Quote Received', MOQC: 'Option Quote Cancelled', MOQM: 'Option Quote Modified',
         // Option Trade Events
-        MOOT: 'Option Trade', MOOTS: 'Option Trade Supplement',
+        MOOT: 'Option Trade',
         // Option Fulfillment/Allocation
         MOOF: 'Option Order Fulfillment', MOOFS: 'Option Order Fulfillment Supplement',
         MOFA: 'Option Order Fulfillment Amendment',
         MOPA: 'Option Post-Trade Allocation', MOAA: 'Option Amended Allocation',
-        MOOPA: 'Option Post-Trade Allocation', MOOPAA: 'Option Post-Trade Allocation Accept',
         // Multi-Leg Order Events
-        MLNO: 'Multi-Leg New Order', MLNOS: 'Multi-Leg New Order Supplement',
-        MLOA: 'Multi-Leg Order Accepted', MLOAS: 'Multi-Leg Order Accepted Supplement',
+        MLNO: 'Multi-Leg New Order',
+        MLOA: 'Multi-Leg Order Accepted',
         MLOS: 'Multi-Leg Order Supplement',
         MLOE: 'Multi-Leg Order Effect',
-        MLOJ: 'Multi-Leg Order Adjusted', MLOJM: 'Multi-Leg Order Adjusted Modified', MLOJC: 'Multi-Leg Order Adjusted Cancelled',
-        // Multi-Leg Order Internal Route Events
+        // Multi-Leg Internal Route Events
         MLIR: 'Multi-Leg Order Internal Route Accepted',
         MLIM: 'Multi-Leg Order Internal Route Modified', MLIMR: 'Multi-Leg Order Internal Route Modification Request',
         MLIC: 'Multi-Leg Order Internal Route Cancelled', MLICR: 'Multi-Leg Order Internal Route Cancel Request',
-        MLOIR: 'Multi-Leg Order Internal Route', MLOIRM: 'Multi-Leg Order Internal Route Modified',
-        MLOIRC: 'Multi-Leg Order Internal Route Cancelled',
-        MLOIMRQ: 'Multi-Leg Order Internal Route Modification Request', MLOICRQ: 'Multi-Leg Order Internal Route Cancel Request',
         // Multi-Leg Route Events
-        MLOR: 'Multi-Leg Order Route', MLORS: 'Multi-Leg Order Route Supplement',
+        MLOR: 'Multi-Leg Order Route',
         MLMR: 'Multi-Leg Route Modified',
         MLCR: 'Multi-Leg Route Cancelled',
-        MLORM: 'Multi-Leg Order Route Modified', MLORC: 'Multi-Leg Order Route Cancelled',
-        MLORMS: 'Multi-Leg Order Route Modified Supplement', MLORCS: 'Multi-Leg Order Route Cancelled Supplement',
         // Multi-Leg Modify/Cancel Events
-        MLOM: 'Multi-Leg Order Modified', MLOMS: 'Multi-Leg Order Modified Supplement',
-        MLOMR: 'Multi-Leg Order Modification Request', MLOMRQ: 'Multi-Leg Order Modification Request',
+        MLOM: 'Multi-Leg Order Modified',
+        MLOMR: 'Multi-Leg Order Modification Request',
         MLOC: 'Multi-Leg Order Cancelled', MLOCR: 'Multi-Leg Order Cancel Request',
         MLCO: 'Multi-Leg Child Order', MLCOC: 'Multi-Leg Child Order Cancelled', MLCOM: 'Multi-Leg Child Order Modified',
-        MLCOCRQ: 'Multi-Leg Child Order Cancel Request',
         // Multi-Leg Quote Events
-        MLNQ: 'Multi-Leg New Quote', MLNQS: 'Multi-Leg New Quote Supplement',
-        MLRQ: 'Multi-Leg Routed Quote', MLRQS: 'Multi-Leg Routed Quote Supplement',
+        MLNQ: 'Multi-Leg New Quote',
+        MLRQ: 'Multi-Leg Routed Quote',
         MLQR: 'Multi-Leg Quote Received', MLQC: 'Multi-Leg Quote Cancelled',
         MLQM: 'Multi-Leg Quote Modified', MLQS: 'Multi-Leg Quote Supplement',
-        // Multi-Leg Trade (legacy)
-        MLOT: 'Multi-Leg Order Trade', MLOTS: 'Multi-Leg Order Trade Supplement',
-        MLOF: 'Multi-Leg Order Fulfillment', MLOFS: 'Multi-Leg Order Fulfillment Supplement',
-        // Allocation aliases
-        MLOPA: 'Multi-Leg Post-Trade Allocation', MLOPAA: 'Multi-Leg Post-Trade Allocation Accept',
     },
     actionType: {
         NEW: 'New Record',
@@ -5407,7 +5377,8 @@ function showDetail(record, push) {
     const cls = CATEGORY_CLASS[cat] || 'et-other';
 
     currentDetailRecord = record;
-    $('detailTitle').innerHTML = `Record Detail &mdash; <span class="event-type ${cls}">${escapeHtml(record.type || 'Unknown')}</span>`;
+    const typeTooltip = FIELD_TOOLTIPS.type[record.type] || '';
+    $('detailTitle').innerHTML = `Record Detail &mdash; <span class="event-type ${cls}"${typeTooltip ? ` data-tooltip="${escapeHtml(typeTooltip)}"` : ''}>${escapeHtml(record.type || 'Unknown')}</span>`;
 
     renderDetailGrid(record, detailMode, $('showAllFields').checked);
 
@@ -6095,7 +6066,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.03.22 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.03.23 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
