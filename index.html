@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.03.23
+  CAT File Viewer v2026.03.24
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -421,6 +421,9 @@
         .combo-list .combo-no-match {
             padding: 5px 10px; font-size: 13px; color: var(--text-muted); font-style: italic;
         }
+        .combo-select-actions { display: flex; gap: 4px; padding: 4px 8px; border-bottom: 1px solid var(--border); font-size: 11px; }
+        .combo-select-actions span { color: var(--blue); cursor: pointer; padding: 2px 4px; border-radius: 3px; }
+        .combo-select-actions span:hover { background: var(--surface2); }
         .filter-remove {
             background: none; border: none; border-left: 1px solid var(--border); color: var(--text-muted); cursor: pointer;
             font-size: 16px; padding: 0 6px; line-height: 1; border-radius: 0;
@@ -487,13 +490,27 @@
         .val-icon { color: var(--orange); font-size: 11px; cursor: help; margin-right: 2px; }
         .detail-field.has-val-error { border: 1px solid var(--red); border-radius: 4px; background: rgba(239,68,68,0.08); }
         .detail-field.has-val-warn  { border: 1px solid var(--orange); border-radius: 4px; background: rgba(245,158,11,0.05); }
-        .val-badge { display: inline-block; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: normal; vertical-align: middle; }
+        .val-badge { display: inline-block; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: normal; vertical-align: middle; position: relative; }
         .val-badge-error { background: var(--red); color: #fff; }
         .val-badge-warn  { background: var(--orange); color: #000; }
+        .val-badge-ignore { background: none; border: none; color: inherit; cursor: pointer; font-size: 11px; padding: 0 0 0 4px; opacity: 0.5; vertical-align: baseline; line-height: 1; }
+        .val-badge-ignore:hover { opacity: 1; }
+        .val-badge[data-error-code] { cursor: pointer; }
         .val-stat-error { color: var(--orange); }
         .val-stat-ok { color: var(--green); }
-        .errors-toggle { font-size: 13px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; height: 32px; box-sizing: border-box; }
-        .errors-toggle.active { background: rgba(245,158,11,0.15); border-color: var(--orange); color: var(--orange); }
+        .val-stat-ignored { color: var(--text-muted); cursor: pointer; text-decoration: underline; text-decoration-style: dotted; }
+        .val-stat-ignored:hover { color: var(--text); }
+        .ignore-menu { position: fixed; z-index: 200; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); overflow: hidden; }
+        .ignore-menu-item { padding: 8px 14px; cursor: pointer; font-size: 13px; color: var(--text); white-space: nowrap; }
+        .ignore-menu-item:hover { background: var(--surface2); }
+        .ignored-errors-dialog { position: fixed; z-index: 200; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); padding: 16px; min-width: 300px; max-width: 500px; max-height: 400px; display: flex; flex-direction: column; }
+        .ignored-errors-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: var(--text); }
+        .ignored-errors-list { overflow-y: auto; flex: 1; }
+        .ignored-errors-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); gap: 12px; }
+        .ignored-errors-restore { font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); cursor: pointer; white-space: nowrap; }
+        .ignored-errors-restore:hover { background: var(--surface2); color: var(--text); }
+        .ignored-errors-clear-all { margin-top: 12px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font-size: 13px; align-self: flex-end; }
+        .ignored-errors-clear-all:hover { background: var(--surface2); }
 
         .cat-tooltip {
             position: fixed;
@@ -916,7 +933,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.03.23</span>
+    <span class="subtitle">v2026.03.24</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -944,7 +961,6 @@
                 <input type="text" id="searchInput" placeholder="Search all fields..." autocomplete="off">
                 <button class="search-clear" id="searchClear" title="Clear search">&times;</button>
             </div>
-            <button class="errors-toggle" id="errorsToggle" title="Show only records with validation errors">Errors Only</button>
             <div class="filter-bar" id="filterBar"></div>
             <button class="btn-clear-all" id="clearAllFilters" title="Clear all filters and search">Clear All</button>
             <span class="toolbar-spacer"></span>
@@ -1238,7 +1254,8 @@ let orderChainRoot = null;
 let orderChainDepth = Infinity;
 let chainDisplayData = null;
 let activeTab = 'table';
-let showErrorsOnly = false;
+let errorCodeFilterValues = [];
+let ignoredErrors = new Set(); // keys: "code" (global) or "code:field" (field-specific)
 let validationEnabled = true;
 let dragSrcColIdx = null;
 let colMgrDragIdx = null;
@@ -3376,6 +3393,126 @@ function formatErrorWithCode(e) {
     return e.code ? `[${e.code}] ${msg}` : msg;
 }
 
+function isErrorIgnored(code, field) {
+    if (!code) return false;
+    const key = String(code);
+    return ignoredErrors.has(key) || ignoredErrors.has(key + ':' + field);
+}
+
+function getVisibleErrors(errors) {
+    if (!errors) return null;
+    const result = {};
+    for (const field in errors) {
+        const visible = errors[field].filter(e => !isErrorIgnored(e.code, field));
+        if (visible.length) result[field] = visible;
+    }
+    return Object.keys(result).length ? result : null;
+}
+
+function ignoreError(code, field) {
+    const key = field ? code + ':' + field : String(code);
+    ignoredErrors.add(key);
+    refreshAfterIgnoreChange();
+}
+
+function unignoreError(key) {
+    ignoredErrors.delete(key);
+    refreshAfterIgnoreChange();
+}
+
+function refreshAfterIgnoreChange() {
+    updateValidationStat();
+    renderFilterBar();
+    applyFilters();
+    if (currentDetailRecord) {
+        renderDetailGrid(currentDetailRecord, detailMode, $('showAllFields').checked);
+    }
+}
+
+function renderErrorBadge(e, fieldName) {
+    const msg = escapeHtml(e.message);
+    const codeLabel = e.code ? `<b>[${e.code}]</b> ` : '';
+    return `<span class="val-badge val-badge-${e.severity}" ${e.code ? `data-error-code="${e.code}" data-error-field="${escapeHtml(fieldName)}"` : ''}>${codeLabel}${msg}${e.code ? '<button class="val-badge-ignore" title="Ignore this error">&#xd7;</button>' : ''}</span>`;
+}
+
+function showIgnoreMenu(code, field, anchorEl) {
+    // Remove existing menu
+    document.querySelectorAll('.ignore-menu').forEach(m => m.remove());
+    const menu = document.createElement('div');
+    menu.className = 'ignore-menu';
+
+    const itemGlobal = document.createElement('div');
+    itemGlobal.className = 'ignore-menu-item';
+    itemGlobal.textContent = `Ignore [${code}] everywhere`;
+    itemGlobal.addEventListener('click', () => { menu.remove(); ignoreError(code, null); });
+    menu.appendChild(itemGlobal);
+
+    const itemField = document.createElement('div');
+    itemField.className = 'ignore-menu-item';
+    itemField.textContent = `Ignore [${code}] in ${field}`;
+    itemField.addEventListener('click', () => { menu.remove(); ignoreError(code, field); });
+    menu.appendChild(itemField);
+
+    document.body.appendChild(menu);
+    const rect = anchorEl.getBoundingClientRect();
+    // Position menu, ensuring it stays in viewport
+    let left = rect.left, top = rect.bottom + 4;
+    const menuRect = menu.getBoundingClientRect();
+    if (left + menuRect.width > window.innerWidth) left = window.innerWidth - menuRect.width - 8;
+    if (top + menuRect.height > window.innerHeight) top = rect.top - menuRect.height - 4;
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+
+    const closeMenu = (ev) => {
+        if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('mousedown', closeMenu); }
+    };
+    setTimeout(() => document.addEventListener('mousedown', closeMenu), 0);
+}
+
+function showIgnoredErrorsDialog() {
+    // Remove existing
+    document.querySelectorAll('.ignored-errors-dialog').forEach(d => d.remove());
+    if (!ignoredErrors.size) return;
+
+    const dialog = document.createElement('div');
+    dialog.className = 'ignored-errors-dialog';
+    dialog.innerHTML = '<div class="ignored-errors-title">Ignored Errors</div>';
+
+    const list = document.createElement('div');
+    list.className = 'ignored-errors-list';
+    for (const key of [...ignoredErrors].sort()) {
+        const row = document.createElement('div');
+        row.className = 'ignored-errors-row';
+        const parts = key.split(':');
+        const code = parts[0];
+        const field = parts.length > 1 ? parts.slice(1).join(':') : null;
+        const label = document.createElement('span');
+        label.textContent = field ? `[${code}] in ${field}` : `[${code}] everywhere`;
+        row.appendChild(label);
+        const btn = document.createElement('button');
+        btn.className = 'ignored-errors-restore';
+        btn.textContent = 'Restore';
+        btn.addEventListener('click', () => { unignoreError(key); row.remove(); if (!ignoredErrors.size) dialog.remove(); });
+        row.appendChild(btn);
+        list.appendChild(row);
+    }
+    dialog.appendChild(list);
+
+    const clearAll = document.createElement('button');
+    clearAll.className = 'ignored-errors-clear-all';
+    clearAll.textContent = 'Restore All';
+    clearAll.addEventListener('click', () => { ignoredErrors.clear(); dialog.remove(); refreshAfterIgnoreChange(); });
+    dialog.appendChild(clearAll);
+
+    document.body.appendChild(dialog);
+    const closeDialog = (ev) => {
+        if (!dialog.contains(ev.target) && (!$('ignoredErrorsLink') || ev.target !== $('ignoredErrorsLink'))) {
+            dialog.remove(); document.removeEventListener('mousedown', closeDialog);
+        }
+    };
+    setTimeout(() => document.addEventListener('mousedown', closeDialog), 0);
+}
+
 function renderCellWithErrors(content, cellErrors) {
     if (!cellErrors || !cellErrors.length) return `<td>${content}</td>`;
     const cls = cellErrors.some(e => e.severity === 'error') ? 'val-error' : 'val-warn';
@@ -3943,7 +4080,7 @@ function enterOrderChain(orderID) {
 function hasActiveFilters() {
     if ($('searchInput').value) return true;
     if (orderChainRoot) return true;
-    if (showErrorsOnly) return true;
+    if (errorCodeFilterValues.length) return true;
     const fv = getFilterValues();
     return Object.keys(fv).length > 0;
 }
@@ -3956,9 +4093,8 @@ function clearAllFilters() {
     // Clear search
     $('searchInput').value = '';
     syncSearchClear();
-    // Clear errors-only filter
-    showErrorsOnly = false;
-    $('errorsToggle').classList.remove('active');
+    // Clear error code filter
+    errorCodeFilterValues = [];
     // Clear order chain
     orderChainRoot = null;
     orderChainDepth = Infinity;
@@ -3977,7 +4113,7 @@ function clearAllFilters() {
         if (input) input.value = '';
     });
     expandedFilters.clear();
-    document.querySelectorAll('.filter-item').forEach(updateFilterLabel);
+    renderFilterBar();
     applyFilters();
 }
 
@@ -4021,13 +4157,29 @@ function updateValidationStat() {
     const el = $('validationStat');
     if (!el) return;
     if (!validationEnabled) { el.innerHTML = ''; return; }
-    const errRecCount = allRecords.filter(r => r._errors && Object.keys(r._errors).length).length;
-    const totalErrs = allRecords.reduce((s, r) => s + (r._errors ? Object.keys(r._errors).length : 0), 0);
-    if (errRecCount > 0) {
-        el.innerHTML = `<div class="stat"><span class="stat-label">Validation:</span><span class="stat-value val-stat-error">${totalErrs.toLocaleString()} error${totalErrs !== 1 ? 's' : ''} in ${errRecCount.toLocaleString()} record${errRecCount !== 1 ? 's' : ''}</span></div>`;
-    } else {
-        el.innerHTML = `<div class="stat"><span class="stat-label">Validation:</span><span class="stat-value val-stat-ok">&#10003; All valid</span></div>`;
+    let errRecCount = 0, totalErrs = 0, totalIgnored = 0;
+    for (const r of allRecords) {
+        if (!r._errors) continue;
+        const vis = getVisibleErrors(r._errors);
+        if (vis) {
+            errRecCount++;
+            for (const f in vis) totalErrs += vis[f].length;
+        }
+        // Count ignored
+        for (const f in r._errors) {
+            for (const e of r._errors[f]) {
+                if (isErrorIgnored(e.code, f)) totalIgnored++;
+            }
+        }
     }
+    const ignoredHtml = totalIgnored > 0 ? ` <span class="val-stat-ignored" id="ignoredErrorsLink" title="Click to manage ignored errors">(${totalIgnored} ignored)</span>` : '';
+    if (errRecCount > 0) {
+        el.innerHTML = `<div class="stat"><span class="stat-label">Validation:</span><span class="stat-value val-stat-error">${totalErrs.toLocaleString()} error${totalErrs !== 1 ? 's' : ''} in ${errRecCount.toLocaleString()} record${errRecCount !== 1 ? 's' : ''}${ignoredHtml}</span></div>`;
+    } else {
+        el.innerHTML = `<div class="stat"><span class="stat-label">Validation:</span><span class="stat-value val-stat-ok">&#10003; All valid${ignoredHtml}</span></div>`;
+    }
+    const ignoredLink = $('ignoredErrorsLink');
+    if (ignoredLink) ignoredLink.addEventListener('click', showIgnoredErrorsDialog);
 }
 
 function initializeUI() {
@@ -4051,8 +4203,8 @@ function initializeUI() {
     document.body.style.paddingBottom = '';
     currentDetailRecord = null;
     detailMode = 'translated';
-    showErrorsOnly = false;
-    $('errorsToggle').classList.remove('active');
+    errorCodeFilterValues = [];
+    ignoredErrors = new Set();
     switchTab('table', false);
     $('showAllFields').checked = false;
     document.querySelectorAll('.detail-tab').forEach(t => t.classList.toggle('active', t.dataset.detailTab === 'translated'));
@@ -4210,6 +4362,7 @@ let filterModes = {}; // col → 'exact' | 'range'
 // Returns translated string, or null if no translation applies
 function translateFilterValue(col, rawValue) {
     if (rawValue === '__EMPTY__') return '(no value)';
+    if (rawValue === '__NO_ERRORS__') return '(no errors)';
     if (rawValue == null || rawValue === '') return null;
     const s = String(rawValue);
 
@@ -4264,6 +4417,7 @@ function translateFilterValue(col, rawValue) {
 }
 
 function getColumnType(col) {
+    if (col === '#') return 'number';
     if (/Timestamp$|KeyDate$/.test(col)) return 'timestamp';
     if (/Date$/.test(col)) return 'date';
     if (PRICE_FIELDS.has(col) || QTY_FIELDS.has(col)) return 'number';
@@ -4329,7 +4483,7 @@ function buildFilterOptions(col) {
     let hasEmpty = false;
     const vals = new Set();
     for (const r of allRecords) {
-        const v = r[col];
+        const v = col === '#' ? r._idx + 1 : r[col];
         if (v == null || v === '') hasEmpty = true;
         else vals.add(v);
     }
@@ -4452,6 +4606,28 @@ function createComboBox(col, placeholder, bound) {
             noMatch.textContent = 'No matches';
             list.appendChild(noMatch);
             return;
+        }
+        if (multiSelect && matched.length > 1) {
+            const actions = document.createElement('div');
+            actions.className = 'combo-select-actions';
+            const selAll = document.createElement('span');
+            selAll.textContent = 'Select All';
+            selAll.addEventListener('mousedown', e => {
+                e.preventDefault();
+                for (const o of matched) { if (!box._selectedValues.includes(o.raw)) box._selectedValues.push(o.raw); }
+                renderTags(); input.value = ''; renderOptions(''); applyFilters();
+            });
+            const deselAll = document.createElement('span');
+            deselAll.textContent = 'Deselect All';
+            deselAll.addEventListener('mousedown', e => {
+                e.preventDefault();
+                const matchedSet = new Set(matched.map(o => o.raw));
+                box._selectedValues = box._selectedValues.filter(v => !matchedSet.has(v));
+                renderTags(); input.value = ''; renderOptions(''); applyFilters();
+            });
+            actions.appendChild(selAll);
+            actions.appendChild(deselAll);
+            list.appendChild(actions);
         }
         matched.forEach((o, i) => {
             const item = document.createElement('div');
@@ -4689,9 +4865,249 @@ function updateFilterLabel(item) {
     }
 }
 
+function buildErrorCodeOptions() {
+    const codeCounts = {};
+    for (const r of allRecords) {
+        if (!r._errors) continue;
+        for (const field in r._errors) {
+            for (const e of r._errors[field]) {
+                if (e.code) {
+                    const key = String(e.code);
+                    if (!codeCounts[key]) codeCounts[key] = { code: key, count: 0, sample: e.message.replace(/^Element \[\d+\](?:\.\w+)?:\s*/, '') };
+                    codeCounts[key].count++;
+                }
+            }
+        }
+    }
+    const noErrCount = allRecords.filter(r => !r._errors || !Object.keys(r._errors).length).length;
+    const opts = [{ raw: '__NO_ERRORS__', display: `(no errors) (${noErrCount})` }];
+    return opts.concat(Object.values(codeCounts)
+        .sort((a, b) => Number(a.code) - Number(b.code))
+        .map(c => ({ raw: c.code, display: `[${c.code}] ${c.sample.length > 50 ? c.sample.slice(0, 50) + '…' : c.sample} (${c.count})` })));
+}
+
+function createErrorCodeComboBox(options) {
+    const multiSelect = true;
+    const placeholder = 'All Error Codes';
+    const box = document.createElement('div');
+    box.className = 'combo-box';
+    box.dataset.col = '_errorCode';
+    box.dataset.rawValue = '';
+    box._selectedValues = [...errorCodeFilterValues];
+
+    const font = '13px ' + getComputedStyle(document.body).fontFamily;
+    let maxW = measureTextWidth(placeholder, font);
+    for (const o of options) {
+        const w = measureTextWidth(o.display + '     ', font);
+        if (w > maxW) maxW = w;
+    }
+    box.style.minWidth = Math.ceil(maxW) + 44 + 'px';
+    box.style.width = 'auto';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = placeholder;
+    input.autocomplete = 'off';
+    box.appendChild(input);
+
+    const clear = document.createElement('button');
+    clear.className = 'combo-clear';
+    clear.innerHTML = '&times;';
+    clear.tabIndex = -1;
+    box.appendChild(clear);
+
+    const list = document.createElement('div');
+    list.className = 'combo-list';
+    box.appendChild(list);
+
+    let highlighted = -1;
+
+    function renderTags() {
+        box.querySelectorAll('.combo-tag').forEach(t => t.remove());
+        for (const raw of box._selectedValues) {
+            const opt = options.find(o => o.raw === raw);
+            const display = raw === '__NO_ERRORS__' ? '(no errors)' : (opt ? `[${raw}]` : raw);
+            const tag = document.createElement('span');
+            tag.className = 'combo-tag';
+            tag.textContent = display;
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'combo-tag-remove';
+            removeBtn.innerHTML = '&times;';
+            removeBtn.addEventListener('mousedown', e => {
+                e.preventDefault();
+                e.stopPropagation();
+                toggleValue(raw);
+            });
+            tag.appendChild(removeBtn);
+            box.insertBefore(tag, input);
+        }
+        input.placeholder = box._selectedValues.length ? '' : placeholder;
+        box.dataset.rawValue = box._selectedValues.join(',');
+        box.classList.toggle('has-value', box._selectedValues.length > 0);
+    }
+
+    function toggleValue(raw) {
+        const idx = box._selectedValues.indexOf(raw);
+        if (idx >= 0) box._selectedValues.splice(idx, 1);
+        else box._selectedValues.push(raw);
+        errorCodeFilterValues = [...box._selectedValues];
+        renderTags();
+        input.value = '';
+        renderOptions('');
+        currentPage = 0;
+        applyFilters();
+    }
+
+    function renderOptions(filter) {
+        list.innerHTML = '';
+        highlighted = -1;
+        const lc = (filter || '').toLowerCase();
+        const matched = lc ? options.filter(o =>
+            o.display.toLowerCase().includes(lc) || o.raw.toLowerCase().includes(lc)
+        ) : options;
+        if (!matched.length) {
+            const noMatch = document.createElement('div');
+            noMatch.className = 'combo-no-match';
+            noMatch.textContent = 'No matches';
+            list.appendChild(noMatch);
+            return;
+        }
+        if (matched.length > 1) {
+            const actions = document.createElement('div');
+            actions.className = 'combo-select-actions';
+            const selAll = document.createElement('span');
+            selAll.textContent = 'Select All';
+            selAll.addEventListener('mousedown', e => {
+                e.preventDefault();
+                for (const o of matched) { if (!box._selectedValues.includes(o.raw)) box._selectedValues.push(o.raw); }
+                errorCodeFilterValues = [...box._selectedValues];
+                renderTags(); input.value = ''; renderOptions(''); currentPage = 0; applyFilters();
+            });
+            const deselAll = document.createElement('span');
+            deselAll.textContent = 'Deselect All';
+            deselAll.addEventListener('mousedown', e => {
+                e.preventDefault();
+                const matchedSet = new Set(matched.map(o => o.raw));
+                box._selectedValues = box._selectedValues.filter(v => !matchedSet.has(v));
+                errorCodeFilterValues = [...box._selectedValues];
+                renderTags(); input.value = ''; renderOptions(''); currentPage = 0; applyFilters();
+            });
+            actions.appendChild(selAll);
+            actions.appendChild(deselAll);
+            list.appendChild(actions);
+        }
+        matched.forEach((o, i) => {
+            const item = document.createElement('div');
+            item.className = 'combo-option';
+            const check = document.createElement('span');
+            check.className = 'combo-option-check';
+            check.textContent = box._selectedValues.includes(o.raw) ? '\u2713' : '';
+            item.appendChild(check);
+            item.appendChild(document.createTextNode(o.display));
+            item.dataset.raw = o.raw;
+            item.dataset.display = o.display;
+            item.dataset.idx = i;
+            item.addEventListener('mousedown', e => {
+                e.preventDefault();
+                toggleValue(o.raw);
+            });
+            list.appendChild(item);
+        });
+    }
+
+    function clearValue() {
+        box._selectedValues = [];
+        errorCodeFilterValues = [];
+        renderTags();
+        currentPage = 0;
+        applyFilters();
+    }
+
+    function highlightAt(idx) {
+        const items = list.querySelectorAll('.combo-option');
+        items.forEach(it => it.classList.remove('highlighted'));
+        if (idx >= 0 && idx < items.length) {
+            highlighted = idx;
+            items[idx].classList.add('highlighted');
+            items[idx].scrollIntoView({ block: 'nearest' });
+        }
+    }
+
+    input.addEventListener('focus', () => { renderOptions(''); list.classList.add('visible'); });
+    input.addEventListener('input', () => { renderOptions(input.value); list.classList.add('visible'); });
+    input.addEventListener('blur', () => {
+        setTimeout(() => {
+            list.classList.remove('visible');
+            input.value = '';
+            const item = box.closest('.filter-item');
+            if (item && !item.contains(document.activeElement)) {
+                item.classList.remove('expanded');
+                expandedFilters.delete('_errorCode');
+                updateFilterLabel(item);
+            }
+        }, 150);
+    });
+    input.addEventListener('keydown', e => {
+        const items = list.querySelectorAll('.combo-option');
+        if (e.key === 'ArrowDown') { e.preventDefault(); if (!list.classList.contains('visible')) { renderOptions(input.value); list.classList.add('visible'); } highlightAt(Math.min(highlighted + 1, items.length - 1)); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); highlightAt(Math.max(highlighted - 1, 0)); }
+        else if (e.key === 'Enter') { e.preventDefault(); if (highlighted >= 0 && items[highlighted]) { toggleValue(items[highlighted].dataset.raw); input.value = ''; renderOptions(''); } }
+        else if (e.key === 'Escape') { list.classList.remove('visible'); input.blur(); }
+        else if (e.key === 'Backspace' && !input.value && box._selectedValues.length) { box._selectedValues.pop(); errorCodeFilterValues = [...box._selectedValues]; renderTags(); renderOptions(''); currentPage = 0; applyFilters(); }
+    });
+    clear.addEventListener('mousedown', e => { e.preventDefault(); clearValue(); input.focus(); });
+    box.addEventListener('mousedown', e => { if (e.target === box) { e.preventDefault(); input.focus(); } });
+    renderTags();
+    return box;
+}
+
 function renderFilterBar() {
     const bar = $('filterBar');
     bar.innerHTML = '';
+
+    // Error code filter (only when validation is enabled and errors exist)
+    if (validationEnabled) {
+        const errorOptions = buildErrorCodeOptions();
+        if (errorOptions.length > 0) {
+            const item = document.createElement('div');
+            item.className = 'filter-item';
+
+            const label = document.createElement('div');
+            label.className = 'filter-label';
+            label.dataset.col = '_errorCode';
+            const labelName = document.createElement('span');
+            labelName.textContent = 'Error Code';
+            labelName.style.color = 'var(--orange)';
+            label.appendChild(labelName);
+            item.appendChild(label);
+
+            label.addEventListener('click', () => {
+                item.classList.add('expanded');
+                expandedFilters.add('_errorCode');
+                const inp = item.querySelector('.combo-box input');
+                if (inp) inp.focus();
+            });
+            if (expandedFilters.has('_errorCode')) item.classList.add('expanded');
+
+            item.appendChild(createErrorCodeComboBox(errorOptions));
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'filter-remove';
+            removeBtn.title = 'Clear error code filter';
+            removeBtn.innerHTML = '&times;';
+            removeBtn.addEventListener('click', () => {
+                if (errorCodeFilterValues.length) {
+                    errorCodeFilterValues = [];
+                                    renderFilterBar();
+                    currentPage = 0;
+                    applyFilters();
+                }
+            });
+            item.appendChild(removeBtn);
+
+            bar.appendChild(item);
+        }
+    }
 
     for (const col of activeFilters) {
         const colType = getColumnType(col);
@@ -4805,7 +5221,7 @@ function showAddFilterMenu(e) {
     const existing = document.querySelector('.filter-add-menu');
     if (existing) { existing.remove(); return; }
 
-    const allCols = new Set();
+    const allCols = new Set(['#']);
     allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx' && k !== '_timeInForce_original' && k !== '_errors' && k !== '_original') allCols.add(k); }));
     const available = Array.from(allCols).sort().filter(c => !activeFilters.includes(c));
     if (!available.length) return;
@@ -4889,21 +5305,20 @@ function applyFilters(skipSync) {
     filteredRecords = pool.filter(r => {
         for (const col in filterValues) {
             const fv = filterValues[col];
+            const rv_raw = col === '#' ? r._idx + 1 : r[col];
             if (typeof fv === 'object' && fv.mode === 'range') {
                 const colType = getColumnType(col);
-                const val = getComparableValue(col, r[col], colType);
+                const val = getComparableValue(col, rv_raw, colType);
                 if (val === null) return false;
                 const minB = fv.min ? getComparableValue(col, fv.min, colType) : null;
                 const maxB = fv.max ? getComparableValue(col, fv.max, colType) : null;
                 if (minB !== null && val < minB) return false;
                 if (maxB !== null && val > maxB) return false;
             } else if (Array.isArray(fv)) {
-                const rv = r[col];
-                const sv = (rv == null || rv === '') ? '__EMPTY__' : String(rv);
+                const sv = (rv_raw == null || rv_raw === '') ? '__EMPTY__' : String(rv_raw);
                 if (!fv.includes(sv)) return false;
             } else {
-                const rv = r[col];
-                const sv = (rv == null || rv === '') ? '__EMPTY__' : String(rv);
+                const sv = (rv_raw == null || rv_raw === '') ? '__EMPTY__' : String(rv_raw);
                 if (sv !== fv) return false;
             }
         }
@@ -4913,7 +5328,20 @@ function applyFilters(skipSync) {
             );
             if (!match) return false;
         }
-        if (validationEnabled && showErrorsOnly && !(r._errors && Object.keys(r._errors).length)) return false;
+        if (validationEnabled && errorCodeFilterValues.length) {
+            const recordCodes = new Set();
+            if (r._errors) {
+                for (const field in r._errors) {
+                    for (const e of r._errors[field]) {
+                        if (e.code) recordCodes.add(String(e.code));
+                    }
+                }
+            }
+            const hasNoErrors = recordCodes.size === 0;
+            const matchesCode = errorCodeFilterValues.some(c => recordCodes.has(c));
+            const matchesNoErrors = hasNoErrors && errorCodeFilterValues.includes('__NO_ERRORS__');
+            if (!matchesCode && !matchesNoErrors) return false;
+        }
         return true;
     });
 
@@ -4925,6 +5353,10 @@ function applyFilters(skipSync) {
         if (sortKeys.length) {
             filteredRecords.sort((a, b) => {
                 for (const {col, asc} of sortKeys) {
+                    if (col === '#') {
+                        if (a._idx !== b._idx) return asc ? a._idx - b._idx : b._idx - a._idx;
+                        continue;
+                    }
                     const ra = a[col], rb = b[col];
                     const ea = ra == null || ra === '';
                     const eb = rb == null || rb === '';
@@ -4958,7 +5390,10 @@ function renderTable() {
 
     const visCols = visibleColumns();
     let html = '<table><thead><tr>';
-    html += '<th>#</th>';
+    const si_hash = sortKeys.findIndex(s => s.col === '#');
+    const arrow_hash = si_hash >= 0 ? (sortKeys[si_hash].asc ? ' \u25B2' : ' \u25BC') : '';
+    const sortNum_hash = si_hash >= 0 && sortKeys.length > 1 ? `<span class="sort-num">${si_hash + 1}</span>` : '';
+    html += `<th data-col="#">#<span class="sort-arrow">${arrow_hash}${sortNum_hash}</span></th>`;
     if (chainDisplayData) html += '<th style="width:1px;padding:0 8px"></th>';
     for (let ci = 0; ci < visCols.length; ci++) {
         const col = visCols[ci];
@@ -4973,17 +5408,18 @@ function renderTable() {
         const globalIdx = start + idx;
         const chainEntry = chainDisplayData ? chainDisplayData[globalIdx] : null;
         const groupFirst = chainEntry && chainEntry.isFirstOfOrder && chainEntry.depth > 0;
-        const hasErrors = validationEnabled && record._errors && Object.keys(record._errors).length > 0;
+        const visErrors = validationEnabled ? getVisibleErrors(record._errors) : null;
+        const hasErrors = visErrors && Object.keys(visErrors).length > 0;
         let cls = selectedRow === globalIdx ? 'selected' : '';
         if (groupFirst) cls += ' order-group-first';
         html += `<tr data-idx="${globalIdx}" class="${cls}">`;
-        html += `<td>${hasErrors ? '<span class="val-icon" title="Validation errors">\u26A0</span>' : ''}${globalIdx + 1}</td>`;
+        html += `<td>${hasErrors ? '<span class="val-icon" title="Validation errors">\u26A0</span>' : ''}${record._idx + 1}</td>`;
         if (chainDisplayData) {
             html += `<td class="tree-cell">${chainEntry ? escapeHtml(chainEntry.treePrefix) : ''}</td>`;
         }
         for (const col of visCols) {
-            const errs = validationEnabled && record._errors && record._errors[col];
-            const parentErrs = validationEnabled && !errs && col.includes('.') && record._errors && record._errors[col.split('.')[0]];
+            const errs = visErrors && visErrors[col];
+            const parentErrs = !errs && col.includes('.') && visErrors && visErrors[col.split('.')[0]];
             const allErrs = errs || parentErrs;
             const errCls = allErrs ? (allErrs.some(e => e.severity === 'error') ? ' val-error' : ' val-warn') : '';
             const errTip = allErrs ? allErrs.map(formatErrorWithCode).join('; ') : '';
@@ -5372,9 +5808,10 @@ function renderDetailGrid(record, mode, showAll) {
 
     // Append fields with validation errors that aren't already in the key list
     // (e.g. required fields missing entirely from the record)
-    if (validationEnabled && record._errors) {
+    const _visErrors = validationEnabled ? getVisibleErrors(record._errors) : null;
+    if (_visErrors) {
         const keySet = new Set(keys);
-        for (const errField of Object.keys(record._errors)) {
+        for (const errField of Object.keys(_visErrors)) {
             if (!keySet.has(errField)) {
                 // In original mode, timeInForce errors are shown on _timeInForce_original
                 if (errField === 'timeInForce' && keySet.has('_timeInForce_original')) continue;
@@ -5414,14 +5851,12 @@ function renderDetailGrid(record, mode, showAll) {
 
         // Look up validation errors for this field (only when validation display is enabled)
         const lookupKey = key === '_timeInForce_original' ? 'timeInForce' : key;
-        const fieldErrors = validationEnabled && record._errors && (record._errors[lookupKey] || (lookupKey.includes('.') && record._errors[lookupKey.split('.')[0]]));
+        const fieldErrors = _visErrors && (_visErrors[lookupKey] || (lookupKey.includes('.') && _visErrors[lookupKey.split('.')[0]]));
         const errClass = fieldErrors ? (fieldErrors.some(e => e.severity === 'error') ? ' has-val-error' : ' has-val-warn') : '';
 
         // Show empty fields if "show all" is checked, or if the field has validation errors (e.g. missing required)
         if (!showAll && isEmpty && !fieldErrors) continue;
-        const errBadges = fieldErrors ? fieldErrors.map(e =>
-            `<span class="val-badge val-badge-${e.severity}">${e.code ? `<b>[${e.code}]</b> ` : ''}${escapeHtml(e.message)}</span>`
-        ).join('') : '';
+        const errBadges = fieldErrors ? fieldErrors.map(e => renderErrorBadge(e, lookupKey)).join('') : '';
 
         if (isEmpty) {
             html += `<div class="detail-field${errClass}">
@@ -5439,7 +5874,7 @@ function renderDetailGrid(record, mode, showAll) {
                 // Element errors shown inside cells; only show non-element errors as badges above
                 const elemErrs = fieldErrors ? fieldErrors.filter(e => /^Element \[/.test(e.message)) : [];
                 const otherErrs = fieldErrors ? fieldErrors.filter(e => !/^Element \[/.test(e.message)) : [];
-                const topBadges = otherErrs.length ? otherErrs.map(e => `<span class="val-badge val-badge-${e.severity}">${e.code ? `<b>[${e.code}]</b> ` : ''}${escapeHtml(e.message)}</span>`).join('') : '';
+                const topBadges = otherErrs.length ? otherErrs.map(e => renderErrorBadge(e, key)).join('') : '';
                 const topClass = otherErrs.length ? (otherErrs.some(e => e.severity === 'error') ? ' has-val-error' : ' has-val-warn') : '';
                 html += `<div class="detail-field-wide${topClass}">
                     <div class="field-name">${escapeHtml(key)}</div>
@@ -5456,7 +5891,7 @@ function renderDetailGrid(record, mode, showAll) {
             if (items.length) {
                 const elemErrs = fieldErrors ? fieldErrors.filter(e => /^Element \[/.test(e.message)) : [];
                 const otherErrs = fieldErrors ? fieldErrors.filter(e => !/^Element \[/.test(e.message)) : [];
-                const topBadges = otherErrs.length ? otherErrs.map(e => `<span class="val-badge val-badge-${e.severity}">${e.code ? `<b>[${e.code}]</b> ` : ''}${escapeHtml(e.message)}</span>`).join('') : '';
+                const topBadges = otherErrs.length ? otherErrs.map(e => renderErrorBadge(e, key)).join('') : '';
                 const topClass = otherErrs.length ? (otherErrs.some(e => e.severity === 'error') ? ' has-val-error' : ' has-val-warn') : '';
                 html += `<div class="detail-field-wide${topClass}">
                     <div class="field-name">${escapeHtml(key)}</div>
@@ -5469,7 +5904,7 @@ function renderDetailGrid(record, mode, showAll) {
         if (COMPOUND_FIELDS.has(key) && key !== 'legDetails' && key !== 'buyDetails' && key !== 'sellDetails' && mode === 'translated' && Array.isArray(value) && value.length) {
             const elemErrs = fieldErrors ? fieldErrors.filter(e => /^Element \[/.test(e.message)) : [];
             const otherErrs = fieldErrors ? fieldErrors.filter(e => !/^Element \[/.test(e.message)) : [];
-            const topBadges = otherErrs.length ? otherErrs.map(e => `<span class="val-badge val-badge-${e.severity}">${e.code ? `<b>[${e.code}]</b> ` : ''}${escapeHtml(e.message)}</span>`).join('') : '';
+            const topBadges = otherErrs.length ? otherErrs.map(e => renderErrorBadge(e, key)).join('') : '';
             const topClass = otherErrs.length ? (otherErrs.some(e => e.severity === 'error') ? ' has-val-error' : ' has-val-warn') : '';
             html += `<div class="detail-field-wide${topClass}">
                 <div class="field-name">${escapeHtml(key)}${topBadges}</div>
@@ -5650,24 +6085,16 @@ $('clearAllFilters').addEventListener('click', clearAllFilters);
 $('validationToggle').addEventListener('click', () => {
     validationEnabled = !validationEnabled;
     $('validationToggle').textContent = (validationEnabled ? '\u2713 ' : '') + 'Validation';
-    $('errorsToggle').style.display = validationEnabled ? '' : 'none';
-    if (!validationEnabled && showErrorsOnly) {
-        showErrorsOnly = false;
-        $('errorsToggle').classList.remove('active');
-    }
+    if (!validationEnabled && errorCodeFilterValues.length) {
+        errorCodeFilterValues = [];
+        }
+    renderFilterBar();
     updateValidationStat();
     applyFilters();
     // Refresh detail panel if open
     if (currentDetailRecord) {
         renderDetailGrid(currentDetailRecord, detailMode, $('showAllFields').checked);
     }
-});
-
-$('errorsToggle').addEventListener('click', () => {
-    showErrorsOnly = !showErrorsOnly;
-    $('errorsToggle').classList.toggle('active', showErrorsOnly);
-    currentPage = 0;
-    applyFilters();
 });
 
 // ── Order chain controls ──
@@ -5775,6 +6202,17 @@ $('showAllFields').addEventListener('change', () => {
 
 // ── Detail panel order links ──
 $('detailGrid').addEventListener('click', e => {
+    // Handle ignore button on error badges
+    const ignoreBtn = e.target.closest('.val-badge-ignore');
+    if (ignoreBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const badge = ignoreBtn.closest('.val-badge');
+        if (badge && badge.dataset.errorCode) {
+            showIgnoreMenu(badge.dataset.errorCode, badge.dataset.errorField, badge);
+        }
+        return;
+    }
     const link = e.target.closest('.order-link');
     if (!link) return;
     handleLinkClick(link);
@@ -6189,7 +6627,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.03.23 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.03.24 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
