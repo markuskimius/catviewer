@@ -1614,6 +1614,9 @@ const TIF_ALL = new Set([...TIF_BOOLEAN, ...Object.keys(TIF_NON_BOOLEAN)]);
 const HI_BOOLEAN = new Set(['ADD','AIP','ALG','ALGMod','ALGS','ALO','AOK','AON','APCM','AUC','ATT','BIN','CAC','CMC','CMPX','CND','CPR','CTR','CSC','CSH','d','DAC','DIR','DIV','DNI','DNR','DNRT','ERP','EW','FB','FBA','FOK','FS','FUT','G','GP','IO','LOC','LOO','M','MAX','MOC','MOO','MRP','MTL','NAV','NCTR','NH','OCP','OFF','OPO','OPT','OVD','P','PBG','PCS','PCTPX','PEG','QCC','R','RAR','RLO','RSV','SCL','SLD','SLL','SLQ','SLR','SOQ','STOPF','STP','TS','TTF','TTO','TTS','TTSO','TTU','UNP','UNS','WDP','WRK']);
 const HI_NON_BOOLEAN = new Set(['APCL','AucResp','CASH','DISP','DISQ','DLVF','DLVT','STOP','SW','SWQ','TMO']);
 
+// bidRelativePrice / askRelativePrice: all attributes are Boolean
+const BRP_ARP_ATTRS = new Set(['BNCH','M','MOC','NAV','OFF','OPM','OTH','PCT','PEG','SPRD']);
+
 
 function parseCSV(text) {
     const lines = text.split(/\r?\n/).filter(l => l.trim());
@@ -1882,10 +1885,10 @@ function validateRecord(record, format) {
         accountHolderType: 2001, actionType: 2002, affiliateFlag: 2003, aggregatedOrders: 2004,
         askPrice: 2005, askQty: 2006, atsDisplayInd: 2007, atsOrderType: 2008,
         bidPrice: 2009, bidQty: 2010, CATReporterIMID: 2011, cancelQty: 2012,
-        cancelFlag: 2013, cancelTimestamp: 2014, capacity: 2015, custDspIntrFlag: 2017,
+        cancelFlag: 2013, cancelTimestamp: 2014, capacity: 2015, counterparty: 2185, custDspIntrFlag: 2017,
         deptType: 2018, destinationType: 2020, displayPrice: 2021, displayQty: 2022,
         dupROIDCond: 2023, electronicDupFlag: 2024, electronicTimestamp: 2025,
-        errorROEID: 2026, eventTimestamp: 2027, fillKeyDate: 2030,
+        errorROEID: 2026, eventTimestamp: 2027, exchOriginCode: 2028, fillKeyDate: 2030,
         firmDesignatedID: 2031, firmROEID: 2032, fulfillmentID: 2034,
         fulfillmentLinkType: 2035, handlingInstructions: 2036, infoBarrierID: 2037,
         initiator: 2038, isoInd: 2039, leavesQty: 2040, manualFlag: 2041,
@@ -2235,6 +2238,36 @@ function validateRecord(record, format) {
                             }
                         } else {
                             addError(fieldName, 'warn', `Unknown handlingInstructions attribute: "${hiKey}"`, 2036);
+                        }
+                    }
+                }
+            } else if (fieldName === 'bidRelativePrice' || fieldName === 'askRelativePrice') {
+                // Validate bidRelativePrice/askRelativePrice Name/Value Pairs (all Boolean)
+                let rpObj = null;
+                if (!isCSV && typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                    rpObj = value;
+                } else if (isCSV && typeof value === 'string') {
+                    rpObj = {};
+                    const parts = value.split(';');
+                    for (const part of parts) {
+                        const trimmed = part.trim();
+                        if (!trimmed) continue;
+                        const eqIdx = trimmed.indexOf('=');
+                        if (eqIdx >= 0) {
+                            rpObj[trimmed.slice(0, eqIdx)] = trimmed.slice(eqIdx + 1);
+                        } else {
+                            rpObj[trimmed] = true;
+                        }
+                    }
+                }
+                if (rpObj) {
+                    for (const [rpKey, rpVal] of Object.entries(rpObj)) {
+                        if (BRP_ARP_ATTRS.has(rpKey)) {
+                            if (!isCSV && rpVal !== true) {
+                                addError(fieldName, 'error', `${fieldName} "${rpKey}" must have value true, got ${JSON.stringify(rpVal)}`, fc);
+                            }
+                        } else {
+                            addError(fieldName, 'warn', `Unknown ${fieldName} attribute: "${rpKey}"`, fc);
                         }
                     }
                 }
@@ -2887,6 +2920,96 @@ function validateRecord(record, format) {
         }
         if (rqi === 'N' && hasBAG) {
             addError('bidAggregatedOrders', 'error', 'bidAggregatedOrders must be blank when representativeQuoteInd is N', 2243);
+        }
+    }
+
+    // 2019: destination must be a valid Exchange ID when destinationType is 'E'
+    if (schema.destination && schema.destinationType) {
+        const dt = strVal('destinationType');
+        const dest = strVal('destination');
+        if (dt === 'E' && dest && !CAT_ALLOWED_EXCHANGES.has(dest)) {
+            addError('destination', 'error', `destination must be a valid Exchange ID when destinationType is E (got "${dest}")`, 2019);
+        }
+    }
+
+    // 2028: exchOriginCode must be populated when destinationType is 'E' and the value is communicated
+    if (schema.exchOriginCode && schema.destinationType) {
+        const dt = strVal('destinationType');
+        const eoc = val('exchOriginCode');
+        if (dt === 'E' && eoc === undefined && isNew) {
+            addError('exchOriginCode', 'warn', 'exchOriginCode should be populated when destinationType is E', 2028);
+        }
+    }
+
+    // 2062: price required when orderType is LMT
+    if (schema.price && schema.orderType) {
+        const ot = strVal('orderType');
+        const p = val('price');
+        if (ot === 'LMT' && p === undefined && isNew) {
+            addError('price', 'error', 'price is required when orderType is LMT', 2067);
+        }
+    }
+
+    // 2249: RFQID must be populated when RFQFlag is true
+    if (schema.RFQFlag && schema.RFQID) {
+        const flag = val('RFQFlag');
+        const id = val('RFQID');
+        const flagBool = flag === true || flag === 'true';
+        if (flagBool && id === undefined && isNew) {
+            addError('RFQID', 'error', 'RFQID must be populated when RFQFlag is true', 2187);
+        }
+    }
+
+    // 2048: NBBO fields required when nbboSource is not NA
+    if (schema.nbboSource) {
+        const ns = strVal('nbboSource');
+        if (ns && ns !== 'NA') {
+            if (val('nbboTimestamp') === undefined && isNew) {
+                addError('nbboTimestamp', 'warn', 'nbboTimestamp should be populated when nbboSource is not NA', 2048);
+            }
+            if (schema.nbbPrice && val('nbbPrice') === undefined && isNew) {
+                addError('nbbPrice', 'warn', 'nbbPrice should be populated when nbboSource is not NA', 2049);
+            }
+            if (schema.nboPrice && val('nboPrice') === undefined && isNew) {
+                addError('nboPrice', 'warn', 'nboPrice should be populated when nbboSource is not NA', 2051);
+            }
+        }
+    }
+
+    // 2057: openCloseIndicator required when optionID is populated (option events)
+    if (schema.openCloseIndicator && schema.optionID) {
+        const optId = val('optionID');
+        const oci = val('openCloseIndicator');
+        if (optId !== undefined && oci === undefined && isNew) {
+            addError('openCloseIndicator', 'warn', 'openCloseIndicator should be populated when optionID is populated', 2057);
+        }
+    }
+
+    // 2179: DVPCustodianID required when allocationType is DVP or DVPF
+    if (schema.DVPCustodianID && schema.allocationType) {
+        const at = strVal('allocationType');
+        const dvp = val('DVPCustodianID');
+        if ((at === 'DVP' || at === 'DVPF') && dvp === undefined && isNew) {
+            addError('DVPCustodianID', 'error', `DVPCustodianID is required when allocationType is ${at}`, 2179);
+        }
+    }
+
+    // 2245: accountHolderType required when firmDesignatedID populated (already exists above)
+    // Additional: firmDesignatedID required when accountHolderType is populated
+    if (schema.firmDesignatedID && schema.accountHolderType) {
+        const fdid = val('firmDesignatedID');
+        const aht = val('accountHolderType');
+        if (aht !== undefined && fdid === undefined) {
+            addError('firmDesignatedID', 'warn', 'firmDesignatedID should be populated when accountHolderType is populated', 2031);
+        }
+    }
+
+    // 2177: settlementDate required on allocation events when applicable
+    if (schema.settlementDate && schema.tradeDate) {
+        const sd = val('settlementDate');
+        const td = val('tradeDate');
+        if (td !== undefined && sd === undefined && isNew) {
+            addError('settlementDate', 'warn', 'settlementDate should be populated when tradeDate is populated', 2177);
         }
     }
 
