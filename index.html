@@ -717,7 +717,7 @@
         body.detail-open { padding-bottom: var(--detail-h, 45vh); height: auto; min-height: 100vh; overflow: visible; }
         body.detail-open footer { display: none; }
         body.detail-open #app { overflow: visible; }
-        body.detail-open .table-container { flex: none; height: calc(100vh - var(--detail-h, 45vh) - 250px); }
+        body.detail-open .table-container { flex: none; }
         body.detail-open .bottom-bar { margin-bottom: 8px; }
         .detail-panel h3 {
             font-size: 15px;
@@ -3984,6 +3984,20 @@ function switchTab(name, push) {
     if (push) syncURL(true);
 }
 
+function sizeTableContainer() {
+    const tc = document.querySelector('.table-container');
+    if (!tc) return;
+    if (!document.body.classList.contains('detail-open')) {
+        tc.style.height = '';
+        return;
+    }
+    const detailH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--detail-h')) || (window.innerHeight * 0.45);
+    const tcTop = tc.getBoundingClientRect().top;
+    const bottomBar = document.querySelector('.bottom-bar');
+    const bottomBarH = bottomBar ? bottomBar.offsetHeight + 8 : 0;
+    tc.style.height = (window.innerHeight - tcTop - detailH - bottomBarH) + 'px';
+}
+
 function closeDetail(push) {
     const panel = $('detailPanel');
     if (!panel.classList.contains('visible')) return;
@@ -4082,6 +4096,9 @@ function handleLinkClick(el) {
     const target = LINKAGE_FIELDS[field];
     if (!target) return;
 
+    // Save scroll position before any DOM changes
+    const scrollY = window.scrollY;
+
     // Clear all filters before navigating
     $('searchInput').value = '';
     syncSearchClear();
@@ -4099,9 +4116,6 @@ function handleLinkClick(el) {
     });
     expandedFilters.clear();
     renderFilterBar();
-
-    // Save scroll position so layout changes don't shift the page
-    const scrollY = window.scrollY;
 
     // If target is orderID, use order chain view
     if (target === 'orderID') {
@@ -5440,6 +5454,7 @@ function applyFilters(skipSync) {
 
     currentPage = 0;
     renderTable();
+    sizeTableContainer();
     $('recordCount').textContent = `${filteredRecords.length.toLocaleString()} of ${allRecords.length.toLocaleString()} records`;
     updateClearAllButton();
     if (!skipSync) syncURL(false);
@@ -6044,6 +6059,7 @@ function showDetail(record, push) {
     }
 
     panel.classList.add('visible');
+    sizeTableContainer();
 
     // Select the corresponding row in the table
     const filteredIdx = filteredRecords.indexOf(record);
@@ -6223,8 +6239,8 @@ $('closeDetail').addEventListener('click', () => closeDetail(true));
     function onMouseMove(e) {
         const newH = Math.max(150, Math.min(window.innerHeight - 50, startH + (startY - e.clientY)));
         const vh = (newH / window.innerHeight * 100);
-        // Single property drives panel height, body padding, and table height atomically via CSS
         document.documentElement.style.setProperty('--detail-h', vh + 'vh');
+        sizeTableContainer();
     }
 
     function onMouseUp() {
@@ -6246,6 +6262,7 @@ $('closeDetail').addEventListener('click', () => closeDetail(true));
         document.addEventListener('mouseup', onMouseUp);
     });
 })();
+window.addEventListener('resize', sizeTableContainer);
 
 document.querySelector('.detail-toolbar').addEventListener('click', e => {
     const tab = e.target.closest('.detail-tab');
