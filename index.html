@@ -4105,8 +4105,6 @@ function handleLinkClick(el) {
 
     // If target is orderID, use order chain view
     if (target === 'orderID') {
-        const record = allRecords.find(r => r.orderID === value);
-        if (record) showDetail(record);
         enterOrderChain(value);
         window.scrollTo(0, scrollY);
         return;

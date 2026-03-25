@@ -34,8 +34,8 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 - **Dynamic filters** — searchable, collapsible comboboxes with range support for event type (with detailed descriptions), action type (NEW/RPR/COR/DEL), side (Buy/Sell/Short), error code, and free-text search across all fields; filter layout persists across sessions
 - **Record detail panel** — fixed and resizable at the bottom of the viewport with animated slide-up/down transitions and translated/original view modes
 - **Translated display** — human-readable timestamps (string format and epoch nanoseconds → Eastern Time), dates, side codes, and compound fields (legDetails, buyDetails, sellDetails)
-- **Clickable linkage fields** — navigate between related records via orderID, tradeID, parentOrderID, priorOrderID, etc.
-- **Order chain view** — hierarchy tree showing parent/child order relationships
+- **Clickable linkage fields** — navigate between related records via orderID, tradeID, parentOrderID, priorOrderID, routedOrderID, etc.; clicking clears other active filters
+- **Order chain view** — hierarchy tree showing parent/child order relationships with depth controls (This order, + Children, + All) and Branch mode (direct ancestor chain plus descendants, excluding siblings)
 - **URL deep linking** — hash-based URL state with direct links to selected records
 - **Multi-file support** — load multiple files (JSON, CSV, ZIP, GZIP) via drag-and-drop or file picker; hold Shift to append
 - **File validation** — verifies files are CAT format before loading
