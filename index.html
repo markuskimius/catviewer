@@ -3996,20 +3996,25 @@ function sizeTableContainer() {
         tc.style.height = '';
         return;
     }
-    // Temporarily collapse table so we can measure element positions
-    tc.style.height = '0px';
-    tc.offsetHeight; // force reflow
-    // Size table so bottom bar sits just above the detail panel
+    const panel = $('detailPanel');
     const headerH = document.querySelector('header').offsetHeight;
+    const tabBarH = $('tabBar').offsetHeight;
+    const tabBarBottom = $('tabBar').getBoundingClientRect().bottom;
+    const tcTop = tc.getBoundingClientRect().top;
+    const gap = tcTop - tabBarBottom;
+
     const detailH = getDetailH();
-    const tabBarTop = $('tabBar').getBoundingClientRect().top + window.scrollY;
-    const scrollTarget = tabBarTop - headerH;
-    const bottomBar = document.querySelector('.bottom-bar');
-    const bbBottomAbs = bottomBar.getBoundingClientRect().bottom + window.scrollY;
-    // When scrolled to scrollTarget, the detail panel top is at scrollTarget + viewportH - detailH
-    const targetBBBottom = scrollTarget + window.innerHeight - detailH;
-    const tableH = targetBBBottom - bbBottomAbs;
-    tc.style.height = Math.max(100, tableH) + 'px';
+    function tick() {
+        const panelRect = panel.getBoundingClientRect();
+        const visibleDetailH = Math.max(0, window.innerHeight - panelRect.top);
+        const tableH = window.innerHeight - headerH * 2 - tabBarH - gap - visibleDetailH;
+        tc.style.height = Math.max(100, tableH) + 'px';
+        window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight);
+        if (panel.classList.contains('visible') && visibleDetailH < detailH) {
+            requestAnimationFrame(tick);
+        }
+    }
+    requestAnimationFrame(tick);
 }
 
 function closeDetail(push) {
@@ -6120,9 +6125,7 @@ function showDetail(record, push) {
         }
     }
 
-    // Scroll to the bottom so the tabs anchor just below the sticky header
     if (push !== false) {
-        window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight);
         syncURL(true);
     }
 }
