@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.03.24
+  CAT File Viewer v2026.03.25
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -934,7 +934,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.03.24</span>
+    <span class="subtitle">v2026.03.25</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -3950,13 +3950,12 @@ function switchTab(name, push) {
             document.documentElement.style.setProperty('--detail-h', savedDetailH);
         }
         panel.classList.add('visible');
+        sizeTableContainer();
         // Animate scroll so tab bar ends up flush below sticky header
-        const headerH = document.querySelector('header').offsetHeight;
-        const tabBarTop = $('tabBar').getBoundingClientRect().top + window.scrollY - headerH;
-        // Start from current visual position, animate to target
+        const scrollTarget = document.documentElement.scrollHeight - window.innerHeight;
         window.scrollTo({ top: scrollBefore });
         const startScroll = scrollBefore;
-        const distance = tabBarTop - startScroll;
+        const distance = scrollTarget - startScroll;
         if (Math.abs(distance) > 1) {
             const duration = 300;
             const startTime = performance.now();
@@ -3983,6 +3982,13 @@ function switchTab(name, push) {
     if (push) syncURL(true);
 }
 
+function getDetailH() {
+    const detailHRaw = getComputedStyle(document.documentElement).getPropertyValue('--detail-h').trim();
+    return detailHRaw
+        ? (detailHRaw.endsWith('vh') ? parseFloat(detailHRaw) / 100 * window.innerHeight : parseFloat(detailHRaw))
+        : (window.innerHeight * 0.45);
+}
+
 function sizeTableContainer() {
     const tc = document.querySelector('.table-container');
     if (!tc) return;
@@ -3990,19 +3996,30 @@ function sizeTableContainer() {
         tc.style.height = '';
         return;
     }
-    // Temporarily set height to 0 so we measure the natural top position
+    // Temporarily collapse table so we can measure element positions
     tc.style.height = '0px';
     tc.offsetHeight; // force reflow
-    const detailH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--detail-h')) || (window.innerHeight * 0.45);
-    const tcTop = tc.getBoundingClientRect().top;
+    // Size table so bottom bar sits just above the detail panel
+    const headerH = document.querySelector('header').offsetHeight;
+    const detailH = getDetailH();
+    const tabBarTop = $('tabBar').getBoundingClientRect().top + window.scrollY;
+    const scrollTarget = tabBarTop - headerH;
     const bottomBar = document.querySelector('.bottom-bar');
-    const bottomBarH = bottomBar ? bottomBar.offsetHeight + 8 : 0;
-    tc.style.height = Math.max(100, window.innerHeight - tcTop - detailH - bottomBarH) + 'px';
+    const bbBottomAbs = bottomBar.getBoundingClientRect().bottom + window.scrollY;
+    // When scrolled to scrollTarget, the detail panel top is at scrollTarget + viewportH - detailH
+    const targetBBBottom = scrollTarget + window.innerHeight - detailH;
+    const tableH = targetBBBottom - bbBottomAbs;
+    tc.style.height = Math.max(100, tableH) + 'px';
 }
 
 function closeDetail(push) {
     const panel = $('detailPanel');
     if (!panel.classList.contains('visible')) return;
+    // Skip animation during history restoration (push === false)
+    if (push === false) {
+        document.body.style.transition = 'none';
+        panel.style.transition = 'none';
+    }
     panel.classList.remove('visible');
     document.body.classList.remove('detail-open');
     document.documentElement.style.removeProperty('--detail-h');
@@ -4011,11 +4028,20 @@ function closeDetail(push) {
     const tc = document.querySelector('.table-container');
     if (tc) tc.style.height = '';
     currentDetailRecord = null;
-    if (push !== false) syncURL(true);
-    setTimeout(() => {
+    if (push === false) {
+        // Instant close: reflow, re-render, restore transitions
+        document.body.offsetHeight;
         selectedRow = -1;
         renderTable();
-    }, 300);
+        document.body.style.transition = '';
+        panel.style.transition = '';
+    } else {
+        syncURL(true);
+        setTimeout(() => {
+            selectedRow = -1;
+            renderTable();
+        }, 300);
+    }
 }
 
 function stateFromHash() {
@@ -6019,12 +6045,14 @@ function showDetail(record, push) {
 
     renderDetailGrid(record, detailMode, $('showAllFields').checked);
 
-    // Apply padding instantly (no transition) so scrollIntoView target is correct
+    // Apply padding instantly (no transition) and preserve scroll position
     const wasDetailOpen = document.body.classList.contains('detail-open');
+    const scrollY = window.scrollY;
     document.body.style.transition = 'none';
     document.body.classList.add('detail-open');
     document.body.offsetHeight; // force reflow
     document.body.style.transition = '';
+    window.scrollTo(0, scrollY);
 
     // Calculate initial height: enough for 30 fields or 50vh, whichever is smaller
     if (!document.documentElement.style.getPropertyValue('--detail-h')) {
@@ -6063,7 +6091,9 @@ function showDetail(record, push) {
     }
 
     panel.classList.add('visible');
-    if (!wasDetailOpen) sizeTableContainer();
+    if (!wasDetailOpen) {
+        sizeTableContainer();
+    }
 
     // Select the corresponding row in the table
     const filteredIdx = filteredRecords.indexOf(record);
@@ -6090,11 +6120,11 @@ function showDetail(record, push) {
         }
     }
 
-    const headerH = document.querySelector('header').offsetHeight;
-    const tabBarTop = $('tabBar').getBoundingClientRect().top + window.scrollY - headerH;
-    window.scrollTo({ top: tabBarTop, behavior: 'smooth' });
-
-    if (push !== false) syncURL(true);
+    // Scroll to the bottom so the tabs anchor just below the sticky header
+    if (push !== false) {
+        window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight);
+        syncURL(true);
+    }
 }
 
 function renderEventSummary() {
@@ -6269,6 +6299,8 @@ $('closeDetail').addEventListener('click', () => closeDetail(true));
         const vh = (newH / window.innerHeight * 100);
         document.documentElement.style.setProperty('--detail-h', vh + 'vh');
         sizeTableContainer();
+        document.body.offsetHeight; // force reflow so scrollHeight is current
+        window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight);
     }
 
     function onMouseUp() {
@@ -6755,7 +6787,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.03.24 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.03.25 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
