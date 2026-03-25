@@ -316,6 +316,7 @@
         .col-mgr-item:hover { background: var(--surface2); }
         .col-mgr-item.dragging { opacity: 0.4; }
         .col-mgr-item.drag-over { box-shadow: inset 0 -2px 0 var(--accent); }
+        .col-mgr-item.col-mgr-highlight { background: rgba(99,102,241,0.18); }
         .col-mgr-item .col-mgr-grip {
             color: var(--text-muted); font-size: 14px; cursor: grab; flex-shrink: 0; width: 16px; text-align: center;
         }
@@ -1041,7 +1042,7 @@
             <h3>Manage Columns</h3>
             <button class="close-btn" id="colMgrClose">&times;</button>
         </div>
-        <input type="text" class="col-mgr-search" id="colMgrSearch" placeholder="Search columns...">
+        <input type="search" class="col-mgr-search" id="colMgrSearch" placeholder="Search columns...">
         <div class="col-mgr-actions">
             <button id="colMgrShowAll">Show All</button>
             <button id="colMgrHideAll">Hide All</button>
@@ -6427,14 +6428,19 @@ function closeColMgr() {
 function renderColMgrList(filter) {
     const list = $('colMgrList');
     const q = (filter || '').toLowerCase();
-    const matching = columns.filter(c => !q || c.toLowerCase().includes(q));
     const visCount = columns.filter(c => !hiddenColumns.has(c)).length;
-    $('colMgrCount').textContent = `${visCount} of ${columns.length} visible`;
+    if (q) {
+        const matchCount = columns.filter(c => c.toLowerCase().includes(q)).length;
+        $('colMgrCount').textContent = `${matchCount} match${matchCount !== 1 ? 'es' : ''} \u00b7 ${visCount} of ${columns.length} visible`;
+    } else {
+        $('colMgrCount').textContent = `${visCount} of ${columns.length} visible`;
+    }
 
-    list.innerHTML = matching.map((col, i) => {
-        const fullIdx = columns.indexOf(col);
+    list.innerHTML = columns.map((col, i) => {
+        const isMatch = q && col.toLowerCase().includes(q);
+        const highlight = isMatch ? ' col-mgr-highlight' : '';
         const checked = !hiddenColumns.has(col) ? 'checked' : '';
-        return `<div class="col-mgr-item" data-col="${escapeHtml(col)}" data-full-idx="${fullIdx}" draggable="true">
+        return `<div class="col-mgr-item${highlight}" data-col="${escapeHtml(col)}" data-full-idx="${i}" draggable="true">
             <span class="col-mgr-grip">\u2261</span>
             <input type="checkbox" ${checked} data-col="${escapeHtml(col)}">
             <span class="col-mgr-name">${escapeHtml(col)}</span>
@@ -6444,6 +6450,12 @@ function renderColMgrList(filter) {
             </span>
         </div>`;
     }).join('');
+
+    // Scroll to first match
+    if (q) {
+        const first = list.querySelector('.col-mgr-highlight');
+        if (first) first.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
 
     // Checkbox toggle
     list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
@@ -6520,6 +6532,7 @@ $('colMgrDone').addEventListener('click', closeColMgr);
 $('colMgrOverlay').addEventListener('click', e => { if (e.target === $('colMgrOverlay')) closeColMgr(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('colMgrOverlay').classList.contains('visible')) closeColMgr(); });
 $('colMgrSearch').addEventListener('input', e => renderColMgrList(e.target.value));
+$('colMgrSearch').addEventListener('search', e => renderColMgrList(e.target.value));
 $('colMgrShowAll').addEventListener('click', () => { pushUndo('Show All Columns'); hiddenColumns.clear(); renderColMgrList($('colMgrSearch').value); });
 $('colMgrHideAll').addEventListener('click', () => { pushUndo('Hide All Columns'); columns.forEach(c => hiddenColumns.add(c)); renderColMgrList($('colMgrSearch').value); });
 
