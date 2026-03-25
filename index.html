@@ -1232,10 +1232,11 @@ const FIELD_TOOLTIPS = {
 // Key columns to show in the table (in order of importance)
 const PRIORITY_COLUMNS = [
     'type', 'actionType', 'firmROEID', 'symbol', 'underlying', 'optionID', 'eventTimestamp',
-    'orderKeyDate', 'orderID', 'side', 'price', 'quantity',
+    'orderKeyDate', 'orderID', 'priorOrderID', 'parentOrderID', 'routedOrderID',
+    'side', 'price', 'quantity',
     'orderType', 'timeInForce.name', 'timeInForce.value', 'deptType', 'manualFlag',
     'CATReporterIMID', 'firmDesignatedID', 'accountHolderType',
-    'destination', 'routedOrderID', 'senderIMID',
+    'destination', 'senderIMID',
     'tradeKeyDate', 'tradeID', 'fillPrice', 'fillQty',
     'errorROEID',
 ];
@@ -1264,7 +1265,7 @@ let hiddenColumns = new Set();
 const undoStack = [];
 const redoStack = [];
 const MAX_UNDO = 50;
-const DEFAULT_FILTERS = ['type', 'symbol'];
+const DEFAULT_FILTERS = ['type', 'symbol', 'underlying', 'optionID'];
 let activeFilters = [...DEFAULT_FILTERS]; // column names currently shown as filter dropdowns
 const expandedFilters = new Set(); // filters currently showing their combobox
 
@@ -1280,6 +1281,7 @@ function snapshotState() {
 }
 
 function pushUndo(label) {
+    layoutIsDefault = false;
     undoStack.push({ label, state: snapshotState() });
     if (undoStack.length > MAX_UNDO) undoStack.shift();
     redoStack.length = 0;
@@ -3710,7 +3712,7 @@ function renderCompoundArrayHTML(value, mode, fieldErrors) {
 // ── Linkage fields: maps field name → the target field it references ──
 const LINKAGE_FIELDS = {
     orderID: 'orderID', parentOrderID: 'orderID', priorOrderID: 'orderID',
-    manualOrderID: 'orderID', pairedOrderID: 'orderID',
+    manualOrderID: 'orderID', pairedOrderID: 'orderID', routedOrderID: 'orderID',
     tradeID: 'tradeID',
 };
 
@@ -4051,6 +4053,24 @@ function handleLinkClick(el) {
     const value = el.dataset.linkValue;
     const target = LINKAGE_FIELDS[field];
     if (!target) return;
+
+    // Clear all filters before navigating
+    $('searchInput').value = '';
+    syncSearchClear();
+    errorCodeFilterValues = [];
+    orderChainRoot = null;
+    orderChainDepth = Infinity;
+    chainDisplayData = null;
+    $('orderChainBar').classList.remove('visible');
+    document.querySelectorAll('.filter-item .combo-box').forEach(box => {
+        if (box._selectedValues) box._selectedValues.length = 0;
+        box.dataset.rawValue = '';
+        box.querySelectorAll('.combo-tag').forEach(t => t.remove());
+        const input = box.querySelector('input');
+        if (input) input.value = '';
+    });
+    expandedFilters.clear();
+    renderFilterBar();
 
     // If target is orderID, use order chain view
     if (target === 'orderID') {
@@ -6275,11 +6295,19 @@ function getSavedColumnOrder() {
     } catch { return null; }
 }
 
+let layoutIsDefault = false; // true after Reset Layout, cleared on any layout change
 function saveLayout() {
-    localStorage.setItem('catViewer_columnOrder', JSON.stringify(columns));
-    localStorage.setItem('catViewer_hiddenColumns', JSON.stringify([...hiddenColumns]));
-    localStorage.setItem('catViewer_filterColumns', JSON.stringify(activeFilters));
-    localStorage.setItem('catViewer_filterModes', JSON.stringify(filterModes));
+    if (layoutIsDefault) {
+        localStorage.removeItem('catViewer_columnOrder');
+        localStorage.removeItem('catViewer_hiddenColumns');
+        localStorage.removeItem('catViewer_filterColumns');
+        localStorage.removeItem('catViewer_filterModes');
+    } else {
+        localStorage.setItem('catViewer_columnOrder', JSON.stringify(columns));
+        localStorage.setItem('catViewer_hiddenColumns', JSON.stringify([...hiddenColumns]));
+        localStorage.setItem('catViewer_filterColumns', JSON.stringify(activeFilters));
+        localStorage.setItem('catViewer_filterModes', JSON.stringify(filterModes));
+    }
     const msg = $('colOrderSaved');
     msg.classList.add('visible');
     setTimeout(() => msg.classList.remove('visible'), 1500);
@@ -6305,6 +6333,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 $('resetLayoutBtn').addEventListener('click', () => {
+    layoutIsDefault = true;
     localStorage.removeItem('catViewer_columnOrder');
     localStorage.removeItem('catViewer_hiddenColumns');
     localStorage.removeItem('catViewer_filterColumns');
