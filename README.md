@@ -35,7 +35,7 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 - **Record detail panel** — fixed and resizable at the bottom of the viewport with animated slide-up/down transitions and translated/original view modes
 - **Translated display** — human-readable timestamps (string format and epoch nanoseconds → Eastern Time), dates, side codes, and compound fields (legDetails, buyDetails, sellDetails)
 - **Clickable linkage fields** — navigate between related records via orderID, tradeID, parentOrderID, priorOrderID, routedOrderID, etc.; clicking clears other active filters
-- **Order chain view** — hierarchy tree showing parent/child order relationships with depth controls (This order, + Children, + All) and Branch mode (direct ancestor chain plus descendants, excluding siblings)
+- **Order chain view** — hierarchy tree showing parent/child order relationships with depth controls (This order, + Children, + Branch); buttons toggle off when clicked again; Branch shows direct ancestor chain plus descendants, excluding siblings
 - **URL deep linking** — hash-based URL state with direct links to selected records
 - **Multi-file support** — load multiple files (JSON, CSV, ZIP, GZIP) via drag-and-drop or file picker; hold Shift to append
 - **File validation** — verifies files are CAT format before loading

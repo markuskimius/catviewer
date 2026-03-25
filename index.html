@@ -996,8 +996,7 @@
             <div class="depth-controls" id="depthControls">
                 <button class="depth-btn" data-depth="0">This order</button>
                 <button class="depth-btn" data-depth="1">+ Children</button>
-                <button class="depth-btn active" data-depth="Infinity">+ All</button>
-                <button class="depth-btn" data-depth="branch">Branch</button>
+                <button class="depth-btn" data-depth="branch">+ Branch</button>
             </div>
             <button class="clear-chain" id="clearChain" title="Clear order chain filter">&times;</button>
         </div>
@@ -3991,11 +3990,14 @@ function sizeTableContainer() {
         tc.style.height = '';
         return;
     }
+    // Temporarily set height to 0 so we measure the natural top position
+    tc.style.height = '0px';
+    tc.offsetHeight; // force reflow
     const detailH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--detail-h')) || (window.innerHeight * 0.45);
     const tcTop = tc.getBoundingClientRect().top;
     const bottomBar = document.querySelector('.bottom-bar');
     const bottomBarH = bottomBar ? bottomBar.offsetHeight + 8 : 0;
-    tc.style.height = (window.innerHeight - tcTop - detailH - bottomBarH) + 'px';
+    tc.style.height = Math.max(100, window.innerHeight - tcTop - detailH - bottomBarH) + 'px';
 }
 
 function closeDetail(push) {
@@ -4120,6 +4122,8 @@ function handleLinkClick(el) {
     // If target is orderID, use order chain view
     if (target === 'orderID') {
         enterOrderChain(value);
+        const record = filteredRecords.find(r => r.orderID === value);
+        if (record) showDetail(record);
         window.scrollTo(0, scrollY);
         return;
     }
@@ -4137,7 +4141,7 @@ function handleLinkClick(el) {
 
 function enterOrderChain(orderID, depth) {
     orderChainRoot = orderID;
-    orderChainDepth = depth !== undefined ? depth : Infinity;
+    orderChainDepth = depth !== undefined ? depth : 1;
     syncURL(true);
     updateChainBar();
     applyFilters();
@@ -4214,10 +4218,9 @@ function updateChainBar() {
 
     const hasParent = entry && entry.parentOrderID;
     document.querySelectorAll('.depth-btn').forEach(btn => {
-        const d = btn.dataset.depth === 'Infinity' ? Infinity : btn.dataset.depth === 'branch' ? 'branch' : parseInt(btn.dataset.depth);
+        const d = btn.dataset.depth === 'branch' ? 'branch' : parseInt(btn.dataset.depth);
         btn.classList.toggle('active', d === orderChainDepth);
         if (d === 'branch') btn.disabled = !hasParent && totalDescendants === 0;
-        else if (d > 0) btn.disabled = totalDescendants === 0;
     });
 }
 
@@ -4280,7 +4283,7 @@ function initializeUI() {
     orderChainDepth = Infinity;
     chainDisplayData = null;
     $('orderChainBar').classList.remove('visible');
-    history.replaceState({}, '', location.pathname + location.search);
+    history.pushState({ dataLoaded: true }, '', location.pathname + location.search);
 
     // Determine columns
     const colSet = new Set();
@@ -6017,6 +6020,7 @@ function showDetail(record, push) {
     renderDetailGrid(record, detailMode, $('showAllFields').checked);
 
     // Apply padding instantly (no transition) so scrollIntoView target is correct
+    const wasDetailOpen = document.body.classList.contains('detail-open');
     document.body.style.transition = 'none';
     document.body.classList.add('detail-open');
     document.body.offsetHeight; // force reflow
@@ -6059,7 +6063,7 @@ function showDetail(record, push) {
     }
 
     panel.classList.add('visible');
-    sizeTableContainer();
+    if (!wasDetailOpen) sizeTableContainer();
 
     // Select the corresponding row in the table
     const filteredIdx = filteredRecords.indexOf(record);
@@ -6180,7 +6184,13 @@ $('depthControls').addEventListener('click', e => {
     const btn = e.target.closest('.depth-btn');
     if (!btn || btn.disabled) return;
     const d = btn.dataset.depth;
-    orderChainDepth = d === 'Infinity' ? Infinity : d === 'branch' ? 'branch' : parseInt(d);
+    const newDepth = d === 'branch' ? 'branch' : parseInt(d);
+    // Toggle off: clicking an already-active button (except "This order") falls back to "This order"
+    if (newDepth === orderChainDepth && newDepth !== 0) {
+        orderChainDepth = 0;
+    } else {
+        orderChainDepth = newDepth;
+    }
     syncURL(true);
     updateChainBar();
     applyFilters();
@@ -6193,10 +6203,23 @@ window.addEventListener('popstate', e => {
     setTimeout(() => _ignoreHashChange = false, 0);
 
     const state = stateFromHash();
+    const histState = e.state || {};
 
-    // No hash = root state: show drop zone (data retained for back navigation)
+    // No hash: either drop zone or data-loaded with no filters
     if (!state) {
         if (!allRecords.length) return;
+        // If history state has dataLoaded, show data with default filters
+        if (histState.dataLoaded) {
+            if (!app.classList.contains('visible')) {
+                dropZone.style.display = 'none';
+                app.classList.add('visible');
+                const fileNames = loadedFiles.map(f => f.name);
+                document.title = `${fileNames.join(', ')} — CAT File Viewer`;
+            }
+            restoreFilterState({});
+            return;
+        }
+        // Otherwise, show drop zone
         $('detailPanel').classList.remove('visible');
         document.body.classList.remove('detail-open');
         currentDetailRecord = null;

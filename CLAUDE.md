@@ -33,7 +33,7 @@ A single-file web application for compliance officers to inspect CAT data files.
 - Fixed, resizable record detail panel at bottom of viewport with animated slide-up/down transitions and translated/original view modes
 - Translated display for timestamps (both string format and epoch nanoseconds → Eastern Time), dates, side codes, compound fields (legDetails, buyDetails, sellDetails)
 - Clickable linkage fields (orderID, tradeID, parentOrderID, priorOrderID, routedOrderID, etc.) for navigating between related records; clicking clears other active filters
-- Order chain view with hierarchy tree, depth controls (This order, + Children, + All), and Branch mode (direct ancestor chain plus descendants, excluding siblings)
+- Order chain view with hierarchy tree, depth controls (This order, + Children, + Branch) that toggle off when clicked again; Branch shows direct ancestor chain plus descendants, excluding siblings
 - URL hash state with deep linking to selected records
 - Tools dropdown menu (keyboard shortcut accessible) with layout export/import, drag-and-drop layout reordering, and validation toggle. Reset Layout followed by Save Layout clears saved layout so defaults are always used.
 - Event Summary tab with counts broken down by action type
