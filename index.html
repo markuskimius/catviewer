@@ -6204,6 +6204,7 @@ window.addEventListener('popstate', e => {
     _ignoreHashChange = true;
     setTimeout(() => _ignoreHashChange = false, 0);
 
+    const scrollY = window.scrollY;
     const state = stateFromHash();
     const histState = e.state || {};
 
@@ -6219,6 +6220,7 @@ window.addEventListener('popstate', e => {
                 document.title = `${fileNames.join(', ')} — CAT File Viewer`;
             }
             restoreFilterState({});
+            window.scrollTo(0, scrollY);
             return;
         }
         // Otherwise, show drop zone
@@ -6242,6 +6244,7 @@ window.addEventListener('popstate', e => {
     }
 
     restoreFilterState(state);
+    window.scrollTo(0, scrollY);
 });
 
 // ── Hash change (manual URL editing) ──
