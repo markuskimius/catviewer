@@ -997,6 +997,7 @@
                 <button class="depth-btn" data-depth="0">This order</button>
                 <button class="depth-btn" data-depth="1">+ Children</button>
                 <button class="depth-btn active" data-depth="Infinity">+ All</button>
+                <button class="depth-btn" data-depth="branch">Branch</button>
             </div>
             <button class="clear-chain" id="clearChain" title="Clear order chain filter">&times;</button>
         </div>
@@ -3768,6 +3769,33 @@ function getChainOrderIDs(rootID, maxDepth) {
     return result;
 }
 
+function getBranchOrderIDs(selectedID) {
+    const result = new Set();
+    // Walk up ancestor chain
+    const ancestors = [];
+    let cur = selectedID;
+    while (cur) {
+        ancestors.push(cur);
+        result.add(cur);
+        const entry = orderIndex[cur];
+        cur = (entry && entry.parentOrderID) ? entry.parentOrderID : null;
+        if (result.has(cur)) break; // cycle guard
+    }
+    // Walk down all descendants of selectedID
+    function walkDown(id) {
+        const entry = orderIndex[id];
+        if (!entry) return;
+        for (const child of entry.children) {
+            if (!result.has(child)) {
+                result.add(child);
+                walkDown(child);
+            }
+        }
+    }
+    walkDown(selectedID);
+    return { ids: result, topAncestor: ancestors[ancestors.length - 1] };
+}
+
 function buildChainDisplay(rootID, maxDepth, records) {
     const result = [];
     const byOrder = {};
@@ -3817,7 +3845,7 @@ function getFilterState() {
         search: $('searchInput').value,
         filters: getFilterValues(),
         chainRoot: orderChainRoot,
-        chainDepth: orderChainDepth === Infinity ? 'Infinity' : orderChainDepth,
+        chainDepth: orderChainDepth === Infinity ? 'Infinity' : String(orderChainDepth),
         tab: activeTab,
         detail: currentDetailRecord ? currentDetailRecord._idx : null,
     };
@@ -3883,7 +3911,7 @@ function restoreFilterState(state) {
     document.querySelectorAll('.filter-item').forEach(updateFilterLabel);
 
     orderChainRoot = state.chainRoot || null;
-    orderChainDepth = (!state.chainDepth || state.chainDepth === 'Infinity') ? Infinity : Number(state.chainDepth);
+    orderChainDepth = (!state.chainDepth || state.chainDepth === 'Infinity') ? Infinity : state.chainDepth === 'branch' ? 'branch' : Number(state.chainDepth);
     chainDisplayData = null;
 
     if (orderChainRoot) {
@@ -4033,7 +4061,7 @@ function loadFiltersFromURL() {
     document.querySelectorAll('.filter-item').forEach(updateFilterLabel);
 
     orderChainRoot = state.chainRoot;
-    orderChainDepth = state.chainDepth === 'Infinity' ? Infinity : Number(state.chainDepth);
+    orderChainDepth = state.chainDepth === 'Infinity' ? Infinity : state.chainDepth === 'branch' ? 'branch' : Number(state.chainDepth);
 
     if (orderChainRoot) updateChainBar();
 
@@ -4072,11 +4100,15 @@ function handleLinkClick(el) {
     expandedFilters.clear();
     renderFilterBar();
 
+    // Save scroll position so layout changes don't shift the page
+    const scrollY = window.scrollY;
+
     // If target is orderID, use order chain view
     if (target === 'orderID') {
         const record = allRecords.find(r => r.orderID === value);
         if (record) showDetail(record);
         enterOrderChain(value);
+        window.scrollTo(0, scrollY);
         return;
     }
 
@@ -4087,12 +4119,13 @@ function handleLinkClick(el) {
         $('searchInput').value = value;
         syncSearchClear();
         applyFilters();
+        window.scrollTo(0, scrollY);
     }
 }
 
-function enterOrderChain(orderID) {
+function enterOrderChain(orderID, depth) {
     orderChainRoot = orderID;
-    orderChainDepth = Infinity;
+    orderChainDepth = depth !== undefined ? depth : Infinity;
     syncURL(true);
     updateChainBar();
     applyFilters();
@@ -4162,15 +4195,17 @@ function updateChainBar() {
     const parentDiv = $('chainParent');
     if (entry && entry.parentOrderID) {
         parentDiv.innerHTML = `<span class="chain-parent-link" id="chainParentLink">\u2191 Parent: ${escapeHtml(entry.parentOrderID)}</span>`;
-        $('chainParentLink').addEventListener('click', () => enterOrderChain(entry.parentOrderID));
+        $('chainParentLink').addEventListener('click', () => enterOrderChain(entry.parentOrderID, orderChainDepth));
     } else {
         parentDiv.innerHTML = '';
     }
 
+    const hasParent = entry && entry.parentOrderID;
     document.querySelectorAll('.depth-btn').forEach(btn => {
-        const d = btn.dataset.depth === 'Infinity' ? Infinity : parseInt(btn.dataset.depth);
+        const d = btn.dataset.depth === 'Infinity' ? Infinity : btn.dataset.depth === 'branch' ? 'branch' : parseInt(btn.dataset.depth);
         btn.classList.toggle('active', d === orderChainDepth);
-        if (d > 0) btn.disabled = totalDescendants === 0;
+        if (d === 'branch') btn.disabled = !hasParent && totalDescendants === 0;
+        else if (d > 0) btn.disabled = totalDescendants === 0;
     });
 }
 
@@ -5317,9 +5352,15 @@ function applyFilters(skipSync) {
     const filterValues = getFilterValues();
 
     let pool = allRecords;
+    let branchData = null;
     if (orderChainRoot) {
-        const chainIDs = getChainOrderIDs(orderChainRoot, orderChainDepth);
-        pool = allRecords.filter(r => r.orderID && chainIDs.has(r.orderID));
+        if (orderChainDepth === 'branch') {
+            branchData = getBranchOrderIDs(orderChainRoot);
+            pool = allRecords.filter(r => r.orderID && branchData.ids.has(r.orderID));
+        } else {
+            const chainIDs = getChainOrderIDs(orderChainRoot, orderChainDepth);
+            pool = allRecords.filter(r => r.orderID && chainIDs.has(r.orderID));
+        }
     }
 
     filteredRecords = pool.filter(r => {
@@ -5366,7 +5407,9 @@ function applyFilters(skipSync) {
     });
 
     if (orderChainRoot) {
-        chainDisplayData = buildChainDisplay(orderChainRoot, orderChainDepth, filteredRecords);
+        const displayRoot = branchData ? branchData.topAncestor : orderChainRoot;
+        const displayDepth = branchData ? Infinity : orderChainDepth;
+        chainDisplayData = buildChainDisplay(displayRoot, displayDepth, filteredRecords);
         filteredRecords = chainDisplayData.map(d => d.record);
     } else {
         chainDisplayData = null;
@@ -6122,7 +6165,8 @@ $('clearChain').addEventListener('click', clearOrderChain);
 $('depthControls').addEventListener('click', e => {
     const btn = e.target.closest('.depth-btn');
     if (!btn || btn.disabled) return;
-    orderChainDepth = btn.dataset.depth === 'Infinity' ? Infinity : parseInt(btn.dataset.depth);
+    const d = btn.dataset.depth;
+    orderChainDepth = d === 'Infinity' ? Infinity : d === 'branch' ? 'branch' : parseInt(d);
     syncURL(true);
     updateChainBar();
     applyFilters();
