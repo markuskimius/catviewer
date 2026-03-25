@@ -4366,10 +4366,9 @@ function translateFilterValue(col, rawValue) {
     if (rawValue == null || rawValue === '') return null;
     const s = String(rawValue);
 
-    // Event type: show "MENO (Order)" style
+    // Event type: show "MENO (New Order)" style
     if (col === 'type') {
-        const cat = EVENT_CATEGORIES[s] || 'other';
-        const label = CATEGORY_LABELS[cat] || 'Other';
+        const label = FIELD_TOOLTIPS.type[s] || 'Other';
         return `${s} (${label})`;
     }
     // Action type: show "RPR (Repair)" style
