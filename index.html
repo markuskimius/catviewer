@@ -4563,7 +4563,7 @@ function createComboBox(col, placeholder, bound) {
             const display = opt ? opt.display : raw;
             const tag = document.createElement('span');
             tag.className = 'combo-tag';
-            tag.textContent = display;
+            tag.textContent = raw === '__EMPTY__' ? display : raw;
             const removeBtn = document.createElement('button');
             removeBtn.className = 'combo-tag-remove';
             removeBtn.innerHTML = '&times;';
@@ -4849,10 +4849,9 @@ function updateFilterLabel(item) {
         const bound = box.dataset.bound;
         if (box._selectedValues && box._selectedValues.length) {
             for (const val of box._selectedValues) {
-                const translated = translateFilterValue(col, val);
                 const tag = document.createElement('span');
                 tag.className = 'combo-tag';
-                tag.textContent = translated || val;
+                tag.textContent = val === '__EMPTY__' ? '(no value)' : val;
                 label.appendChild(tag);
             }
         } else if (bound && box.dataset.rawValue) {
