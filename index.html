@@ -995,7 +995,7 @@
             <span id="chainParent"></span>
             <div class="depth-controls" id="depthControls">
                 <button class="depth-btn" data-depth="0">This order</button>
-                <button class="depth-btn" data-depth="1">+ Children</button>
+                <button class="depth-btn" data-depth="Infinity">+ Children</button>
                 <button class="depth-btn" data-depth="branch">+ Branch</button>
             </div>
             <button class="clear-chain" id="clearChain" title="Clear order chain filter">&times;</button>
@@ -4141,7 +4141,7 @@ function handleLinkClick(el) {
 
 function enterOrderChain(orderID, depth) {
     orderChainRoot = orderID;
-    orderChainDepth = depth !== undefined ? depth : 1;
+    orderChainDepth = depth !== undefined ? depth : Infinity;
     syncURL(true);
     updateChainBar();
     applyFilters();
@@ -4218,7 +4218,7 @@ function updateChainBar() {
 
     const hasParent = entry && entry.parentOrderID;
     document.querySelectorAll('.depth-btn').forEach(btn => {
-        const d = btn.dataset.depth === 'branch' ? 'branch' : parseInt(btn.dataset.depth);
+        const d = btn.dataset.depth === 'Infinity' ? Infinity : btn.dataset.depth === 'branch' ? 'branch' : parseInt(btn.dataset.depth);
         btn.classList.toggle('active', d === orderChainDepth);
         if (d === 'branch') btn.disabled = !hasParent && totalDescendants === 0;
     });
@@ -6184,16 +6184,18 @@ $('depthControls').addEventListener('click', e => {
     const btn = e.target.closest('.depth-btn');
     if (!btn || btn.disabled) return;
     const d = btn.dataset.depth;
-    const newDepth = d === 'branch' ? 'branch' : parseInt(d);
+    const newDepth = d === 'Infinity' ? Infinity : d === 'branch' ? 'branch' : parseInt(d);
     // Toggle off: clicking an already-active button (except "This order") falls back to "This order"
     if (newDepth === orderChainDepth && newDepth !== 0) {
         orderChainDepth = 0;
     } else {
         orderChainDepth = newDepth;
     }
+    const scrollY = window.scrollY;
     syncURL(true);
     updateChainBar();
     applyFilters();
+    window.scrollTo(0, scrollY);
 });
 
 // ── History (back/forward button) ──
