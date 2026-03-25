@@ -4176,6 +4176,16 @@ function enterOrderChain(orderID, depth) {
     syncURL(true);
     updateChainBar();
     applyFilters();
+    // Re-select the detail record in the new filtered list
+    if (currentDetailRecord) {
+        const idx = filteredRecords.indexOf(currentDetailRecord);
+        if (idx !== -1 && idx !== selectedRow) {
+            selectedRow = idx;
+            const page = PAGE_SIZE === Infinity ? 0 : Math.floor(idx / PAGE_SIZE);
+            if (page !== currentPage) currentPage = page;
+            renderTable();
+        }
+    }
 }
 
 function hasActiveFilters() {
@@ -6228,6 +6238,16 @@ $('depthControls').addEventListener('click', e => {
     syncURL(true);
     updateChainBar();
     applyFilters();
+    // Re-select the detail record in the new filtered list
+    if (currentDetailRecord) {
+        const idx = filteredRecords.indexOf(currentDetailRecord);
+        if (idx !== -1 && idx !== selectedRow) {
+            selectedRow = idx;
+            const page = PAGE_SIZE === Infinity ? 0 : Math.floor(idx / PAGE_SIZE);
+            if (page !== currentPage) currentPage = page;
+            renderTable();
+        }
+    }
     window.scrollTo(0, scrollY);
 });
 
