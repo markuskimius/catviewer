@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.03.25
+  CAT File Viewer v2026.03.28
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -33,6 +33,7 @@
             display: flex;
             flex-direction: column;
             overflow-y: auto;
+            transition: padding 0.3s ease;
         }
         header {
             background: var(--surface);
@@ -61,7 +62,6 @@
             padding: 48px;
             text-align: center;
             cursor: pointer;
-            transition: all 0.2s;
             flex: 1;
             display: flex;
             flex-direction: column;
@@ -192,7 +192,6 @@
             font-size: 14px;
             color: var(--text-muted);
             border-bottom: 2px solid transparent;
-            transition: all 0.15s;
         }
         .tab:hover { color: var(--text); }
         .tab.active {
@@ -241,7 +240,7 @@
         th .sort-num { font-size: 9px; vertical-align: super; opacity: 0.7; }
         .col-order-controls { display: flex; gap: 6px; align-items: center; }
         .col-order-controls .btn { font-size: 12px; padding: 4px 10px; }
-        .col-order-saved { color: var(--green); font-size: 12px; opacity: 0; transition: opacity 0.3s; }
+        .col-order-saved { color: var(--green); font-size: 12px; opacity: 0; }
         .col-order-saved.visible { opacity: 1; }
 
         /* Tools menu */
@@ -323,7 +322,7 @@
         .col-mgr-item input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
         .col-mgr-item .col-mgr-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .col-mgr-item .col-mgr-arrows {
-            display: flex; gap: 2px; opacity: 0; transition: opacity 0.1s; flex-shrink: 0;
+            display: flex; gap: 2px; opacity: 0; flex-shrink: 0;
         }
         .col-mgr-item:hover .col-mgr-arrows { opacity: 1; }
         .col-mgr-item .col-mgr-arrows button {
@@ -398,7 +397,7 @@
         }
         .combo-tag-remove:hover { color: #fff; }
         .combo-box .combo-clear {
-            position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+            position: absolute; right: 4px; top: 0; bottom: 0; margin: auto 0; height: fit-content;
             background: none; border: none; color: var(--text-muted); cursor: pointer;
             font-size: 14px; padding: 0 4px; line-height: 1; display: none;
         }
@@ -504,7 +503,7 @@
         .ignore-menu { position: fixed; z-index: 200; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); overflow: hidden; }
         .ignore-menu-item { padding: 8px 14px; cursor: pointer; font-size: 13px; color: var(--text); white-space: nowrap; }
         .ignore-menu-item:hover { background: var(--surface2); }
-        .ignored-errors-dialog { position: fixed; z-index: 200; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); padding: 16px; min-width: 300px; max-width: 500px; max-height: 400px; display: flex; flex-direction: column; }
+        .ignored-errors-dialog { position: fixed; z-index: 200; inset: 0; margin: auto; height: fit-content; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); padding: 16px; min-width: 300px; max-width: 500px; max-height: 400px; display: flex; flex-direction: column; }
         .ignored-errors-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: var(--text); }
         .ignored-errors-list { overflow-y: auto; flex: 1; }
         .ignored-errors-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text); gap: 12px; }
@@ -526,7 +525,6 @@
             white-space: nowrap;
             box-shadow: 0 2px 8px rgba(0,0,0,0.4);
             opacity: 0;
-            transition: opacity 0.15s;
         }
         .cat-tooltip.visible { opacity: 1; }
 
@@ -666,18 +664,13 @@
             flex-direction: column;
             box-shadow: 0 -2px 12px rgba(0,0,0,0.15);
             transform: translateY(100%);
-            opacity: 0;
-            visibility: hidden;
-            transition: transform 0.3s ease, opacity 0.3s ease, visibility 0s 0.3s;
+            transition: transform 0.3s ease;
         }
         .detail-panel.visible {
             transform: translateY(0);
-            opacity: 1;
-            visibility: visible;
-            transition: transform 0.3s ease, opacity 0.3s ease, visibility 0s 0s;
+            transition: transform 0.3s ease;
         }
         .detail-panel.resizing {
-            transition: none;
             user-select: none;
         }
         .detail-resize-handle {
@@ -694,14 +687,12 @@
             content: '';
             position: absolute;
             top: 2px;
-            left: 50%;
-            transform: translateX(-50%);
+            left: 0; right: 0; margin: 0 auto;
             width: 40px;
             height: 3px;
             border-radius: 2px;
             background: var(--text-muted);
             opacity: 0.4;
-            transition: opacity 0.2s;
         }
         .detail-resize-handle:hover::after,
         .detail-resize-handle:active::after {
@@ -713,8 +704,7 @@
             min-height: 0;
             padding: 16px 20px;
         }
-        body { transition: padding-bottom 0.3s ease; }
-        body.detail-open { padding-bottom: var(--detail-h, 45vh); height: auto; min-height: 100vh; overflow: visible; }
+        body.detail-open { padding-bottom: var(--detail-h, 45vh); height: auto; min-height: 100vh; overflow: visible; transition: padding 0.3s ease; }
         body.detail-open footer { display: none; }
         body.detail-open #app { overflow: visible; }
         body.detail-open .table-container { flex: none; }
@@ -828,7 +818,6 @@
             align-items: center;
             gap: 12px;
             font-size: 14px;
-            transition: margin-bottom 0.3s ease;
         }
         .bottom-bar .record-count { color: var(--text-muted); font-size: 13px; }
         .bottom-bar .spacer { flex: 1; }
@@ -934,7 +923,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.03.25</span>
+    <span class="subtitle">v2026.03.28</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -3971,11 +3960,8 @@ function switchTab(name, push) {
     } else if (name !== 'table' && currentDetailRecord) {
         // Save current panel height so it can be restored when switching back
         savedDetailH = document.documentElement.style.getPropertyValue('--detail-h');
-        document.body.style.transition = 'none';
         document.body.classList.remove('detail-open');
         document.documentElement.style.removeProperty('--detail-h');
-        document.body.offsetHeight; // force reflow
-        document.body.style.transition = '';
         panel.classList.remove('visible');
     }
     if (name === 'summary') renderEventSummary();
@@ -4020,33 +4006,24 @@ function sizeTableContainer() {
 function closeDetail(push) {
     const panel = $('detailPanel');
     if (!panel.classList.contains('visible')) return;
-    // Skip animation during history restoration (push === false)
-    if (push === false) {
-        document.body.style.transition = 'none';
-        panel.style.transition = 'none';
-    }
     panel.classList.remove('visible');
     document.body.classList.remove('detail-open');
-    document.documentElement.style.removeProperty('--detail-h');
-    panel.style.height = '';
-    document.body.style.paddingBottom = '';
-    const tc = document.querySelector('.table-container');
-    if (tc) tc.style.height = '';
     currentDetailRecord = null;
-    if (push === false) {
-        // Instant close: reflow, re-render, restore transitions
-        document.body.offsetHeight;
-        selectedRow = -1;
-        renderTable();
-        document.body.style.transition = '';
-        panel.style.transition = '';
-    } else {
+    if (push !== false) {
         syncURL(true);
-        setTimeout(() => {
-            selectedRow = -1;
-            renderTable();
-        }, 300);
     }
+    selectedRow = -1;
+    renderTable();
+    panel.addEventListener('transitionend', function onEnd(e) {
+        if (e.propertyName !== 'transform') return;
+        panel.removeEventListener('transitionend', onEnd);
+        if (panel.classList.contains('visible')) return; // reopened before animation finished
+        document.documentElement.style.removeProperty('--detail-h');
+        panel.style.height = '';
+        document.body.style.paddingBottom = '';
+        const tc = document.querySelector('.table-container');
+        if (tc) tc.style.height = '';
+    });
 }
 
 function stateFromHash() {
@@ -6060,20 +6037,14 @@ function showDetail(record, push) {
 
     renderDetailGrid(record, detailMode, $('showAllFields').checked);
 
-    // Apply padding instantly (no transition) and preserve scroll position
     const wasDetailOpen = document.body.classList.contains('detail-open');
     const scrollY = window.scrollY;
-    document.body.style.transition = 'none';
     document.body.classList.add('detail-open');
-    document.body.offsetHeight; // force reflow
-    document.body.style.transition = '';
     window.scrollTo(0, scrollY);
 
     // Calculate initial height: enough for 30 fields or 50vh, whichever is smaller
     if (!document.documentElement.style.getPropertyValue('--detail-h')) {
-        // Force visible to measure layout
-        panel.style.transition = 'none';
-        panel.style.transform = 'translateY(0)';
+        // Temporarily make visible to measure layout
         panel.style.visibility = 'visible';
         panel.offsetHeight; // reflow
 
@@ -6098,11 +6069,7 @@ function showDetail(record, push) {
             document.documentElement.style.setProperty('--detail-h', finalH + 'px');
         }
 
-        // Reset for animation
-        panel.style.transform = '';
         panel.style.visibility = '';
-        panel.offsetHeight; // reflow
-        panel.style.transition = '';
     }
 
     panel.classList.add('visible');
@@ -6329,7 +6296,6 @@ $('closeDetail').addEventListener('click', () => closeDetail(true));
     function onMouseUp() {
         panel.classList.remove('resizing');
         document.body.style.userSelect = '';
-        document.body.style.transition = '';
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
     }
@@ -6340,7 +6306,6 @@ $('closeDetail').addEventListener('click', () => closeDetail(true));
         startH = panel.getBoundingClientRect().height;
         panel.classList.add('resizing');
         document.body.style.userSelect = 'none';
-        document.body.style.transition = 'none';
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', onMouseUp);
     });
@@ -6810,7 +6775,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.03.25 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.03.28 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
