@@ -35,6 +35,9 @@
             overflow-y: auto;
             transition: padding 0.3s ease;
         }
+        body.resizing {
+            transition: none;
+        }
         header {
             background: var(--surface);
             border-bottom: 1px solid var(--border);
@@ -703,7 +706,7 @@
             min-height: 0;
             padding: 16px 20px;
         }
-        body.detail-open { padding-bottom: var(--detail-h, 45vh); height: auto; min-height: 100vh; overflow: visible; transition: padding 0.3s ease; }
+        body.detail-open { padding-bottom: var(--detail-h, 45vh); height: auto; min-height: 100vh; overflow: visible; }
         body.detail-open footer { display: none; }
         body.detail-open #app { overflow: visible; }
         body.detail-open .table-container { flex: none; }
@@ -6277,6 +6280,7 @@ $('closeDetail').addEventListener('click', () => closeDetail(true));
 
     function onMouseUp() {
         panel.classList.remove('resizing');
+        document.body.classList.remove('resizing');
         document.body.style.userSelect = '';
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
@@ -6287,6 +6291,7 @@ $('closeDetail').addEventListener('click', () => closeDetail(true));
         startY = e.clientY;
         startH = panel.getBoundingClientRect().height;
         panel.classList.add('resizing');
+        document.body.classList.add('resizing');
         document.body.style.userSelect = 'none';
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', onMouseUp);
