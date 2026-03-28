@@ -3942,7 +3942,7 @@ function switchTab(name, push) {
             }
             requestAnimationFrame(animateScroll);
         }
-    } else if (name !== 'table' && currentDetailRecord) {
+    } else if (name !== 'table' && currentDetailRecord && document.body.classList.contains('detail-open')) {
         // Save current panel height so it can be restored when switching back
         savedDetailH = document.documentElement.style.getPropertyValue('--detail-h');
         document.body.classList.remove('detail-open');
