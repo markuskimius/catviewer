@@ -7020,6 +7020,21 @@ function tlDraw() {
     ctx.beginPath(); ctx.moveTo(plotL, TL_AXIS_H); ctx.lineTo(plotR, TL_AXIS_H); ctx.stroke();
     ctx.restore();
 
+    // ── Find selected event info for highlighting ──
+    let selLaneIdx = -1, selEventT = null;
+    if (tlSelectedRecord) {
+        for (let i = 0; i < tlLanes.length; i++) {
+            for (const ev of tlLanes[i].events) {
+                if (ev.record === tlSelectedRecord) {
+                    selLaneIdx = i;
+                    selEventT = ev.t;
+                    break;
+                }
+            }
+            if (selLaneIdx >= 0) break;
+        }
+    }
+
     // ── Lane backgrounds + life-duration bars ──
     ctx.save();
     ctx.beginPath();
@@ -7028,6 +7043,11 @@ function tlDraw() {
     for (let i = firstLane; i <= lastLane; i++) {
         const node = tlLanes[i];
         const y = tlLaneY(i);
+        // Selected lane highlight
+        if (i === selLaneIdx) {
+            ctx.fillStyle = 'rgba(96, 165, 250, 0.12)';
+            ctx.fillRect(plotL, y, plotW, TL_LANE_H);
+        }
         // Alternating background
         if (i % 2 === 0) {
             ctx.fillStyle = 'rgba(30, 41, 59, 0.4)';
@@ -7148,6 +7168,23 @@ function tlDraw() {
         }
     }
 
+    // ── Selected event time crosshair ──
+    if (selEventT !== null) {
+        const sx = tlTimeToX(selEventT);
+        if (sx >= plotL && sx <= plotR) {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(96, 165, 250, 0.4)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.moveTo(sx, TL_AXIS_H);
+            ctx.lineTo(sx, H);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.restore();
+        }
+    }
+
     // ── Lane labels (left area) ──
     ctx.save();
     ctx.beginPath();
@@ -7164,6 +7201,12 @@ function tlDraw() {
         const y = tlLaneY(i);
         const cy = y + TL_LANE_H / 2;
         const indent = 8 + node.depth * TL_INDENT;
+
+        // Selected lane highlight background
+        if (i === selLaneIdx) {
+            ctx.fillStyle = 'rgba(96, 165, 250, 0.18)';
+            ctx.fillRect(0, y, TL_LABEL_W, TL_LANE_H);
+        }
 
         // Collapse/expand triangle
         if (node.hasChildren) {
@@ -7187,7 +7230,7 @@ function tlDraw() {
         // Order ID label
         const textX = indent + (node.hasChildren ? 14 : 4);
         const maxW = TL_LABEL_W - textX - 6;
-        ctx.fillStyle = '#cbd5e1';
+        ctx.fillStyle = i === selLaneIdx ? '#60a5fa' : '#cbd5e1';
         ctx.textAlign = 'left';
         ctx.fillText(node.orderID, textX, cy, maxW);
 
@@ -7352,6 +7395,21 @@ function tlUpdateScrollbars() {
 
     if (tlHeatmapDirty) tlBuildHeatmapBuckets();
 
+    // Find selected event for scrollbar markers
+    let selEventT = null, selLaneIdx = -1;
+    if (tlSelectedRecord) {
+        for (let i = 0; i < tlLanes.length; i++) {
+            for (const ev of tlLanes[i].events) {
+                if (ev.record === tlSelectedRecord) {
+                    selLaneIdx = i;
+                    selEventT = ev.t;
+                    break;
+                }
+            }
+            if (selLaneIdx >= 0) break;
+        }
+    }
+
     // Horizontal
     const hThumb = $('tlSbHThumb');
     const hTrack = $('tlSbH');
@@ -7362,7 +7420,22 @@ function tlUpdateScrollbars() {
         hThumb.style.width = thumbW + 'px';
         const scrollFrac = tlViewX / Math.max(1, totalTimeW - plotW);
         hThumb.style.left = (scrollFrac * (hTrack.clientWidth - thumbW)) + 'px';
-        tlDrawHeatmap($('tlSbHHeat'), tlHeatBucketsH, false);
+        const hHeat = $('tlSbHHeat');
+        tlDrawHeatmap(hHeat, tlHeatBucketsH, false);
+        // Draw selected event time marker
+        if (selEventT !== null && timeRange > 0) {
+            const frac = (selEventT - tlTimeMin) / timeRange;
+            const mx = frac * hHeat.clientWidth;
+            const hCtx = hHeat.getContext('2d');
+            const hdpr = window.devicePixelRatio || 1;
+            hCtx.setTransform(hdpr, 0, 0, hdpr, 0, 0);
+            hCtx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+            hCtx.lineWidth = 1.5;
+            hCtx.beginPath();
+            hCtx.moveTo(mx, 0);
+            hCtx.lineTo(mx, hHeat.clientHeight);
+            hCtx.stroke();
+        }
     } else {
         hTrack.style.display = 'none';
     }
@@ -7377,7 +7450,22 @@ function tlUpdateScrollbars() {
         vThumb.style.height = thumbH + 'px';
         const scrollFrac = tlViewY / Math.max(1, totalH - visH);
         vThumb.style.top = (scrollFrac * (vTrack.clientHeight - thumbH)) + 'px';
-        tlDrawHeatmap($('tlSbVHeat'), tlHeatBucketsV, true);
+        const vHeat = $('tlSbVHeat');
+        tlDrawHeatmap(vHeat, tlHeatBucketsV, true);
+        // Draw selected lane marker
+        if (selLaneIdx >= 0 && tlLanes.length > 0) {
+            const frac = (selLaneIdx + 0.5) / tlLanes.length;
+            const my = frac * vHeat.clientHeight;
+            const vCtx = vHeat.getContext('2d');
+            const vdpr = window.devicePixelRatio || 1;
+            vCtx.setTransform(vdpr, 0, 0, vdpr, 0, 0);
+            vCtx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+            vCtx.lineWidth = 1.5;
+            vCtx.beginPath();
+            vCtx.moveTo(0, my);
+            vCtx.lineTo(vHeat.clientWidth, my);
+            vCtx.stroke();
+        }
     } else {
         vTrack.style.display = 'none';
     }
