@@ -455,6 +455,8 @@
         }
         tr:hover td { background: rgba(59, 130, 246, 0.04); }
         tr.selected td { background: rgba(59, 130, 246, 0.1); }
+        tr.vs-spacer td { padding: 0; border: none; }
+        tbody tr:not(.vs-spacer) { height: 35px; max-height: 35px; overflow: hidden; }
 
         .event-type {
             display: inline-block;
@@ -1248,6 +1250,14 @@ let ignoredErrors = new Set(); // keys: "code" (global) or "code:field" (field-s
 let validationEnabled = true;
 let dragSrcColIdx = null;
 let colMgrDragIdx = null;
+
+// Virtual scrolling state
+const ROW_HEIGHT = 35; // measured: 8px pad + ~18px text + 8px pad + 1px border
+const VS_BUFFER = 10;  // extra rows above/below viewport
+let vsCurrentRange = null; // {start, end} of currently rendered rows
+let vsPageRecords = null; // records for the current page (cached between scroll frames)
+let vsTbody = null; // reference to the tbody element
+let vsRafId = null; // requestAnimationFrame ID for scroll handler
 let hiddenColumns = new Set();
 const undoStack = [];
 const redoStack = [];
@@ -4146,6 +4156,7 @@ function enterOrderChain(orderID, depth) {
             const page = PAGE_SIZE === Infinity ? 0 : Math.floor(idx / PAGE_SIZE);
             if (page !== currentPage) currentPage = page;
             renderTable();
+            vsScrollToRow(idx);
         }
     }
 }
@@ -4370,6 +4381,9 @@ function initializeUI() {
 
     // Summary cards
     renderSummaryCards();
+
+    // Set up event delegation for virtual-scrolled table body (once)
+    ensureTableDelegation();
 
     // On first file load, apply filters from URL; on subsequent loads, start clean
     if (!initializeUI._loaded) {
@@ -5466,9 +5480,107 @@ function applyFilters(skipSync) {
     if (!skipSync) syncURL(false);
 }
 
+function renderRowHtml(record, globalIdx, visCols) {
+    const chainEntry = chainDisplayData ? chainDisplayData[globalIdx] : null;
+    const groupFirst = chainEntry && chainEntry.isFirstOfOrder && chainEntry.depth > 0;
+    const visErrors = validationEnabled ? getVisibleErrors(record._errors) : null;
+    const hasErrors = visErrors && Object.keys(visErrors).length > 0;
+    let cls = selectedRow === globalIdx ? 'selected' : '';
+    if (groupFirst) cls += ' order-group-first';
+    let h = `<tr data-idx="${globalIdx}" class="${cls}" style="height:${ROW_HEIGHT}px">`;
+    h += `<td>${hasErrors ? '<span class="val-icon" title="Validation errors">\u26A0</span>' : ''}${record._idx + 1}</td>`;
+    if (chainDisplayData) {
+        h += `<td class="tree-cell">${chainEntry ? escapeHtml(chainEntry.treePrefix) : ''}</td>`;
+    }
+    for (const col of visCols) {
+        const errs = visErrors && visErrors[col];
+        const parentErrs = !errs && col.includes('.') && visErrors && visErrors[col.split('.')[0]];
+        const allErrs = errs || parentErrs;
+        const errCls = allErrs ? (allErrs.some(e => e.severity === 'error') ? ' val-error' : ' val-warn') : '';
+        const errTip = allErrs ? allErrs.map(formatErrorWithCode).join('; ') : '';
+        h += `<td${errCls ? ` class="${errCls}"` : ''}${errTip ? ` data-tooltip="${escapeHtml(errTip)}"` : ''}>${formatCell(col, record[col])}</td>`;
+    }
+    h += '</tr>';
+    return h;
+}
+
+function vsRenderRows(force) {
+    const container = $('tableContainer');
+    if (!vsTbody || !vsPageRecords) return;
+    const totalRows = vsPageRecords.length;
+    if (totalRows === 0) {
+        vsTbody.innerHTML = '';
+        vsCurrentRange = null;
+        return;
+    }
+
+    const scrollTop = container.scrollTop;
+    const theadH = container.querySelector('thead') ? container.querySelector('thead').offsetHeight : 0;
+    const viewH = container.clientHeight - theadH;
+    const firstVisible = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT));
+    const visibleCount = Math.ceil(viewH / ROW_HEIGHT) + 1;
+    const start = Math.max(0, firstVisible - VS_BUFFER);
+    const end = Math.min(totalRows, firstVisible + visibleCount + VS_BUFFER);
+
+    // Skip re-render if range hasn't changed
+    if (!force && vsCurrentRange && vsCurrentRange.start === start && vsCurrentRange.end === end) return;
+    vsCurrentRange = {start, end};
+
+    const visCols = visibleColumns();
+    const pageStart = PAGE_SIZE === Infinity ? 0 : currentPage * PAGE_SIZE;
+    const colCount = visCols.length + 1 + (chainDisplayData ? 1 : 0); // +1 for # col
+
+    let html = '';
+    // Top spacer
+    if (start > 0) {
+        html += `<tr class="vs-spacer" style="height:${start * ROW_HEIGHT}px"><td colspan="${colCount}"></td></tr>`;
+    }
+    // Visible rows
+    for (let i = start; i < end; i++) {
+        html += renderRowHtml(vsPageRecords[i], pageStart + i, visCols);
+    }
+    // Bottom spacer
+    if (end < totalRows) {
+        html += `<tr class="vs-spacer" style="height:${(totalRows - end) * ROW_HEIGHT}px"><td colspan="${colCount}"></td></tr>`;
+    }
+    vsTbody.innerHTML = html;
+}
+
+function vsLockColumnWidths() {
+    const table = $('tableContainer').querySelector('table');
+    if (!table || !vsPageRecords || !vsPageRecords.length) return;
+    const ths = table.querySelectorAll('thead th');
+
+    // Reset to auto layout for measurement
+    ths.forEach(th => { th.style.width = ''; });
+    table.style.tableLayout = '';
+
+    // Sample ~200 rows spread evenly across the full page dataset
+    const total = vsPageRecords.length;
+    const sampleSize = Math.min(total, 200);
+    const step = total / sampleSize;
+    const visCols = visibleColumns();
+    const pageStart = PAGE_SIZE === Infinity ? 0 : currentPage * PAGE_SIZE;
+    let sampleHtml = '';
+    for (let s = 0; s < sampleSize; s++) {
+        const i = Math.min(Math.floor(s * step), total - 1);
+        sampleHtml += renderRowHtml(vsPageRecords[i], pageStart + i, visCols);
+    }
+    vsTbody.innerHTML = sampleHtml;
+
+    // Measure auto-layout widths from the sample, then freeze them
+    const widths = Array.from(ths).map(th => th.offsetWidth);
+    ths.forEach((th, i) => { th.style.width = widths[i] + 'px'; });
+    table.style.tableLayout = 'fixed';
+
+    // Replace sample with actual virtual-scrolled rows
+    vsRenderRows(true);
+}
+
 function renderTable() {
     const start = PAGE_SIZE === Infinity ? 0 : currentPage * PAGE_SIZE;
-    const pageRecords = PAGE_SIZE === Infinity ? filteredRecords : filteredRecords.slice(start, start + PAGE_SIZE);
+    vsPageRecords = PAGE_SIZE === Infinity ? filteredRecords : filteredRecords.slice(start, start + PAGE_SIZE);
+    vsCurrentRange = null;
 
     const visCols = visibleColumns();
     let html = '<table><thead><tr>';
@@ -5484,34 +5596,13 @@ function renderTable() {
         const sortNum = si >= 0 && sortKeys.length > 1 ? `<span class="sort-num">${si + 1}</span>` : '';
         html += `<th data-col="${escapeHtml(col)}" data-col-idx="${ci}" draggable="true">${escapeHtml(col)}<span class="sort-arrow">${arrow}${sortNum}</span></th>`;
     }
-    html += '</tr></thead><tbody>';
-
-    pageRecords.forEach((record, idx) => {
-        const globalIdx = start + idx;
-        const chainEntry = chainDisplayData ? chainDisplayData[globalIdx] : null;
-        const groupFirst = chainEntry && chainEntry.isFirstOfOrder && chainEntry.depth > 0;
-        const visErrors = validationEnabled ? getVisibleErrors(record._errors) : null;
-        const hasErrors = visErrors && Object.keys(visErrors).length > 0;
-        let cls = selectedRow === globalIdx ? 'selected' : '';
-        if (groupFirst) cls += ' order-group-first';
-        html += `<tr data-idx="${globalIdx}" class="${cls}">`;
-        html += `<td>${hasErrors ? '<span class="val-icon" title="Validation errors">\u26A0</span>' : ''}${record._idx + 1}</td>`;
-        if (chainDisplayData) {
-            html += `<td class="tree-cell">${chainEntry ? escapeHtml(chainEntry.treePrefix) : ''}</td>`;
-        }
-        for (const col of visCols) {
-            const errs = visErrors && visErrors[col];
-            const parentErrs = !errs && col.includes('.') && visErrors && visErrors[col.split('.')[0]];
-            const allErrs = errs || parentErrs;
-            const errCls = allErrs ? (allErrs.some(e => e.severity === 'error') ? ' val-error' : ' val-warn') : '';
-            const errTip = allErrs ? allErrs.map(formatErrorWithCode).join('; ') : '';
-            html += `<td${errCls ? ` class="${errCls}"` : ''}${errTip ? ` data-tooltip="${escapeHtml(errTip)}"` : ''}>${formatCell(col, record[col])}</td>`;
-        }
-        html += '</tr>';
-    });
-
-    html += '</tbody></table>';
+    html += '</tr></thead><tbody></tbody></table>';
     $('tableContainer').innerHTML = html;
+    vsTbody = $('tableContainer').querySelector('tbody');
+
+    // Render initial visible rows, then lock column widths so they don't shift on scroll
+    vsRenderRows(true);
+    vsLockColumnWidths();
 
     // Pagination
     const totalPages = Math.max(1, Math.ceil(filteredRecords.length / PAGE_SIZE));
@@ -5541,31 +5632,56 @@ function renderTable() {
         renderTable();
     });
 
-    // Row click handlers — skip if user is selecting text
-    $('tableContainer').querySelectorAll('tr[data-idx]').forEach(tr => {
-        tr.addEventListener('click', () => {
+    // Set up column header event handlers (delegated from thead)
+    setupColumnHeaders();
+}
+
+// ── Event delegation for table body ──
+// Attached once, handles all row/link clicks regardless of virtual scroll re-renders
+let _tableDelegationAttached = false;
+function ensureTableDelegation() {
+    if (_tableDelegationAttached) return;
+    _tableDelegationAttached = true;
+    const container = $('tableContainer');
+
+    // Scroll handler for virtual scrolling
+    container.addEventListener('scroll', () => {
+        if (vsRafId) return;
+        vsRafId = requestAnimationFrame(() => {
+            vsRafId = null;
+            vsRenderRows(false);
+        });
+    });
+
+    // Row click — delegated
+    container.addEventListener('click', e => {
+        // Yahoo Finance links — let them propagate naturally (they're <a> tags)
+        if (e.target.closest('.yahoo-link')) return;
+
+        // Linkage field click
+        const link = e.target.closest('.order-link');
+        if (link) {
+            e.stopPropagation();
+            handleLinkClick(link);
+            return;
+        }
+
+        // Row click — skip if selecting text
+        const tr = e.target.closest('tr[data-idx]');
+        if (tr) {
             const sel = window.getSelection();
             if (sel && sel.toString().length > 0) return;
             selectedRow = parseInt(tr.dataset.idx);
             showDetail(filteredRecords[selectedRow]);
-        });
+        }
     });
+}
 
-    // Linkage field click handlers
-    $('tableContainer').querySelectorAll('.order-link').forEach(el => {
-        el.addEventListener('click', e => {
-            e.stopPropagation();
-            handleLinkClick(el);
-        });
-    });
-
-    // Yahoo Finance link handlers — stop propagation so row click doesn't fire
-    $('tableContainer').querySelectorAll('.yahoo-link').forEach(el => {
-        el.addEventListener('click', e => e.stopPropagation());
-    });
+function setupColumnHeaders() {
+    const container = $('tableContainer');
 
     // Column sort handlers (click cycles asc→desc→unsort; Shift+click adds secondary sort)
-    $('tableContainer').querySelectorAll('th[data-col]').forEach(th => {
+    container.querySelectorAll('th[data-col]').forEach(th => {
         th.addEventListener('click', (e) => {
             if (th._wasDragged) { th._wasDragged = false; return; }
             const col = th.dataset.col;
@@ -5586,7 +5702,7 @@ function renderTable() {
     });
 
     // Column drag-to-reorder handlers (visible index → full columns array)
-    $('tableContainer').querySelectorAll('th[draggable="true"]').forEach(th => {
+    container.querySelectorAll('th[draggable="true"]').forEach(th => {
         th.addEventListener('dragstart', e => {
             dragSrcColIdx = parseInt(th.dataset.colIdx);
             th.classList.add('dragging');
@@ -5595,7 +5711,7 @@ function renderTable() {
         });
         th.addEventListener('dragend', () => {
             th.classList.remove('dragging');
-            $('tableContainer').querySelectorAll('th').forEach(h => {
+            container.querySelectorAll('th').forEach(h => {
                 h.classList.remove('drag-over-left', 'drag-over-right');
             });
             dragSrcColIdx = null;
@@ -5605,7 +5721,7 @@ function renderTable() {
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
             const targetIdx = parseInt(th.dataset.colIdx);
-            $('tableContainer').querySelectorAll('th').forEach(h => {
+            container.querySelectorAll('th').forEach(h => {
                 h.classList.remove('drag-over-left', 'drag-over-right');
             });
             if (targetIdx !== dragSrcColIdx) {
@@ -5643,6 +5759,27 @@ function renderTable() {
             menu.classList.add('visible');
         });
     });
+}
+
+// Scroll a filtered record index into view within the virtual-scrolled table
+function vsScrollToRow(filteredIdx) {
+    const container = $('tableContainer');
+    const pageStart = PAGE_SIZE === Infinity ? 0 : currentPage * PAGE_SIZE;
+    const rowInPage = filteredIdx - pageStart;
+    if (rowInPage < 0 || rowInPage >= (vsPageRecords ? vsPageRecords.length : 0)) return;
+    const theadH = container.querySelector('thead') ? container.querySelector('thead').offsetHeight : 0;
+    // Row position in scroll content: theadH + rowInPage * ROW_HEIGHT
+    // Visible tbody area: [scrollTop + theadH, scrollTop + clientHeight]
+    const rowScrollTop = theadH + rowInPage * ROW_HEIGHT;
+    const viewTop = container.scrollTop + theadH;
+    const viewBottom = container.scrollTop + container.clientHeight;
+    if (rowScrollTop < viewTop) {
+        container.scrollTop = rowInPage * ROW_HEIGHT; // puts row just below sticky header
+    } else if (rowScrollTop + ROW_HEIGHT > viewBottom) {
+        container.scrollTop = rowScrollTop + ROW_HEIGHT - container.clientHeight;
+    }
+    // Force re-render to ensure the row is in the DOM
+    vsRenderRows(true);
 }
 
 const FIELD_LABELS = {
@@ -6072,21 +6209,7 @@ function showDetail(record, push) {
         const page = Math.floor(filteredIdx / PAGE_SIZE);
         if (page !== currentPage) currentPage = page;
         renderTable();
-        // Scroll the selected row into view within the table container
-        const selectedTr = $('tableContainer').querySelector('tr.selected');
-        if (selectedTr) {
-            const container = $('tableContainer');
-            const stickyH = container.querySelector('thead') ? container.querySelector('thead').offsetHeight : 0;
-            const rowTop = selectedTr.offsetTop - stickyH;
-            const rowBottom = selectedTr.offsetTop + selectedTr.offsetHeight;
-            const viewTop = container.scrollTop + stickyH;
-            const viewBottom = container.scrollTop + container.clientHeight;
-            if (rowTop < viewTop) {
-                container.scrollTop = rowTop - stickyH;
-            } else if (rowBottom > viewBottom) {
-                container.scrollTop = rowBottom - container.clientHeight;
-            }
-        }
+        vsScrollToRow(filteredIdx);
     }
 
     if (push !== false) {
@@ -6200,6 +6323,7 @@ $('depthControls').addEventListener('click', e => {
             const page = PAGE_SIZE === Infinity ? 0 : Math.floor(idx / PAGE_SIZE);
             if (page !== currentPage) currentPage = page;
             renderTable();
+            vsScrollToRow(idx);
         }
     }
     window.scrollTo(0, scrollY);
