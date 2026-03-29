@@ -32,11 +32,7 @@
             height: 100vh;
             display: flex;
             flex-direction: column;
-            overflow-y: auto;
-            transition: padding 0.3s ease;
-        }
-        body.resizing {
-            transition: none;
+            overflow: hidden;
         }
         header {
             background: var(--surface);
@@ -202,7 +198,7 @@
         }
 
         #tabTable { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-        #tabSummary, #tabRaw { flex: 1; }
+        #tabSummary, #tabRaw { flex: 1; display: flex; flex-direction: column; min-height: 0; }
         .table-container {
             margin: 0 24px 8px;
             overflow: auto;
@@ -706,7 +702,7 @@
             min-height: 0;
             padding: 16px 20px;
         }
-        body.detail-open { padding-bottom: var(--detail-h, 45vh); height: auto; min-height: 100vh; overflow: visible; }
+        body.detail-open { padding-bottom: var(--detail-h, 45vh); height: auto; min-height: 100vh; }
         body.detail-open footer { display: none; }
         body.detail-open #app { overflow: visible; }
         body.detail-open .table-container { flex: none; }
@@ -877,11 +873,11 @@
             border: 1px solid var(--border);
             border-radius: 8px;
             padding: 16px;
+            flex: 1;
             font-family: 'SF Mono', 'Fira Code', monospace;
             font-size: 12px;
             white-space: pre-wrap;
             word-break: break-all;
-            max-height: 500px;
             overflow-y: auto;
             display: none;
         }
@@ -3980,7 +3976,10 @@ function sizeTableContainer() {
         const visibleDetailH = Math.max(0, window.innerHeight - panelRect.top);
         const tableH = window.innerHeight - headerH * 2 - tabBarH - gap - visibleDetailH;
         tc.style.height = Math.max(100, tableH) + 'px';
-        window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight);
+        window.scrollTo({
+            top     : document.documentElement.scrollHeight - window.innerHeight,
+            behavior: 'smooth',
+        });
         if (panel.classList.contains('visible') && visibleDetailH < detailH) {
             requestAnimationFrame(tick);
         }
@@ -3992,7 +3991,7 @@ function closeDetail(push) {
     const panel = $('detailPanel');
     if (!panel.classList.contains('visible')) return;
     panel.classList.remove('visible');
-    document.body.classList.remove('detail-open');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     currentDetailRecord = null;
     if (push !== false) {
         syncURL(true);
@@ -4006,6 +4005,7 @@ function closeDetail(push) {
         document.documentElement.style.removeProperty('--detail-h');
         panel.style.height = '';
         document.body.style.paddingBottom = '';
+        document.body.classList.remove('detail-open');
         const tc = document.querySelector('.table-container');
         if (tc) tc.style.height = '';
     });
@@ -5548,7 +5548,6 @@ function renderTable() {
             if (sel && sel.toString().length > 0) return;
             selectedRow = parseInt(tr.dataset.idx);
             showDetail(filteredRecords[selectedRow]);
-            renderTable();
         });
     });
 
@@ -6025,7 +6024,10 @@ function showDetail(record, push) {
     const wasDetailOpen = document.body.classList.contains('detail-open');
     const scrollY = window.scrollY;
     document.body.classList.add('detail-open');
-    window.scrollTo(0, scrollY);
+    window.scrollTo({
+        top     : scrollY,
+        behavior: 'smooth',
+    });
 
     // Calculate initial height: enough for 30 fields or 50vh, whichever is smaller
     if (!document.documentElement.style.getPropertyValue('--detail-h')) {
@@ -6126,7 +6128,7 @@ function renderEventSummary() {
 }
 
 function renderRawTab() {
-    const maxShow = 50;
+    const maxShow = Infinity;
     const sample = allRecords.slice(0, maxShow);
     const replacer = (k, v) => (k === '_idx' || k === '_timeInForce_original' || k === '_errors' || k === '_original') ? undefined : v;
     $('rawContent').textContent = JSON.stringify(sample, replacer, 2) +
