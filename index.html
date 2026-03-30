@@ -226,7 +226,12 @@
             box-shadow: 0 1px 6px rgba(96, 165, 250, 0.25);
         }
         .tl-fit-btn:active { transform: scale(0.92); }
+        .tl-fit-btn.zoomed {
+            background: rgba(37, 99, 235, 0.25); border-color: rgba(96, 165, 250, 0.6);
+            box-shadow: 0 1px 6px rgba(96, 165, 250, 0.3);
+        }
         .tl-fit-btn svg { width: 14px; height: 14px; stroke: #64748b; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+        .tl-fit-btn.zoomed svg { stroke: #93c5fd; }
         .tl-fit-btn:hover svg { stroke: #e2e8f0; }
         .tl-tooltip {
             display: none; position: absolute; pointer-events: none;
@@ -7056,6 +7061,11 @@ function tlDraw() {
     const totalH = tlLanes.length * TL_LANE_H;
     const visH = H - TL_AXIS_H;
     tlViewY = Math.max(0, Math.min(tlViewY, Math.max(0, totalH - visH)));
+
+    // Update fit button highlight when zoomed/panned away from home
+    const homeZoom = plotW / timeRange;
+    const isHome = Math.abs(tlZoom - homeZoom) < homeZoom * 0.01 && tlViewX < 1 && tlViewY < 1;
+    $('tlFitBtn').classList.toggle('zoomed', !isHome);
 
     // Visible lane range
     const firstLane = Math.max(0, Math.floor(tlViewY / TL_LANE_H));
