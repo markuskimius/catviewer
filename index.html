@@ -1300,6 +1300,7 @@ let sortKeys = []; // [{col, asc}, ...] multi-column sort
 let currentPage = 0;
 let PAGE_SIZE = 100;
 let selectedRow = -1;
+let _pendingScrollToRow = -1;
 let orderIndex = {};
 let orderChainRoot = null;
 let orderChainDepth = Infinity;
@@ -4118,6 +4119,11 @@ function switchTab(name, push) {
     }
     if (name === 'timeline') tlRender();
     if (name === 'summary') renderEventSummary();
+    // Scroll to pending row AFTER all layout (detail panel, container sizing) is finalized
+    if (name === 'table' && _pendingScrollToRow >= 0) {
+        vsScrollToRow(_pendingScrollToRow);
+        _pendingScrollToRow = -1;
+    }
     if (push) syncURL(true);
 }
 
@@ -5987,15 +5993,15 @@ function vsScrollToRow(filteredIdx) {
     const rowInPage = filteredIdx - pageStart;
     if (rowInPage < 0 || rowInPage >= (vsPageRecords ? vsPageRecords.length : 0)) return;
     const theadH = container.querySelector('thead') ? container.querySelector('thead').offsetHeight : 0;
-    // Row position in scroll content: theadH + rowInPage * ROW_HEIGHT
-    // Visible tbody area: [scrollTop + theadH, scrollTop + clientHeight]
-    const rowScrollTop = theadH + rowInPage * ROW_HEIGHT;
+    // Row position in scroll content (tbody starts after thead)
+    const rowContentTop = theadH + rowInPage * ROW_HEIGHT;
+    // Visible tbody area: sticky thead covers top theadH pixels of viewport
+    const visibleTbodyH = container.clientHeight - theadH;
     const viewTop = container.scrollTop + theadH;
     const viewBottom = container.scrollTop + container.clientHeight;
-    if (rowScrollTop < viewTop) {
-        container.scrollTop = rowInPage * ROW_HEIGHT; // puts row just below sticky header
-    } else if (rowScrollTop + ROW_HEIGHT > viewBottom) {
-        container.scrollTop = rowScrollTop + ROW_HEIGHT - container.clientHeight;
+    if (rowContentTop < viewTop || rowContentTop + ROW_HEIGHT > viewBottom) {
+        // Center the row in the visible tbody area
+        container.scrollTop = rowContentTop - theadH - (visibleTbodyH - ROW_HEIGHT) / 2;
     }
     // Force re-render to ensure the row is in the DOM
     vsRenderRows(true);
@@ -6373,8 +6379,12 @@ function showDetail(record, push) {
 
     currentDetailRecord = record;
     tlSelectedRecord = record;
+    _tlSelCache = null; // invalidate cache for new selection
     tlDirty = true;
-    if (activeTab === 'timeline') tlScheduleDraw();
+    if (activeTab === 'timeline') {
+        tlScrollToSelected();
+        tlScheduleDraw();
+    }
     const typeTooltip = FIELD_TOOLTIPS.type[record.type] || '';
     $('detailTitle').innerHTML = `Record Detail &mdash; <span class="event-type ${cls}"${typeTooltip ? ` data-tooltip="${escapeHtml(typeTooltip)}"` : ''}>${escapeHtml(record.type || 'Unknown')}</span>`;
 
@@ -6431,7 +6441,11 @@ function showDetail(record, push) {
         const page = Math.floor(filteredIdx / PAGE_SIZE);
         if (page !== currentPage) currentPage = page;
         renderTable();
-        vsScrollToRow(filteredIdx);
+        if (activeTab === 'table') {
+            vsScrollToRow(filteredIdx);
+        } else {
+            _pendingScrollToRow = filteredIdx;
+        }
     }
 
     if (push !== false) {
@@ -6942,6 +6956,47 @@ function tlSizeCanvas() {
     if (w <= 0 || h <= 0) return;
     canvas.width = w * dpr;
     canvas.height = h * dpr;
+}
+
+function tlScrollToSelected() {
+    if (!tlSelectedRecord || !tlLanes.length) return;
+    // Find lane and time of selected event
+    let laneIdx = -1, eventT = null;
+    if (_tlSelCache && _tlSelCache.record === tlSelectedRecord) {
+        laneIdx = _tlSelCache.laneIdx;
+        eventT = _tlSelCache.eventT;
+    } else {
+        for (let i = 0; i < tlLanes.length; i++) {
+            for (const ev of tlLanes[i].events) {
+                if (ev.record === tlSelectedRecord) {
+                    laneIdx = i;
+                    eventT = ev.t;
+                    break;
+                }
+            }
+            if (laneIdx >= 0) break;
+        }
+        if (laneIdx >= 0) _tlSelCache = { record: tlSelectedRecord, laneIdx, eventT };
+    }
+    if (laneIdx < 0 || eventT === null) return;
+
+    const canvas = $('timelineCanvas');
+    const dpr = window.devicePixelRatio || 1;
+    const W = canvas.width / dpr;
+    const H = canvas.height / dpr;
+    const plotW = W - TL_LABEL_W;
+    const visH = H - TL_AXIS_H;
+    const timeRange = tlTimeMax - tlTimeMin;
+    const totalTimeW = timeRange * tlZoom;
+    const totalH = tlLanes.length * TL_LANE_H;
+
+    // Center horizontally on the event time
+    const eventX = (eventT - tlTimeMin) * tlZoom;
+    tlViewX = Math.max(0, Math.min(eventX - plotW / 2, totalTimeW - plotW));
+
+    // Center vertically on the event lane
+    const eventY = laneIdx * TL_LANE_H;
+    tlViewY = Math.max(0, Math.min(eventY - visH / 2 + TL_LANE_H / 2, Math.max(0, totalH - visH)));
 }
 
 function tlDraw() {
@@ -7688,6 +7743,7 @@ function tlRender() {
         tlViewY = 0;
     }
     tlSelectedRecord = currentDetailRecord;
+    if (tlSelectedRecord) tlScrollToSelected();
 
     if (!tlInitialized) {
         tlInitialized = true;
