@@ -1010,6 +1010,7 @@
                         <button class="tools-menu-item" id="exportBtn">Export CSV</button>
                         <div class="tools-menu-sep"></div>
                         <button class="tools-menu-item" id="validationToggle">&#10003; Validation</button>
+                        <button class="tools-menu-item" id="perfToggle">Performance</button>
                     </div>
                 </div>
                 <input type="file" id="importLayoutInput" accept=".json" style="display:none">
@@ -1049,6 +1050,19 @@
 
     <div id="tabRaw" style="display:none">
         <div class="raw-json visible" id="rawContent" style="margin:16px 24px"></div>
+    </div>
+
+    <div id="perfPanel" style="display:none; position:fixed; bottom:40px; right:16px; z-index:9999; width:320px; background:rgba(15,23,42,0.95); border:1px solid rgba(71,85,105,0.6); border-radius:8px; font-family:ui-monospace,SFMono-Regular,monospace; font-size:11px; color:#cbd5e1; box-shadow:0 4px 20px rgba(0,0,0,0.4);">
+        <div id="perfPanelHeader" style="display:flex; justify-content:space-between; align-items:center; padding:6px 10px; border-bottom:1px solid rgba(71,85,105,0.4); cursor:move; user-select:none;">
+            <span style="font-weight:600; font-size:12px;">Performance</span>
+            <button id="perfClear" style="background:none; border:none; color:#64748b; cursor:pointer; font-size:11px; padding:2px 6px;">Clear</button>
+        </div>
+        <div id="perfBody" style="padding:6px 10px; max-height:300px; overflow-y:auto;">
+            <table style="width:100%; border-collapse:collapse;">
+                <thead><tr style="color:#64748b; font-size:10px; text-align:right;"><th style="text-align:left; padding:2px 4px;">Label</th><th style="padding:2px 4px;">Last</th><th style="padding:2px 4px;">Avg</th><th style="padding:2px 4px;">Cnt</th></tr></thead>
+                <tbody id="perfRows"></tbody>
+            </table>
+        </div>
     </div>
 
     <div class="detail-panel" id="detailPanel">
@@ -1296,6 +1310,32 @@ let ignoredErrors = new Set(); // keys: "code" (global) or "code:field" (field-s
 let validationEnabled = true;
 let dragSrcColIdx = null;
 let colMgrDragIdx = null;
+
+// Performance instrumentation
+const Perf = {
+    _timers: {}, _log: [], _enabled: false,
+    start(label) { if (this._enabled) this._timers[label] = performance.now(); },
+    end(label) {
+        if (!this._enabled || !this._timers[label]) return 0;
+        const ms = performance.now() - this._timers[label];
+        this._log.push({ label, ms, ts: Date.now() });
+        if (this._log.length > 200) this._log.shift();
+        delete this._timers[label];
+        return ms;
+    },
+    clear() { this._log = []; this._timers = {}; },
+    summary() {
+        const byLabel = {};
+        for (const e of this._log) {
+            if (!byLabel[e.label]) byLabel[e.label] = { count: 0, total: 0, last: 0 };
+            byLabel[e.label].count++;
+            byLabel[e.label].total += e.ms;
+            byLabel[e.label].last = e.ms;
+        }
+        return byLabel;
+    },
+};
+const _collator = new Intl.Collator(undefined, { sensitivity: 'base' });
 
 // Virtual scrolling state
 const ROW_HEIGHT = 35; // measured: 8px pad + ~18px text + 8px pad + 1px border
@@ -3247,12 +3287,14 @@ function processFileText(file, text, append) {
 
         const fmt = detectFormat(file.name, text);
 
+        Perf.start('parse');
         let newRecords;
         if (fmt === 'json') {
             newRecords = parseJSON(text);
         } else {
             newRecords = parseCSV(text);
         }
+        Perf.end('parse');
 
         if (!newRecords.length) {
             showError('No records found in file.');
@@ -3277,9 +3319,9 @@ function processFileText(file, text, append) {
         }
 
         // Flatten nested objects for display
-        // Validate records against schema before flattening
-        newRecords.forEach(r => { r._errors = validateRecord(r, fmt); });
+        Perf.start('flatten');
         newRecords = newRecords.map(flattenRecord);
+        Perf.end('flatten');
 
         if (append) {
             allRecords = allRecords.concat(newRecords);
@@ -3290,12 +3332,54 @@ function processFileText(file, text, append) {
         loadedFiles.push({ name: file.name, format: fmt, size: file.size, count: newRecords.length });
         fileFormat = fmt;
         allRecords.forEach((r, i) => r._idx = i);
+        Perf.start('buildIndex');
         buildOrderIndex();
+        Perf.end('buildIndex');
 
+        Perf.start('initUI');
         initializeUI();
+        Perf.end('initUI');
+
+        // Deferred chunked validation — runs after UI is rendered
+        deferValidation(allRecords, fmt);
     } catch (err) {
         showError('Error parsing file: ' + err.message);
     }
+}
+
+let _validationPending = false;
+let _validationGeneration = 0;
+
+function deferValidation(records, fmt) {
+    if (!validationEnabled) return;
+    _validationPending = true;
+    const gen = ++_validationGeneration;
+    const CHUNK = 500;
+    let i = 0;
+    const total = records.length;
+    function processChunk() {
+        if (gen !== _validationGeneration) return; // cancelled or superseded
+        Perf.start('validateChunk');
+        const end = Math.min(i + CHUNK, total);
+        for (; i < end; i++) {
+            records[i]._errors = validateRecord(records[i]._original, fmt);
+        }
+        Perf.end('validateChunk');
+        updateValidationProgress(i, total);
+        if (i < total) {
+            setTimeout(processChunk, 0);
+        } else {
+            _validationPending = false;
+            updateValidationStat();
+            if (activeTab === 'table') renderTable();
+        }
+    }
+    processChunk();
+}
+
+function updateValidationProgress(current, total) {
+    const stat = $('validationStat');
+    if (stat) stat.textContent = `Validating: ${current.toLocaleString()} / ${total.toLocaleString()}`;
 }
 
 // Fields that contain multi-dimensional arrays and should be preserved as-is
@@ -3347,7 +3431,25 @@ function flattenRecord(record) {
             flat[key] = value;
         }
     }
+    // Pre-compute searchable text for fast text filtering
+    flat._searchText = Object.values(flat)
+        .filter(v => v != null && typeof v !== 'object')
+        .map(v => String(v).toLowerCase()).join('\0');
     return flat;
+}
+
+const _internalFields = new Set(['_idx', '_timeInForce_original', '_errors', '_original', '_searchText']);
+
+function discoverColumns(records, colSet) {
+    const seenTypes = new Set();
+    for (const r of records) {
+        const t = r.type;
+        if (t && seenTypes.has(t)) continue;
+        if (t) seenTypes.add(t);
+        for (const k of Object.keys(r)) {
+            if (!_internalFields.has(k)) colSet.add(k);
+        }
+    }
 }
 
 function parseLegDetails(value) {
@@ -4376,7 +4478,7 @@ function initializeUI() {
 
     // Determine columns
     const colSet = new Set();
-    allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx' && k !== '_timeInForce_original' && k !== '_errors' && k !== '_original') colSet.add(k); }));
+    discoverColumns(allRecords, colSet);
     const allCols = Array.from(colSet);
 
     // Apply saved column order if available, then append any new columns
@@ -5384,7 +5486,7 @@ function showAddFilterMenu(e) {
     if (existing) { existing.remove(); return; }
 
     const allCols = new Set(['#']);
-    allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx' && k !== '_timeInForce_original' && k !== '_errors' && k !== '_original') allCols.add(k); }));
+    discoverColumns(allRecords, allCols);
     const available = Array.from(allCols).sort().filter(c => !activeFilters.includes(c));
     if (!available.length) return;
 
@@ -5453,10 +5555,18 @@ function getSavedFilterModes() {
 }
 
 function applyFilters(skipSync) {
+    Perf.start('filter');
     // Update collapsed filter labels to reflect current selections
     document.querySelectorAll('.filter-item').forEach(updateFilterLabel);
     const search = $('searchInput').value.toLowerCase();
     const filterValues = getFilterValues();
+
+    // Convert array filter values to Sets for O(1) lookup
+    const filterSets = {};
+    for (const col in filterValues) {
+        const fv = filterValues[col];
+        if (Array.isArray(fv)) filterSets[col] = new Set(fv);
+    }
 
     let pool = allRecords;
     let branchData = null;
@@ -5482,19 +5592,16 @@ function applyFilters(skipSync) {
                 const maxB = fv.max ? getComparableValue(col, fv.max, colType) : null;
                 if (minB !== null && val < minB) return false;
                 if (maxB !== null && val > maxB) return false;
-            } else if (Array.isArray(fv)) {
+            } else if (filterSets[col]) {
                 const sv = (rv_raw == null || rv_raw === '') ? '__EMPTY__' : String(rv_raw);
-                if (!fv.includes(sv)) return false;
+                if (!filterSets[col].has(sv)) return false;
             } else {
                 const sv = (rv_raw == null || rv_raw === '') ? '__EMPTY__' : String(rv_raw);
                 if (sv !== fv) return false;
             }
         }
         if (search) {
-            const match = Object.values(r).some(v =>
-                v !== null && typeof v !== 'object' && String(v).toLowerCase().includes(search)
-            );
-            if (!match) return false;
+            if (!(r._searchText || '').includes(search)) return false;
         }
         if (validationEnabled && errorCodeFilterValues.length) {
             const recordCodes = new Set();
@@ -5512,7 +5619,9 @@ function applyFilters(skipSync) {
         }
         return true;
     });
+    Perf.end('filter');
 
+    Perf.start('sort');
     if (orderChainRoot) {
         const displayRoot = branchData ? branchData.topAncestor : orderChainRoot;
         const displayDepth = branchData ? Infinity : orderChainDepth;
@@ -5539,13 +5648,14 @@ function applyFilters(skipSync) {
                         continue;
                     }
                     va = String(va); vb = String(vb);
-                    const cmp = va.localeCompare(vb);
+                    const cmp = _collator.compare(va, vb);
                     if (cmp !== 0) return asc ? cmp : -cmp;
                 }
                 return 0;
             });
         }
     }
+    Perf.end('sort');
 
     currentPage = 0;
     renderTable();
@@ -5624,10 +5734,11 @@ function vsRenderRows(force) {
 }
 
 function vsLockColumnWidths() {
+    Perf.start('colWidths');
     const table = $('tableContainer').querySelector('table');
-    if (!table || !vsPageRecords || !vsPageRecords.length) return;
+    if (!table || !vsPageRecords || !vsPageRecords.length) { Perf.end('colWidths'); return; }
     // Skip measurement when table is hidden (e.g. Timeline tab active) — widths would be 0
-    if (!table.offsetWidth) return;
+    if (!table.offsetWidth) { Perf.end('colWidths'); return; }
     const ths = table.querySelectorAll('thead th');
 
     // Reset to auto layout for measurement
@@ -5682,6 +5793,7 @@ function vsLockColumnWidths() {
 
     // Replace sample with actual virtual-scrolled rows
     vsRenderRows(true);
+    Perf.end('colWidths');
 }
 
 function renderTable() {
@@ -6353,6 +6465,7 @@ let tlViewX      = 0;    // horizontal scroll offset (px)
 let tlViewY      = 0;    // vertical scroll offset (px)
 let tlZoom       = 1;    // px per ms
 let tlSelectedRecord = null;
+let _tlSelCache = null; // {record, laneIdx, eventT} — cached selected event lookup
 let tlHoveredRecord  = null;
 let tlDirty      = true;
 let tlRafId      = null;
@@ -6545,6 +6658,8 @@ function formatETDateFull(utcMs) {
 // ── Data preparation ──
 
 function tlBuildData() {
+    Perf.start('tlBuild');
+    _tlSelCache = null; // invalidate selected event cache
     // Group filtered records by orderID, parse timestamps
     const byOrder = new Map(); // orderID → {events[], minT, maxT}
     for (const r of filteredRecords) {
@@ -6713,6 +6828,7 @@ function tlBuildData() {
     tlTimeMax = gMax + pad;
 
     tlFlattenLanes();
+    Perf.end('tlBuild');
 }
 
 function tlFlattenLanes() {
@@ -6829,6 +6945,7 @@ function tlSizeCanvas() {
 }
 
 function tlDraw() {
+    Perf.start('tlDraw');
     const canvas = $('timelineCanvas');
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
@@ -7073,9 +7190,13 @@ function tlDraw() {
     ctx.beginPath(); ctx.moveTo(plotL, TL_AXIS_H); ctx.lineTo(plotR, TL_AXIS_H); ctx.stroke();
     ctx.restore();
 
-    // ── Find selected event info for highlighting ──
+    // ── Find selected event info for highlighting (cached) ──
     let selLaneIdx = -1, selEventT = null;
     if (tlSelectedRecord) {
+        if (_tlSelCache && _tlSelCache.record === tlSelectedRecord) {
+            selLaneIdx = _tlSelCache.laneIdx;
+            selEventT = _tlSelCache.eventT;
+        } else {
         for (let i = 0; i < tlLanes.length; i++) {
             for (const ev of tlLanes[i].events) {
                 if (ev.record === tlSelectedRecord) {
@@ -7085,6 +7206,8 @@ function tlDraw() {
                 }
             }
             if (selLaneIdx >= 0) break;
+        }
+        _tlSelCache = { record: tlSelectedRecord, laneIdx: selLaneIdx, eventT: selEventT };
         }
     }
 
@@ -7305,6 +7428,7 @@ function tlDraw() {
     ctx.strokeStyle = 'rgba(71, 85, 105, 0.8)';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(TL_LABEL_W, TL_AXIS_H); ctx.lineTo(TL_LABEL_W, H); ctx.stroke();
+    Perf.end('tlDraw');
 }
 
 function hexToRGBA(hex, alpha) {
@@ -7448,9 +7572,13 @@ function tlUpdateScrollbars() {
 
     if (tlHeatmapDirty) tlBuildHeatmapBuckets();
 
-    // Find selected event for scrollbar markers
+    // Find selected event for scrollbar markers (use cache)
     let selEventT = null, selLaneIdx = -1;
     if (tlSelectedRecord) {
+        if (_tlSelCache && _tlSelCache.record === tlSelectedRecord) {
+            selLaneIdx = _tlSelCache.laneIdx;
+            selEventT = _tlSelCache.eventT;
+        } else {
         for (let i = 0; i < tlLanes.length; i++) {
             for (const ev of tlLanes[i].events) {
                 if (ev.record === tlSelectedRecord) {
@@ -7460,6 +7588,8 @@ function tlUpdateScrollbars() {
                 }
             }
             if (selLaneIdx >= 0) break;
+        }
+        _tlSelCache = { record: tlSelectedRecord, laneIdx: selLaneIdx, eventT: selEventT };
         }
     }
 
@@ -7984,9 +8114,15 @@ $('clearAllFilters').addEventListener('click', clearAllFilters);
 $('validationToggle').addEventListener('click', () => {
     validationEnabled = !validationEnabled;
     $('validationToggle').textContent = (validationEnabled ? '\u2713 ' : '') + 'Validation';
-    if (!validationEnabled && errorCodeFilterValues.length) {
-        errorCodeFilterValues = [];
+    if (!validationEnabled) {
+        _validationPending = false; // cancel any in-progress deferred validation
+        if (errorCodeFilterValues.length) {
+            errorCodeFilterValues = [];
         }
+    } else if (allRecords.length) {
+        // Re-validate if toggled on with records loaded
+        deferValidation(allRecords, fileFormat);
+    }
     renderFilterBar();
     updateValidationStat();
     applyFilters();
@@ -7995,6 +8131,49 @@ $('validationToggle').addEventListener('click', () => {
         renderDetailGrid(currentDetailRecord, detailMode, $('showAllFields').checked);
     }
 });
+
+// ── Performance panel ──
+let _perfInterval = null;
+$('perfToggle').addEventListener('click', () => {
+    Perf._enabled = !Perf._enabled;
+    $('perfToggle').textContent = (Perf._enabled ? '\u2713 ' : '') + 'Performance';
+    const panel = $('perfPanel');
+    if (Perf._enabled) {
+        panel.style.display = '';
+        _perfInterval = setInterval(perfRefresh, 500);
+    } else {
+        panel.style.display = 'none';
+        if (_perfInterval) { clearInterval(_perfInterval); _perfInterval = null; }
+    }
+});
+$('perfClear').addEventListener('click', () => { Perf.clear(); perfRefresh(); });
+
+function perfRefresh() {
+    const s = Perf.summary();
+    const labels = Object.keys(s).sort();
+    let h = '';
+    for (const l of labels) {
+        const e = s[l];
+        const avg = e.total / e.count;
+        h += `<tr><td style="padding:2px 4px; color:#e2e8f0;">${l}</td><td style="padding:2px 4px; text-align:right;">${e.last.toFixed(1)}</td><td style="padding:2px 4px; text-align:right;">${avg.toFixed(1)}</td><td style="padding:2px 4px; text-align:right;">${e.count}</td></tr>`;
+    }
+    $('perfRows').innerHTML = h || '<tr><td colspan="4" style="padding:4px; color:#64748b;">No data</td></tr>';
+}
+
+// Make perf panel draggable
+(function() {
+    const hdr = $('perfPanelHeader'), panel = $('perfPanel');
+    let dx, dy;
+    hdr.addEventListener('mousedown', e => {
+        e.preventDefault();
+        dx = e.clientX - panel.getBoundingClientRect().left;
+        dy = e.clientY - panel.getBoundingClientRect().top;
+        const onMove = ev => { panel.style.left = (ev.clientX - dx) + 'px'; panel.style.top = (ev.clientY - dy) + 'px'; panel.style.right = 'auto'; panel.style.bottom = 'auto'; };
+        const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    });
+})();
 
 // ── Order chain controls ──
 $('clearChain').addEventListener('click', clearOrderChain);
@@ -8259,7 +8438,7 @@ $('resetLayoutBtn').addEventListener('click', () => {
     hiddenColumns.clear();
     if (!allRecords.length) return;
     const colSet = new Set();
-    allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx' && k !== '_timeInForce_original' && k !== '_errors' && k !== '_original') colSet.add(k); }));
+    discoverColumns(allRecords, colSet);
     const allCols = Array.from(colSet);
     columns = [];
     for (const col of PRIORITY_COLUMNS) {
@@ -8303,7 +8482,7 @@ function applyLayout(layout) {
     // Apply column order — keep any columns from current data that aren't in the file
     if (allRecords.length) {
         const colSet = new Set();
-        allRecords.forEach(r => Object.keys(r).forEach(k => { if (k !== '_idx' && k !== '_timeInForce_original' && k !== '_errors' && k !== '_original') colSet.add(k); }));
+        discoverColumns(allRecords, colSet);
         const allCols = Array.from(colSet);
         columns = [];
         for (const col of layout.columnOrder) {
