@@ -744,7 +744,7 @@
         body.detail-open { padding-bottom: var(--detail-h, 45vh); height: auto; min-height: 100vh; }
         body.detail-open footer { display: none; }
         body.detail-open #app { overflow: visible; }
-        body.detail-open .table-container { flex: none; }
+        body.detail-open .table-container, body.detail-open #tabTimeline { flex: none; }
         body.detail-open .bottom-bar { margin-bottom: 8px; }
         .detail-panel h3 {
             font-size: 15px;
@@ -3970,6 +3970,7 @@ function switchTab(name, push) {
     if (name === 'table') vsLockColumnWidths();
     // Animate detail panel when switching tabs
     const panel = $('detailPanel');
+    const wasDetailOpen = document.body.classList.contains('detail-open');
     if ((name === 'table' || name === 'timeline') && currentDetailRecord) {
         // Capture current scroll before layout change
         const scrollBefore = window.scrollY;
@@ -3979,23 +3980,32 @@ function switchTab(name, push) {
             document.documentElement.style.setProperty('--detail-h', savedDetailH);
         }
         panel.classList.add('visible');
-        sizeTableContainer();
-        // Animate scroll so tab bar ends up flush below sticky header
-        const scrollTarget = document.documentElement.scrollHeight - window.innerHeight;
-        window.scrollTo({ top: scrollBefore });
-        const startScroll = scrollBefore;
-        const distance = scrollTarget - startScroll;
-        if (Math.abs(distance) > 1) {
-            const duration = 300;
-            const startTime = performance.now();
-            function animateScroll(now) {
-                const elapsed = now - startTime;
-                const t = Math.min(elapsed / duration, 1);
-                const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-                window.scrollTo({ top: startScroll + distance * ease });
-                if (t < 1) requestAnimationFrame(animateScroll);
+        if (wasDetailOpen) {
+            // Switching between detail-supporting tabs: resize but preserve scroll exactly
+            const scrollSnap = window.scrollY;
+            sizeTableContainer(true);
+            window.scrollTo({ top: scrollSnap });
+        } else {
+            sizeTableContainer();
+        }
+        // Only animate scroll when detail is newly appearing, not when switching between detail-supporting tabs
+        if (!wasDetailOpen) {
+            const scrollTarget = document.documentElement.scrollHeight - window.innerHeight;
+            window.scrollTo({ top: scrollBefore });
+            const startScroll = scrollBefore;
+            const distance = scrollTarget - startScroll;
+            if (Math.abs(distance) > 1) {
+                const duration = 300;
+                const startTime = performance.now();
+                function animateScroll(now) {
+                    const elapsed = now - startTime;
+                    const t = Math.min(elapsed / duration, 1);
+                    const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+                    window.scrollTo({ top: startScroll + distance * ease });
+                    if (t < 1) requestAnimationFrame(animateScroll);
+                }
+                requestAnimationFrame(animateScroll);
             }
-            requestAnimationFrame(animateScroll);
         }
     } else if (name !== 'table' && name !== 'timeline' && currentDetailRecord && document.body.classList.contains('detail-open')) {
         // Save current panel height so it can be restored when switching back
@@ -4016,30 +4026,40 @@ function getDetailH() {
         : (window.innerHeight * 0.45);
 }
 
-function sizeTableContainer() {
+function sizeTableContainer(noScroll) {
     const tc = document.querySelector('.table-container');
-    if (!tc) return;
+    const tl = document.querySelector('#tabTimeline');
     if (!document.body.classList.contains('detail-open')) {
-        tc.style.height = '';
+        if (tc) tc.style.height = '';
+        if (tl) tl.style.height = '';
         return;
     }
     const panel = $('detailPanel');
-    const headerH = document.querySelector('header').offsetHeight;
+    const headerH = document.querySelector('header').offsetHeight + 8;  /* FIXME: Don't hard code margin */
     const tabBarH = $('tabBar').offsetHeight;
+    const toolbarH = document.querySelector('#tabTable > .toolbar').offsetHeight + 5;  /* FIXME: Why 5? */
     const tabBarBottom = $('tabBar').getBoundingClientRect().bottom;
-    const tcTop = tc.getBoundingClientRect().top;
-    const gap = tcTop - tabBarBottom;
+
+    // Measure gap from tab bar to active content area
+    const active = activeTab === 'timeline' ? tl : tc;
+    if (!active) return;
+    const activeTop = active.getBoundingClientRect().top;
+    const gap = activeTop - tabBarBottom;
 
     const detailH = getDetailH();
     function tick() {
         const panelRect = panel.getBoundingClientRect();
         const visibleDetailH = Math.max(0, window.innerHeight - panelRect.top);
-        const tableH = window.innerHeight - headerH * 2 - tabBarH - gap - visibleDetailH;
-        tc.style.height = Math.max(100, tableH) + 'px';
-        window.scrollTo({
-            top     : document.documentElement.scrollHeight - window.innerHeight,
-            behavior: 'smooth',
-        });
+        const contentH = window.innerHeight - headerH - tabBarH - gap - visibleDetailH - (active === tc ? toolbarH : 0);
+        const h = Math.max(100, contentH) + 'px';
+        if (tc) tc.style.height = h;
+        if (tl) tl.style.height = h;
+        if (!noScroll) {
+            window.scrollTo({
+                top     : document.documentElement.scrollHeight - window.innerHeight,
+                behavior: 'smooth',
+            });
+        }
         if (panel.classList.contains('visible') && visibleDetailH < detailH) {
             requestAnimationFrame(tick);
         }
@@ -4053,6 +4073,9 @@ function closeDetail(push) {
     panel.classList.remove('visible');
     window.scrollTo({ top: 0, behavior: 'smooth' });
     currentDetailRecord = null;
+    tlSelectedRecord = null;
+    tlDirty = true;
+    if (activeTab === 'timeline') tlScheduleDraw();
     if (push !== false) {
         syncURL(true);
     }
@@ -4068,6 +4091,8 @@ function closeDetail(push) {
         document.body.classList.remove('detail-open');
         const tc = document.querySelector('.table-container');
         if (tc) tc.style.height = '';
+        const tl = $('tabTimeline');
+        if (tl) tl.style.height = '';
     });
 }
 
