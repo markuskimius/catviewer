@@ -6837,12 +6837,14 @@ function tlBuildData() {
     }
     for (const r of roots) setDepth(r, 0);
 
-    // Compute effective end times (post-order)
+    // Compute effective end times and collect descendant spans (post-order)
     function computeEffEnd(node) {
         node.effectiveEndMs = node.lastEventMs;
+        node.descendantSpans = []; // [{startMs, endMs}] for each direct child subtree
         for (const c of node.children) {
             computeEffEnd(c);
             if (c.effectiveEndMs > node.effectiveEndMs) node.effectiveEndMs = c.effectiveEndMs;
+            node.descendantSpans.push({ startMs: c.firstEventMs, endMs: c.effectiveEndMs });
         }
     }
     for (const r of roots) computeEffEnd(r);
@@ -6874,8 +6876,24 @@ function tlFlattenLanes() {
     for (const r of tlTree) walk(r);
 }
 
-function tlToggleCollapse(orderID, shiftKey) {
-    if (tlCollapsed.has(orderID)) {
+function tlToggleCollapse(orderID, shiftKey, ctrlKey) {
+    if (ctrlKey) {
+        // Ctrl+click: toggle ALL nodes based on clicked node's state
+        const wasCollapsed = tlCollapsed.has(orderID);
+        if (wasCollapsed) {
+            // Expand all
+            tlCollapsed.clear();
+        } else {
+            // Collapse all nodes that have children
+            tlCollapsed.clear();
+            (function addAll(nodes) {
+                for (const n of nodes) {
+                    if (n.hasChildren) tlCollapsed.add(n.orderID);
+                    addAll(n.children);
+                }
+            })(tlTree);
+        }
+    } else if (tlCollapsed.has(orderID)) {
         tlCollapsed.delete(orderID);
         if (shiftKey) {
             // Expand all descendants
@@ -7335,6 +7353,49 @@ function tlDraw() {
             ctx.strokeStyle = hexToRGBA(color, 0.35);
             ctx.lineWidth = 1;
             ctx.strokeRect(barX1, barY, barX2 - barX1, TL_BAR_H);
+        }
+    }
+    ctx.restore();
+
+    // ── Collapsed child span indicators ──
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(plotL, TL_AXIS_H, plotW, visH);
+    ctx.clip();
+    for (let i = firstLane; i <= lastLane; i++) {
+        const node = tlLanes[i];
+        if (!node.hasChildren || !tlCollapsed.has(node.orderID)) continue;
+        const y = tlLaneY(i);
+        const barBottom = y + (TL_LANE_H + TL_BAR_H) / 2;
+        const tickH = 4;
+        ctx.lineWidth = 1;
+        for (const span of node.descendantSpans) {
+            const x1 = tlTimeToX(span.startMs);
+            const x2 = tlTimeToX(span.endMs);
+            if (x2 < plotL || x1 > plotR) continue;
+            const cx1 = Math.max(plotL, x1), cx2 = Math.min(plotR, x2);
+            // Horizontal line at bottom of bar
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
+            ctx.beginPath();
+            ctx.moveTo(cx1, barBottom + tickH);
+            ctx.lineTo(cx2, barBottom + tickH);
+            ctx.stroke();
+            // Start tick
+            if (x1 >= plotL && x1 <= plotR) {
+                ctx.strokeStyle = 'rgba(148, 163, 184, 0.7)';
+                ctx.beginPath();
+                ctx.moveTo(x1, barBottom + 1);
+                ctx.lineTo(x1, barBottom + tickH + 1);
+                ctx.stroke();
+            }
+            // End tick
+            if (x2 >= plotL && x2 <= plotR) {
+                ctx.strokeStyle = 'rgba(148, 163, 184, 0.7)';
+                ctx.beginPath();
+                ctx.moveTo(x2, barBottom + 1);
+                ctx.lineTo(x2, barBottom + tickH + 1);
+                ctx.stroke();
+            }
         }
     }
     ctx.restore();
@@ -7913,7 +7974,7 @@ function tlSetupInteractions() {
         const hit = tlHitTest(x, y);
         if (!hit) return;
         if (hit.type === 'toggle') {
-            tlToggleCollapse(hit.node.orderID, e.shiftKey);
+            tlToggleCollapse(hit.node.orderID, e.shiftKey, e.ctrlKey || e.metaKey);
             tlScheduleDraw();
         } else if (hit.type === 'event') {
             tlSelectedRecord = hit.event.record;
