@@ -40,6 +40,15 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 - **Multi-file support** — load multiple files (JSON, CSV, ZIP, GZIP) via drag-and-drop or file picker; hold Shift to append
 - **File validation** — verifies files are CAT format before loading
 - **Tools menu** — keyboard-accessible dropdown with layout export/import for sharing between users/machines, drag-and-drop layout reordering, and validation toggle
+- **Virtual scrolling** — efficiently renders large datasets by only drawing visible rows; sub-pixel-accurate column width measurement ensures columns are never clipped
+- **Timeline visualization** — canvas-based interactive timeline showing order events as color-coded dots in hierarchical swimlanes:
+  - Parent-child order hierarchy with connector lines and collapse/expand controls
+  - Prior order chain merging — orders linked via priorOrderID share a single swimlane with diamond markers at orderID transitions
+  - Adaptive time axis from nanosecond to decade granularity with date pills at midnight boundaries
+  - Kinetic scrolling with momentum, Ctrl/Cmd+wheel zoom, pinch-to-zoom on touch devices
+  - Fit-all button to reset zoom and scroll
+  - Heatmap scrollbars showing color-coded event density
+  - Selection highlighting across lane, time crosshair, and scrollbar markers; integrates with the record detail panel
 - **Event Summary tab** — counts by event type and action type
 - **Raw Data tab** — parsed JSON view of loaded records
 - **CSV export** — download filtered results

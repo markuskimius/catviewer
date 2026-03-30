@@ -36,6 +36,23 @@ A single-file web application for compliance officers to inspect CAT data files.
 - Order chain view with hierarchy tree, depth controls (This order, + Children, + Branch) that toggle off when clicked again; + Children shows all descendants; Branch shows direct ancestor chain plus descendants, excluding siblings
 - URL hash state with deep linking to selected records
 - Tools dropdown menu (keyboard shortcut accessible) with layout export/import, drag-and-drop layout reordering, and validation toggle. Reset Layout followed by Save Layout clears saved layout so defaults are always used.
+- Virtual scrolling for large datasets with sub-pixel-accurate column width locking (samples longest values per column to prevent clipping)
+- Timeline tab with canvas-based order event visualization:
+  - Hierarchical swimlanes grouped by orderID with parent-child connector lines, collapse/expand
+  - Prior order chain merging: orders linked via priorOrderID share a single swimlane with diamond transition markers and chain count badges; tooltip on hover shows old → new orderID
+  - Color-coded event dots by category (order/route/trade/cancel/modify/quote/allocation)
+  - Life-duration bars showing order time span
+  - Adaptive time axis from nanosecond to decade granularity with clean interval alignment and minor gridlines
+  - Date pills at midnight boundaries and timeline start (YYYY-MM-DD format)
+  - Kinetic scrolling (mousedown drag with momentum), Ctrl/Cmd+wheel zoom, Shift+wheel horizontal scroll
+  - Pinch-to-zoom and single-finger pan on touch devices
+  - Fit-all button (bottom-right corner) to reset zoom/scroll
+  - Heatmap scrollbars showing color-coded event density with gaussian smoothing
+  - Selection highlighting: selected event gets lane highlight, time crosshair, blue label, and white scrollbar position markers
+  - Full-precision timestamps in tooltips matching the original eventTimestamp precision (ms/us/ns)
+  - Event type descriptions in tooltips (same as detail panel)
+  - Zoom/scroll state preserved across tab switches; resets only when filtered data changes
+  - Detail panel integration: timeline resizes with detail panel open/close/resize, scroll position preserved when switching between Records and Timeline tabs
 - Event Summary tab with counts broken down by action type
 - Raw Data tab showing parsed JSON
 - CSV export of filtered results
