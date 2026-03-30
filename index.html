@@ -5987,6 +5987,7 @@ function setupColumnHeaders() {
 }
 
 // Scroll a filtered record index into view within the virtual-scrolled table
+let _vsScrollAnim = null;
 function vsScrollToRow(filteredIdx) {
     const container = $('tableContainer');
     const pageStart = PAGE_SIZE === Infinity ? 0 : currentPage * PAGE_SIZE;
@@ -6000,10 +6001,22 @@ function vsScrollToRow(filteredIdx) {
     const viewTop = container.scrollTop + theadH;
     const viewBottom = container.scrollTop + container.clientHeight;
     if (rowContentTop < viewTop || rowContentTop + ROW_HEIGHT > viewBottom) {
-        // Center the row in the visible tbody area
-        container.scrollTop = rowContentTop - theadH - (visibleTbodyH - ROW_HEIGHT) / 2;
+        const target = rowContentTop - theadH - (visibleTbodyH - ROW_HEIGHT) / 2;
+        const start = container.scrollTop;
+        const distance = target - start;
+        if (_vsScrollAnim) cancelAnimationFrame(_vsScrollAnim);
+        const duration = Math.min(300, Math.max(150, Math.abs(distance) / 3));
+        const t0 = performance.now();
+        function tick(now) {
+            const t = Math.min((now - t0) / duration, 1);
+            const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+            container.scrollTop = start + distance * ease;
+            vsRenderRows();
+            if (t < 1) _vsScrollAnim = requestAnimationFrame(tick);
+            else _vsScrollAnim = null;
+        }
+        _vsScrollAnim = requestAnimationFrame(tick);
     }
-    // Force re-render to ensure the row is in the DOM
     vsRenderRows(true);
 }
 
@@ -6990,13 +7003,26 @@ function tlScrollToSelected() {
     const totalTimeW = timeRange * tlZoom;
     const totalH = tlLanes.length * TL_LANE_H;
 
-    // Center horizontally on the event time
-    const eventX = (eventT - tlTimeMin) * tlZoom;
-    tlViewX = Math.max(0, Math.min(eventX - plotW / 2, totalTimeW - plotW));
+    // Target: center on the event
+    const targetX = Math.max(0, Math.min((eventT - tlTimeMin) * tlZoom - plotW / 2, totalTimeW - plotW));
+    const targetY = Math.max(0, Math.min(laneIdx * TL_LANE_H - visH / 2 + TL_LANE_H / 2, Math.max(0, totalH - visH)));
 
-    // Center vertically on the event lane
-    const eventY = laneIdx * TL_LANE_H;
-    tlViewY = Math.max(0, Math.min(eventY - visH / 2 + TL_LANE_H / 2, Math.max(0, totalH - visH)));
+    const startX = tlViewX, startY = tlViewY;
+    const dx = targetX - startX, dy = targetY - startY;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) { tlViewX = targetX; tlViewY = targetY; return; }
+
+    const duration = Math.min(300, Math.max(150, (Math.abs(dx) + Math.abs(dy)) / 3));
+    const t0 = performance.now();
+    function tick(now) {
+        const t = Math.min((now - t0) / duration, 1);
+        const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+        tlViewX = startX + dx * ease;
+        tlViewY = startY + dy * ease;
+        tlDirty = true;
+        tlScheduleDraw();
+        if (t < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
 }
 
 function tlDraw() {
