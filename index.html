@@ -3380,6 +3380,7 @@ function deferValidation(records, fmt) {
         } else {
             _validationPending = false;
             updateValidationStat();
+            renderFilterBar();
             if (activeTab === 'table') renderTable();
         }
     }
@@ -5129,7 +5130,7 @@ function updateFilterLabel(item) {
             for (const val of box._selectedValues) {
                 const tag = document.createElement('span');
                 tag.className = 'combo-tag';
-                tag.textContent = val === '__EMPTY__' ? '(no value)' : val;
+                tag.textContent = val === '__EMPTY__' ? '(no value)' : val === '__NO_ERRORS__' ? '(no errors)' : val;
                 label.appendChild(tag);
             }
         } else if (bound && box.dataset.rawValue) {
