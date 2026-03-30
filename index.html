@@ -988,7 +988,7 @@
         <div class="tab" data-tab="raw">Raw Data</div>
     </div>
 
-    <div id="tabTable">
+    <div id="sharedToolbar">
         <div class="toolbar">
             <div class="search-wrap" id="searchWrap">
                 <input type="text" id="searchInput" placeholder="Search all fields..." autocomplete="off">
@@ -1033,6 +1033,9 @@
             </div>
             <button class="clear-chain" id="clearChain" title="Clear order chain filter">&times;</button>
         </div>
+    </div>
+
+    <div id="tabTable">
         <div class="table-container" id="tableContainer"></div>
         <div class="bottom-bar">
             <span class="record-count" id="recordCount"></span>
@@ -4070,6 +4073,7 @@ function restoreFilterState(state) {
 function switchTab(name, push) {
     activeTab = name;
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+    $('sharedToolbar').style.display = (name === 'table' || name === 'timeline') ? '' : 'none';
     $('tabTable').style.display = name === 'table' ? '' : 'none';
     $('tabTimeline').style.display = name === 'timeline' ? '' : 'none';
     $('tabSummary').style.display = name === 'summary' ? '' : 'none';
@@ -4148,12 +4152,12 @@ function sizeTableContainer(noScroll) {
         return;
     }
     const panel = $('detailPanel');
-    const headerH = document.querySelector('header').offsetHeight + 8;  /* FIXME: Don't hard code margin */
+    const headerH = document.querySelector('header').offsetHeight;
     const tabBarH = $('tabBar').offsetHeight;
-    const toolbarH = document.querySelector('#tabTable > .toolbar').offsetHeight + 5;  /* FIXME: Why 5? */
     const tabBarBottom = $('tabBar').getBoundingClientRect().bottom;
+    const bottomBarH = document.querySelector('#tabTable > .bottom-bar').offsetHeight;
 
-    // Measure gap from tab bar to active content area
+    // Measure gap from tab bar to active content area (includes shared toolbar + chain bar)
     const active = activeTab === 'timeline' ? tl : tc;
     if (!active) return;
     const activeTop = active.getBoundingClientRect().top;
@@ -4163,7 +4167,7 @@ function sizeTableContainer(noScroll) {
     function tick() {
         const panelRect = panel.getBoundingClientRect();
         const visibleDetailH = Math.max(0, window.innerHeight - panelRect.top);
-        const contentH = window.innerHeight - headerH - tabBarH - gap - visibleDetailH - (active === tc ? toolbarH : 0);
+        const contentH = window.innerHeight - headerH - tabBarH - gap - visibleDetailH - (active === tc ? (bottomBarH + 16) : 8);  /* FIXME: hard coded padding */
         const h = Math.max(100, contentH) + 'px';
         if (tc) tc.style.height = h;
         if (tl) tl.style.height = h;
