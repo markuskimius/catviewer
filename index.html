@@ -5901,7 +5901,9 @@ function ensureTableDelegation() {
         if (tr) {
             const sel = window.getSelection();
             if (sel && sel.toString().length > 0) return;
+            const prevRow = selectedRow;
             selectedRow = parseInt(tr.dataset.idx);
+            if (selectedRow !== prevRow) vsRenderRows(true);
             showDetail(filteredRecords[selectedRow]);
         }
     });
@@ -6451,18 +6453,25 @@ function showDetail(record, push) {
         sizeTableContainer();
     }
 
-    // Select the corresponding row in the table
-    const filteredIdx = filteredRecords.indexOf(record);
-    if (filteredIdx !== -1 && filteredIdx !== selectedRow) {
+    // Select the corresponding row in the table (match by _idx, not reference)
+    const filteredIdx = filteredRecords.findIndex(r => r._idx === record._idx);
+    if (filteredIdx !== -1) {
+        const changed = filteredIdx !== selectedRow;
         selectedRow = filteredIdx;
         // Navigate to the page containing this row
         const page = Math.floor(filteredIdx / PAGE_SIZE);
-        if (page !== currentPage) currentPage = page;
-        renderTable();
-        if (activeTab === 'table') {
-            vsScrollToRow(filteredIdx);
-        } else {
-            _pendingScrollToRow = filteredIdx;
+        if (changed && page !== currentPage) currentPage = page;
+        if (changed) {
+            renderTable();
+        } else if (activeTab === 'table') {
+            vsRenderRows(true); // re-render to update highlight
+        }
+        if (changed) {
+            if (activeTab === 'table') {
+                vsScrollToRow(filteredIdx);
+            } else {
+                _pendingScrollToRow = filteredIdx;
+            }
         }
     }
 
@@ -6497,7 +6506,7 @@ let tlViewX      = 0;    // horizontal scroll offset (px)
 let tlViewY      = 0;    // vertical scroll offset (px)
 let tlZoom       = 1;    // px per ms
 let tlSelectedRecord = null;
-let _tlSelCache = null; // {record, laneIdx, eventT} — cached selected event lookup
+let _tlSelCache = null; // {idx, laneIdx, eventT} — cached selected event lookup by _idx
 let tlHoveredRecord  = null;
 let tlDirty      = true;
 let tlRafId      = null;
@@ -6994,32 +7003,35 @@ function tlSizeCanvas() {
     canvas.height = h * dpr;
 }
 
-function tlScrollToSelected() {
-    if (!tlSelectedRecord || !tlLanes.length) return;
-    // Find lane and time of selected event
-    let laneIdx = -1, eventT = null;
-    if (_tlSelCache && _tlSelCache.record === tlSelectedRecord) {
-        laneIdx = _tlSelCache.laneIdx;
-        eventT = _tlSelCache.eventT;
-    } else {
-        for (let i = 0; i < tlLanes.length; i++) {
-            for (const ev of tlLanes[i].events) {
-                if (ev.record === tlSelectedRecord) {
-                    laneIdx = i;
-                    eventT = ev.t;
-                    break;
-                }
-            }
-            if (laneIdx >= 0) break;
-        }
-        if (laneIdx >= 0) _tlSelCache = { record: tlSelectedRecord, laneIdx, eventT };
+// Find the selected event's lane index and time, using _idx for matching
+function tlFindSelectedEvent() {
+    if (!tlSelectedRecord || !tlLanes.length) return null;
+    const selIdx = tlSelectedRecord._idx;
+    if (_tlSelCache && _tlSelCache.idx === selIdx) {
+        return _tlSelCache;
     }
+    for (let i = 0; i < tlLanes.length; i++) {
+        for (const ev of tlLanes[i].events) {
+            if (ev.record._idx === selIdx) {
+                _tlSelCache = { idx: selIdx, laneIdx: i, eventT: ev.t };
+                return _tlSelCache;
+            }
+        }
+    }
+    return null;
+}
+
+function tlScrollToSelected(animate) {
+    const sel = tlFindSelectedEvent();
+    if (!sel) return;
+    const laneIdx = sel.laneIdx, eventT = sel.eventT;
     if (laneIdx < 0 || eventT === null) return;
 
     const canvas = $('timelineCanvas');
     const dpr = window.devicePixelRatio || 1;
     const W = canvas.width / dpr;
     const H = canvas.height / dpr;
+    if (W <= 0 || H <= 0) return;
     const plotW = W - TL_LABEL_W;
     const visH = H - TL_AXIS_H;
     const timeRange = tlTimeMax - tlTimeMin;
@@ -7029,6 +7041,10 @@ function tlScrollToSelected() {
     // Target: center on the event
     const targetX = Math.max(0, Math.min((eventT - tlTimeMin) * tlZoom - plotW / 2, totalTimeW - plotW));
     const targetY = Math.max(0, Math.min(laneIdx * TL_LANE_H - visH / 2 + TL_LANE_H / 2, Math.max(0, totalH - visH)));
+
+    if (animate === false) {
+        tlViewX = targetX; tlViewY = targetY; return;
+    }
 
     const startX = tlViewX, startY = tlViewY;
     const dx = targetX - startX, dy = targetY - startY;
@@ -7299,25 +7315,12 @@ function tlDraw() {
     ctx.beginPath(); ctx.moveTo(plotL, TL_AXIS_H); ctx.lineTo(plotR, TL_AXIS_H); ctx.stroke();
     ctx.restore();
 
-    // ── Find selected event info for highlighting (cached) ──
+    // ── Find selected event info for highlighting (cached, matched by _idx) ──
     let selLaneIdx = -1, selEventT = null;
-    if (tlSelectedRecord) {
-        if (_tlSelCache && _tlSelCache.record === tlSelectedRecord) {
-            selLaneIdx = _tlSelCache.laneIdx;
-            selEventT = _tlSelCache.eventT;
-        } else {
-        for (let i = 0; i < tlLanes.length; i++) {
-            for (const ev of tlLanes[i].events) {
-                if (ev.record === tlSelectedRecord) {
-                    selLaneIdx = i;
-                    selEventT = ev.t;
-                    break;
-                }
-            }
-            if (selLaneIdx >= 0) break;
-        }
-        _tlSelCache = { record: tlSelectedRecord, laneIdx: selLaneIdx, eventT: selEventT };
-        }
+    const selInfo = tlFindSelectedEvent();
+    if (selInfo) {
+        selLaneIdx = selInfo.laneIdx;
+        selEventT = selInfo.eventT;
     }
 
     // ── Lane backgrounds + life-duration bars ──
@@ -7453,8 +7456,8 @@ function tlDraw() {
             const ex = tlTimeToX(ev.t);
             if (ex < plotL - TL_DOT_R || ex > plotR + TL_DOT_R) continue;
             const color = TL_COLORS[ev.cat] || TL_COLORS.other;
-            const isSel = tlSelectedRecord === ev.record;
-            const isHov = tlHoveredRecord === ev.record;
+            const isSel = tlSelectedRecord && ev.record._idx === tlSelectedRecord._idx;
+            const isHov = tlHoveredRecord && ev.record._idx === tlHoveredRecord._idx;
             ctx.beginPath();
             ctx.arc(ex, cy, isSel ? TL_DOT_R + 2 : TL_DOT_R, 0, Math.PI * 2);
             ctx.fillStyle = color;
@@ -7724,25 +7727,12 @@ function tlUpdateScrollbars() {
 
     if (tlHeatmapDirty) tlBuildHeatmapBuckets();
 
-    // Find selected event for scrollbar markers (use cache)
+    // Find selected event for scrollbar markers (matched by _idx)
     let selEventT = null, selLaneIdx = -1;
-    if (tlSelectedRecord) {
-        if (_tlSelCache && _tlSelCache.record === tlSelectedRecord) {
-            selLaneIdx = _tlSelCache.laneIdx;
-            selEventT = _tlSelCache.eventT;
-        } else {
-        for (let i = 0; i < tlLanes.length; i++) {
-            for (const ev of tlLanes[i].events) {
-                if (ev.record === tlSelectedRecord) {
-                    selLaneIdx = i;
-                    selEventT = ev.t;
-                    break;
-                }
-            }
-            if (selLaneIdx >= 0) break;
-        }
-        _tlSelCache = { record: tlSelectedRecord, laneIdx: selLaneIdx, eventT: selEventT };
-        }
+    const selSb = tlFindSelectedEvent();
+    if (selSb) {
+        selLaneIdx = selSb.laneIdx;
+        selEventT = selSb.eventT;
     }
 
     // Horizontal
@@ -7840,7 +7830,7 @@ function tlRender() {
         tlViewY = 0;
     }
     tlSelectedRecord = currentDetailRecord;
-    if (tlSelectedRecord) tlScrollToSelected();
+    if (tlSelectedRecord) tlScrollToSelected(false);
 
     if (!tlInitialized) {
         tlInitialized = true;
