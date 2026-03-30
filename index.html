@@ -1929,7 +1929,7 @@ function validateCATFile(records) {
 
 // ── Field-Level Validation Engine ──
 // Internal fields to skip during validation
-const VALIDATION_SKIP_FIELDS = new Set(['_idx', '_errors', '_original', '_timeInForce_original']);
+const VALIDATION_SKIP_FIELDS = new Set(['_idx', '_errors', '_original', '_timeInForce_original', '_searchText']);
 
 // Allowed values for Choice-type fields (from FIELD_LABELS + spec)
 const CAT_CHOICE_VALUES = {
@@ -6300,7 +6300,7 @@ function renderDetailGrid(record, mode, showAll) {
 
     let html = '';
     for (const key of keys) {
-        if (key === '_idx' || key === '_errors' || key === '_original') continue;
+        if (key === '_idx' || key === '_errors' || key === '_original' || key === '_searchText') continue;
         if (key === '_placeholder') {
             html += '<div class="detail-field" style="visibility:hidden"></div>';
             continue;
@@ -8234,7 +8234,7 @@ function renderEventSummary() {
 function renderRawTab() {
     const maxShow = Infinity;
     const sample = allRecords.slice(0, maxShow);
-    const replacer = (k, v) => (k === '_idx' || k === '_timeInForce_original' || k === '_errors' || k === '_original') ? undefined : v;
+    const replacer = (k, v) => (k === '_idx' || k === '_timeInForce_original' || k === '_errors' || k === '_original' || k === '_searchText') ? undefined : v;
     $('rawContent').textContent = JSON.stringify(sample, replacer, 2) +
         (allRecords.length > maxShow ? `\n\n... (${allRecords.length - maxShow} more records)` : '');
 }
