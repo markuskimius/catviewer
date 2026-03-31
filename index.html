@@ -3953,35 +3953,43 @@ function getChainOrderIDs(rootID, maxDepth) {
 
 function getBranchOrderIDs(selectedID) {
     const result = new Set();
-    // Resolve selectedID's full prior chain
-    const priorIDs = getPriorChainIDs(selectedID);
-    for (const id of priorIDs) result.add(id);
-    // Walk up parent ancestor chain from each prior chain member
-    let topAncestor = selectedID;
-    for (const pid of priorIDs) {
-        let cur = pid;
-        while (cur) {
-            result.add(cur);
-            const entry = orderIndex[cur];
-            const parent = entry && entry.parentOrderID;
-            if (!parent || result.has(parent)) break;
-            cur = parent;
-        }
-        if (cur) topAncestor = cur;
+
+    function addWithPriorChain(id) {
+        for (const pc of getPriorChainIDs(id)) result.add(pc);
     }
-    // Walk down all descendants, including their prior chains
+
+    // Resolve selectedID's full prior chain
+    addWithPriorChain(selectedID);
+
+    // Walk up parent ancestor chain (checking parents of all prior chain members)
+    let topAncestor = selectedID;
+    const ancestorQueue = [...getPriorChainIDs(selectedID)];
+    while (ancestorQueue.length) {
+        const cur = ancestorQueue.shift();
+        const entry = orderIndex[cur];
+        const parent = entry && entry.parentOrderID;
+        if (!parent || result.has(parent)) continue;
+        addWithPriorChain(parent);
+        topAncestor = parent;
+        // Continue walking up from the parent's prior chain members
+        for (const pc of getPriorChainIDs(parent)) ancestorQueue.push(pc);
+    }
+
+    // Walk down descendants only from the selected order (and its prior chain)
     function walkDown(id) {
-        const entry = orderIndex[id];
-        if (!entry) return;
-        for (const child of entry.children) {
-            if (!result.has(child)) {
-                result.add(child);
-                for (const pc of getPriorChainIDs(child)) result.add(pc);
-                walkDown(child);
+        for (const pc of getPriorChainIDs(id)) {
+            const pcEntry = orderIndex[pc];
+            if (!pcEntry) continue;
+            for (const child of pcEntry.children) {
+                if (!result.has(child)) {
+                    addWithPriorChain(child);
+                    walkDown(child);
+                }
             }
         }
     }
-    for (const pid of priorIDs) walkDown(pid);
+    walkDown(selectedID);
+
     return { ids: result, topAncestor };
 }
 
@@ -7058,14 +7066,22 @@ function tlHitTest(cx, cy) {
         // Check event dots first (clickable targets take priority)
         const hitR = TL_DOT_R + 4;
         let best = null, bestD2 = hitR * hitR;
+        const nearby = [];
         for (const ev of node.events) {
             const ex = tlTimeToX(ev.t);
             if (ex < TL_LABEL_W - hitR || ex > $('timelineCanvas').width / (window.devicePixelRatio || 1) + hitR) continue;
             const dx = cx - ex, dy = cy - laneCY;
             const d2 = dx * dx + dy * dy;
+            if (d2 < hitR * hitR) nearby.push(ev);
             if (d2 < bestD2) { bestD2 = d2; best = ev; }
         }
-        if (best) return { type: 'event', event: best, node };
+        if (best) {
+            // Group all events at the same pixel position as best
+            const bestX = Math.round(tlTimeToX(best.t));
+            const group = nearby.filter(ev => Math.round(tlTimeToX(ev.t)) === bestX);
+            if (group.length < 2) return { type: 'event', event: best, node };
+            return { type: 'event', event: best, node, group };
+        }
 
         // Check diamond markers (hover-only targets, after event dots)
         if (node.segments && node.segments.length > 1) {
@@ -7542,24 +7558,92 @@ function tlDraw() {
     for (let i = firstLane; i <= lastLane; i++) {
         const node = tlLanes[i];
         const cy = tlLaneY(i) + TL_LANE_H / 2;
+
+        // Group events by pixel position to detect overlaps
+        const byPx = new Map();
         for (const ev of node.events) {
             const ex = tlTimeToX(ev.t);
             if (ex < plotL - TL_DOT_R || ex > plotR + TL_DOT_R) continue;
-            const color = TL_COLORS[ev.cat] || TL_COLORS.other;
-            const isSel = tlSelectedRecord && ev.record._idx === tlSelectedRecord._idx;
-            const isHov = tlHoveredRecord && ev.record._idx === tlHoveredRecord._idx;
-            ctx.beginPath();
-            ctx.arc(ex, cy, isSel ? TL_DOT_R + 2 : TL_DOT_R, 0, Math.PI * 2);
-            ctx.fillStyle = color;
-            ctx.fill();
-            if (isSel) {
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 2;
+            const px = Math.round(ex);
+            if (!byPx.has(px)) byPx.set(px, []);
+            byPx.get(px).push(ev);
+        }
+
+        for (const [px, group] of byPx) {
+            // Draw segments around the dot for each category when multiple events overlap
+            if (group.length > 1) {
+                // Count categories for pie segments
+                const catCounts = {};
+                for (const ev of group) {
+                    const cat = ev.cat || 'other';
+                    catCounts[cat] = (catCounts[cat] || 0) + 1;
+                }
+                const cats = Object.keys(catCounts);
+                const selInGroup = tlSelectedRecord && group.some(ev => ev.record._idx === tlSelectedRecord._idx);
+                const hovInGroup = tlHoveredRecord && group.some(ev => ev.record._idx === tlHoveredRecord._idx);
+                const r = selInGroup ? TL_DOT_R + 2 : TL_DOT_R;
+
+                if (cats.length === 1) {
+                    // All same category — single color dot
+                    ctx.beginPath();
+                    ctx.arc(px, cy, r, 0, Math.PI * 2);
+                    ctx.fillStyle = TL_COLORS[cats[0]] || TL_COLORS.other;
+                    ctx.fill();
+                } else {
+                    // Multiple categories — pie segments
+                    let angle = -Math.PI / 2;
+                    for (const cat of cats) {
+                        const sweep = (catCounts[cat] / group.length) * Math.PI * 2;
+                        ctx.beginPath();
+                        ctx.moveTo(px, cy);
+                        ctx.arc(px, cy, r, angle, angle + sweep);
+                        ctx.closePath();
+                        ctx.fillStyle = TL_COLORS[cat] || TL_COLORS.other;
+                        ctx.fill();
+                        angle += sweep;
+                    }
+                }
+                if (selInGroup) {
+                    ctx.beginPath(); ctx.arc(px, cy, r, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
+                } else if (hovInGroup) {
+                    ctx.beginPath(); ctx.arc(px, cy, r, 0, Math.PI * 2);
+                    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+                }
+
+                // Count badge
+                ctx.font = 'bold 9px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const label = String(group.length);
+                const tw = ctx.measureText(label).width;
+                const bw = Math.max(tw + 5, 12);
+                const bx = px + r + 1;
+                const by = cy - r - 1;
+                ctx.beginPath();
+                ctx.roundRect(bx - bw / 2, by - 6, bw, 12, 3);
+                ctx.fillStyle = 'rgba(30, 41, 59, 0.9)';
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
+                ctx.lineWidth = 0.5;
                 ctx.stroke();
-            } else if (isHov) {
-                ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-                ctx.lineWidth = 1.5;
-                ctx.stroke();
+                ctx.fillStyle = '#e2e8f0';
+                ctx.fillText(label, bx, by);
+            } else {
+                // Single event — normal dot
+                const ev = group[0];
+                const color = TL_COLORS[ev.cat] || TL_COLORS.other;
+                const isSel = tlSelectedRecord && ev.record._idx === tlSelectedRecord._idx;
+                const isHov = tlHoveredRecord && ev.record._idx === tlHoveredRecord._idx;
+                ctx.beginPath();
+                ctx.arc(px, cy, isSel ? TL_DOT_R + 2 : TL_DOT_R, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+                if (isSel) {
+                    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
+                } else if (isHov) {
+                    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+                }
             }
         }
     }
@@ -8060,8 +8144,16 @@ function tlSetupInteractions() {
             const record = filteredRecords.find(r => r.orderID === hit.node.orderID);
             if (record) showDetail(record);
         } else if (hit.type === 'event') {
-            tlSelectedRecord = hit.event.record;
-            showDetail(hit.event.record, true);
+            let target = hit.event;
+            if (hit.group && hit.group.length > 1 && tlSelectedRecord) {
+                // Cycle to next event in group if current selection is in this group
+                const selIdx = hit.group.findIndex(ev => ev.record._idx === tlSelectedRecord._idx);
+                if (selIdx >= 0) {
+                    target = hit.group[(selIdx + 1) % hit.group.length];
+                }
+            }
+            tlSelectedRecord = target.record;
+            showDetail(target.record, true);
             tlDirty = true;
             tlScheduleDraw();
         }
@@ -8088,15 +8180,30 @@ function tlSetupInteractions() {
             tooltip.style.top = tipY + 'px';
             tooltip.classList.add('visible');
         } else if (hit && hit.type === 'event') {
-            const r = hit.event.record;
+            // When a group member is selected, show that event's info; otherwise show closest
+            let displayEv = hit.event;
+            if (hit.group && hit.group.length > 1 && tlSelectedRecord) {
+                const selEv = hit.group.find(ev => ev.record._idx === tlSelectedRecord._idx);
+                if (selEv) displayEv = selEv;
+            }
+            const r = displayEv.record;
             tlHoveredRecord = r;
             canvas.style.cursor = 'pointer';
-            const desc = FIELD_TOOLTIPS.type[r.type] || CATEGORY_LABELS[hit.event.cat] || 'Other';
-            const ts = formatCATTimestampForDisplay(r.eventTimestamp, hit.event.t);
+            const desc = FIELD_TOOLTIPS.type[r.type] || CATEGORY_LABELS[displayEv.cat] || 'Other';
+            const ts = formatCATTimestampForDisplay(r.eventTimestamp, displayEv.t);
             const priorLine = r.priorOrderID && r.priorOrderID !== r.orderID
                 ? `<br>${escapeHtml(r.priorOrderID)} \u2192 ${escapeHtml(r.orderID)}`
                 : `<br>${escapeHtml(r.orderID || '')}`;
-            tooltip.innerHTML = `<strong>${escapeHtml(r.type)}</strong> (${escapeHtml(desc)})${priorLine}<br>${ts}`;
+            let groupLine = '';
+            if (hit.group && hit.group.length > 1) {
+                const selIdx = tlSelectedRecord ? hit.group.findIndex(ev => ev.record._idx === tlSelectedRecord._idx) : -1;
+                if (selIdx >= 0) {
+                    groupLine = `<br><span style="color:#94a3b8">${selIdx + 1} of ${hit.group.length} events \u2014 click to cycle</span>`;
+                } else {
+                    groupLine = `<br><span style="color:#94a3b8">${hit.group.length} events \u2014 click to cycle</span>`;
+                }
+            }
+            tooltip.innerHTML = `<strong>${escapeHtml(r.type)}</strong> (${escapeHtml(desc)})${priorLine}<br>${ts}${groupLine}`;
             const tipX = Math.min(x + 12, rect.width - 200);
             const tipY = Math.max(y - 40, 4);
             tooltip.style.left = tipX + 'px';
