@@ -8156,31 +8156,25 @@ function tlSetupInteractions() {
             showDetail(target.record, true);
             tlDirty = true;
             tlScheduleDraw();
+            // Update tooltip immediately to reflect new selection
+            if (hit.group && hit.group.length > 1) {
+                tlUpdateTooltip(hit, e.clientX, e.clientY);
+            }
         }
     });
 
-    // Hover tooltip
-    canvas.addEventListener('mousemove', e => {
-        if (tlPanning) return;
+    // Tooltip rendering helper (used by both click and mousemove)
+    function tlUpdateTooltip(hit, clientX, clientY) {
         const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        const hit = tlHitTest(x, y);
-        const prevHover = tlHoveredRecord;
-
-        if (hit && hit.type === 'diamond') {
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+        if (hit.type === 'diamond') {
             tlHoveredRecord = null;
             canvas.style.cursor = 'pointer';
             const prevSeg = hit.node.segments[hit.segIdx - 1];
             const seg = hit.node.segments[hit.segIdx];
             tooltip.innerHTML = `<strong>orderID changed</strong><br>${escapeHtml(prevSeg.orderID)} \u2192 ${escapeHtml(seg.orderID)}`;
-            const tipX = Math.min(x + 12, rect.width - 200);
-            const tipY = Math.max(y - 40, 4);
-            tooltip.style.left = tipX + 'px';
-            tooltip.style.top = tipY + 'px';
-            tooltip.classList.add('visible');
-        } else if (hit && hit.type === 'event') {
-            // When a group member is selected, show that event's info; otherwise show closest
+        } else if (hit.type === 'event') {
             let displayEv = hit.event;
             if (hit.group && hit.group.length > 1 && tlSelectedRecord) {
                 const selEv = hit.group.find(ev => ev.record._idx === tlSelectedRecord._idx);
@@ -8204,11 +8198,29 @@ function tlSetupInteractions() {
                 }
             }
             tooltip.innerHTML = `<strong>${escapeHtml(r.type)}</strong> (${escapeHtml(desc)})${priorLine}<br>${ts}${groupLine}`;
-            const tipX = Math.min(x + 12, rect.width - 200);
-            const tipY = Math.max(y - 40, 4);
-            tooltip.style.left = tipX + 'px';
-            tooltip.style.top = tipY + 'px';
-            tooltip.classList.add('visible');
+        } else {
+            tlHoveredRecord = null;
+            tooltip.classList.remove('visible');
+            return;
+        }
+        const tipX = Math.min(x + 12, rect.width - 200);
+        const tipY = Math.max(y - 40, 4);
+        tooltip.style.left = tipX + 'px';
+        tooltip.style.top = tipY + 'px';
+        tooltip.classList.add('visible');
+    }
+
+    // Hover tooltip
+    canvas.addEventListener('mousemove', e => {
+        if (tlPanning) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const hit = tlHitTest(x, y);
+        const prevHover = tlHoveredRecord;
+
+        if (hit && (hit.type === 'diamond' || hit.type === 'event')) {
+            tlUpdateTooltip(hit, e.clientX, e.clientY);
         } else if (hit && (hit.type === 'toggle' || hit.type === 'label')) {
             tlHoveredRecord = null;
             canvas.style.cursor = 'pointer';
