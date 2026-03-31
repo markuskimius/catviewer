@@ -7727,12 +7727,12 @@ function tlUpdateScrollbars() {
     // Horizontal
     const hThumb = $('tlSbHThumb');
     const hTrack = $('tlSbH');
-    if (totalTimeW > plotW && plotW > 0) {
-        hTrack.style.display = '';
-        const ratio = plotW / totalTimeW;
+    {
+        const scrollable = totalTimeW > plotW && plotW > 0;
+        const ratio = scrollable ? plotW / totalTimeW : 1;
         const thumbW = Math.max(20, hTrack.clientWidth * ratio);
         hThumb.style.width = thumbW + 'px';
-        const scrollFrac = tlViewX / Math.max(1, totalTimeW - plotW);
+        const scrollFrac = scrollable ? tlViewX / Math.max(1, totalTimeW - plotW) : 0;
         hThumb.style.left = (scrollFrac * (hTrack.clientWidth - thumbW)) + 'px';
         const hHeat = $('tlSbHHeat');
         tlDrawHeatmap(hHeat, tlHeatBucketsH, false);
@@ -7750,19 +7750,17 @@ function tlUpdateScrollbars() {
             hCtx.lineTo(mx, hHeat.clientHeight);
             hCtx.stroke();
         }
-    } else {
-        hTrack.style.display = 'none';
     }
 
     // Vertical
     const vThumb = $('tlSbVThumb');
     const vTrack = $('tlSbV');
-    if (totalH > visH && visH > 0) {
-        vTrack.style.display = '';
-        const ratio = visH / totalH;
+    {
+        const scrollable = totalH > visH && visH > 0;
+        const ratio = scrollable ? visH / totalH : 1;
         const thumbH = Math.max(20, vTrack.clientHeight * ratio);
         vThumb.style.height = thumbH + 'px';
-        const scrollFrac = tlViewY / Math.max(1, totalH - visH);
+        const scrollFrac = scrollable ? tlViewY / Math.max(1, totalH - visH) : 0;
         vThumb.style.top = (scrollFrac * (vTrack.clientHeight - thumbH)) + 'px';
         const vHeat = $('tlSbVHeat');
         // Build vertical heatmap filtered to visible time range
@@ -7798,8 +7796,6 @@ function tlUpdateScrollbars() {
             vCtx.lineTo(vHeat.clientWidth, my);
             vCtx.stroke();
         }
-    } else {
-        vTrack.style.display = 'none';
     }
 }
 
@@ -8041,14 +8037,19 @@ function tlSetupInteractions() {
 
     // ── Scrollbar interaction ──
     function tlSetupScrollbar(track, thumb, axis) {
-        let dragging = false, startPos = 0, startScroll = 0;
+        let dragging = false, lastPos = 0;
         thumb.addEventListener('mousedown', e => {
             e.preventDefault(); e.stopPropagation();
             dragging = true; thumb.classList.add('active');
-            startPos = axis === 'h' ? e.clientX : e.clientY;
-            startScroll = axis === 'h' ? tlViewX : tlViewY;
+            lastPos = axis === 'h' ? e.clientX : e.clientY;
             const onMove = ev => {
-                const delta = (axis === 'h' ? ev.clientX : ev.clientY) - startPos;
+                const curPos = axis === 'h' ? ev.clientX : ev.clientY;
+                const rawDelta = curPos - lastPos;
+                lastPos = curPos;
+                const slow = (ev.shiftKey && (ev.ctrlKey || ev.metaKey)) ? 1000
+                    : ev.shiftKey ? 100
+                    : (ev.ctrlKey || ev.metaKey) ? 10 : 1;
+                const delta = rawDelta / slow;
                 const trackSize = axis === 'h' ? track.clientWidth : track.clientHeight;
                 const timeRange = tlTimeMax - tlTimeMin;
                 const totalContent = axis === 'h' ? timeRange * tlZoom : tlLanes.length * TL_LANE_H;
@@ -8056,9 +8057,12 @@ function tlSetupInteractions() {
                     ? (canvas.width / (window.devicePixelRatio || 1)) - TL_LABEL_W
                     : (canvas.height / (window.devicePixelRatio || 1)) - TL_AXIS_H;
                 if (totalContent <= viewSize) return;
-                const scrollRatio = (totalContent - viewSize) / (trackSize - thumb.offsetWidth);
-                if (axis === 'h') tlViewX = Math.max(0, Math.min(startScroll + delta * scrollRatio, totalContent - viewSize));
-                else tlViewY = Math.max(0, Math.min(startScroll + delta * scrollRatio, totalContent - viewSize));
+                const thumbSize = axis === 'h' ? thumb.offsetWidth : thumb.offsetHeight;
+                const scrollRatio = (totalContent - viewSize) / (trackSize - thumbSize);
+                const cur = axis === 'h' ? tlViewX : tlViewY;
+                const next = Math.max(0, Math.min(cur + delta * scrollRatio, totalContent - viewSize));
+                if (axis === 'h') tlViewX = next;
+                else tlViewY = next;
                 tlDirty = true; tlScheduleDraw();
             };
             const onUp = () => {
