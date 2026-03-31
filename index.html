@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.03.30
+  CAT File Viewer v2026.03.31
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -233,6 +233,9 @@
         .tl-fit-btn svg { width: 14px; height: 14px; stroke: #64748b; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
         .tl-fit-btn.zoomed svg { stroke: #93c5fd; }
         .tl-fit-btn:hover svg { stroke: #e2e8f0; }
+        .tl-legend { position: absolute; bottom: 24px; left: 184px; display: flex; gap: 10px; z-index: 5; pointer-events: none; opacity: 0.7; }
+        .tl-legend-item { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #94a3b8; }
+        .tl-legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
         .tl-tooltip {
             display: none; position: absolute; pointer-events: none;
             background: var(--surface); border: 1px solid var(--border);
@@ -508,13 +511,13 @@
             font-size: 12px;
             font-weight: 600;
         }
-        .et-order { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+        .et-order { background: rgba(234, 179, 8, 0.15); color: #facc15; }
         .et-route { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
-        .et-trade { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+        .et-trade { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
         .et-cancel { background: rgba(239, 68, 68, 0.15); color: #f87171; }
-        .et-modify { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+        .et-modify { background: rgba(249, 115, 22, 0.15); color: #fb923c; }
         .et-quote { background: rgba(6, 182, 212, 0.15); color: #22d3ee; }
-        .et-alloc { background: rgba(236, 72, 153, 0.15); color: #f472b6; }
+        .et-alloc { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
         .et-other { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
 
         .action-new { color: var(--green); }
@@ -965,7 +968,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.03.30</span>
+    <span class="subtitle">v2026.03.31</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -1047,6 +1050,7 @@
     <div id="tabTimeline" style="display:none">
         <canvas id="timelineCanvas"></canvas>
         <button class="tl-fit-btn" id="tlFitBtn" title="Fit all"><svg viewBox="0 0 16 16"><path d="M1 5.5V1.5h4M11 1.5h4v4M15 10.5v4h-4M5 15.5H1v-4"/><rect x="4.5" y="4.5" width="7" height="7" rx="1" stroke-dasharray="2 1.5"/></svg></button>
+        <div class="tl-legend" id="tlLegend"></div>
         <div class="tl-sb tl-sb-h" id="tlSbH"><canvas class="tl-sb-heat" id="tlSbHHeat"></canvas><div class="tl-sb-thumb" id="tlSbHThumb"></div></div>
         <div class="tl-sb tl-sb-v" id="tlSbV"><canvas class="tl-sb-heat" id="tlSbVHeat"></canvas><div class="tl-sb-thumb" id="tlSbVThumb"></div></div>
         <div class="tl-tooltip" id="tlTooltip"></div>
@@ -1132,7 +1136,7 @@ const EVENT_CATEGORIES = {
     // Equity Modify/Cancel Events
     MEOM: 'modify', MEOMS: 'modify', MEOMR: 'modify',
     MEOC: 'cancel', MEOCR: 'cancel',
-    MECO: 'cancel', MECOC: 'cancel', MECOM: 'modify',
+    MECO: 'order', MECOC: 'cancel', MECOM: 'modify',
     // Equity Quote Events
     MENQ: 'quote', MENQS: 'quote', MERQ: 'quote', MERQS: 'quote',
     MEQR: 'quote', MEQC: 'quote', MEQM: 'quote', MEQS: 'quote',
@@ -1149,7 +1153,7 @@ const EVENT_CATEGORIES = {
     // Option Modify/Cancel Events
     MOOM: 'modify', MOOMS: 'modify', MOOMR: 'modify',
     MOOC: 'cancel', MOOCR: 'cancel',
-    MOCO: 'cancel', MOCOC: 'cancel', MOCOM: 'modify',
+    MOCO: 'order', MOCOC: 'cancel', MOCOM: 'modify',
     // Option Quote Events
     MONQ: 'quote', MORQ: 'quote', MOQR: 'quote', MOQC: 'quote', MOQM: 'quote',
     // Option Trade/Fulfillment Events
@@ -1165,7 +1169,7 @@ const EVENT_CATEGORIES = {
     // Multi-Leg Modify/Cancel Events
     MLOM: 'modify', MLOMR: 'modify',
     MLOC: 'cancel', MLOCR: 'cancel',
-    MLCO: 'cancel', MLCOC: 'cancel', MLCOM: 'modify',
+    MLCO: 'order', MLCOC: 'cancel', MLCOM: 'modify',
     // Multi-Leg Quote Events
     MLNQ: 'quote', MLRQ: 'quote', MLQR: 'quote', MLQC: 'quote', MLQM: 'quote', MLQS: 'quote',
 };
@@ -3882,24 +3886,65 @@ function buildOrderIndex() {
     for (const r of allRecords) {
         const oid = r.orderID;
         if (!oid) continue;
-        if (!orderIndex[oid]) orderIndex[oid] = { parentOrderID: null, children: new Set() };
+        if (!orderIndex[oid]) orderIndex[oid] = { parentOrderID: null, children: new Set(), priorSuccessors: new Set(), priorOrderID: null };
         if (r.parentOrderID && r.parentOrderID !== oid) {
             orderIndex[oid].parentOrderID = r.parentOrderID;
-            if (!orderIndex[r.parentOrderID]) orderIndex[r.parentOrderID] = { parentOrderID: null, children: new Set() };
+            if (!orderIndex[r.parentOrderID]) orderIndex[r.parentOrderID] = { parentOrderID: null, children: new Set(), priorSuccessors: new Set(), priorOrderID: null };
             orderIndex[r.parentOrderID].children.add(oid);
+        }
+        if (r.priorOrderID && r.priorOrderID !== oid) {
+            orderIndex[oid].priorOrderID = r.priorOrderID;
+            if (!orderIndex[r.priorOrderID]) orderIndex[r.priorOrderID] = { parentOrderID: null, children: new Set(), priorSuccessors: new Set(), priorOrderID: null };
+            orderIndex[r.priorOrderID].priorSuccessors.add(oid);
         }
     }
     buildIdIndex();
 }
 
+// Resolve the full prior chain for an orderID (all predecessors and successors via priorOrderID)
+function getPriorChainIDs(orderID) {
+    const result = new Set();
+    // Walk backward to find the chain root
+    let root = orderID;
+    const visited = new Set([orderID]);
+    while (true) {
+        const entry = orderIndex[root];
+        const prior = entry && entry.priorOrderID;
+        if (!prior || visited.has(prior)) break;
+        visited.add(prior);
+        root = prior;
+    }
+    // Walk forward from root collecting all successors
+    function walkForward(id) {
+        result.add(id);
+        const entry = orderIndex[id];
+        if (!entry) return;
+        for (const succ of entry.priorSuccessors) {
+            if (!result.has(succ)) walkForward(succ);
+        }
+    }
+    walkForward(root);
+    return result;
+}
+
 function getChainOrderIDs(rootID, maxDepth) {
     const result = new Set();
+    function addWithPriorChain(id) {
+        for (const pc of getPriorChainIDs(id)) result.add(pc);
+    }
     function walk(id, depth) {
         if (depth > maxDepth || result.has(id)) return;
-        result.add(id);
+        addWithPriorChain(id);
         const entry = orderIndex[id];
         if (entry) {
             for (const child of entry.children) walk(child, depth + 1);
+        }
+        // Also walk children of prior chain members
+        for (const pc of getPriorChainIDs(id)) {
+            const pcEntry = orderIndex[pc];
+            if (pcEntry) {
+                for (const child of pcEntry.children) walk(child, depth + 1);
+            }
         }
     }
     walk(rootID, 0);
@@ -3908,29 +3953,36 @@ function getChainOrderIDs(rootID, maxDepth) {
 
 function getBranchOrderIDs(selectedID) {
     const result = new Set();
-    // Walk up ancestor chain
-    const ancestors = [];
-    let cur = selectedID;
-    while (cur) {
-        ancestors.push(cur);
-        result.add(cur);
-        const entry = orderIndex[cur];
-        cur = (entry && entry.parentOrderID) ? entry.parentOrderID : null;
-        if (result.has(cur)) break; // cycle guard
+    // Resolve selectedID's full prior chain
+    const priorIDs = getPriorChainIDs(selectedID);
+    for (const id of priorIDs) result.add(id);
+    // Walk up parent ancestor chain from each prior chain member
+    let topAncestor = selectedID;
+    for (const pid of priorIDs) {
+        let cur = pid;
+        while (cur) {
+            result.add(cur);
+            const entry = orderIndex[cur];
+            const parent = entry && entry.parentOrderID;
+            if (!parent || result.has(parent)) break;
+            cur = parent;
+        }
+        if (cur) topAncestor = cur;
     }
-    // Walk down all descendants of selectedID
+    // Walk down all descendants, including their prior chains
     function walkDown(id) {
         const entry = orderIndex[id];
         if (!entry) return;
         for (const child of entry.children) {
             if (!result.has(child)) {
                 result.add(child);
+                for (const pc of getPriorChainIDs(child)) result.add(pc);
                 walkDown(child);
             }
         }
     }
-    walkDown(selectedID);
-    return { ids: result, topAncestor: ancestors[ancestors.length - 1] };
+    for (const pid of priorIDs) walkDown(pid);
+    return { ids: result, topAncestor };
 }
 
 function buildChainDisplay(rootID, maxDepth, records) {
@@ -3944,15 +3996,41 @@ function buildChainDisplay(rootID, maxDepth, records) {
         recs.sort((a, b) => (a.eventTimestamp || '').localeCompare(b.eventTimestamp || ''));
     }
 
+    // Collect all records for an orderID and its prior chain members, sorted chronologically
+    function getRecordsWithPriorChain(id) {
+        const priorIDs = getPriorChainIDs(id);
+        const recs = [];
+        for (const pid of priorIDs) {
+            if (byOrder[pid]) recs.push(...byOrder[pid]);
+        }
+        recs.sort((a, b) => (a.eventTimestamp || '').localeCompare(b.eventTimestamp || ''));
+        return recs;
+    }
+
+    // Collect all children across an orderID and its prior chain members
+    function getChildrenWithPriorChain(id) {
+        const priorIDs = getPriorChainIDs(id);
+        const kids = new Set();
+        for (const pid of priorIDs) {
+            const entry = orderIndex[pid];
+            if (entry) {
+                for (const child of entry.children) {
+                    // Skip children that are prior chain members of this order (they're merged, not children)
+                    if (!priorIDs.has(child)) kids.add(child);
+                }
+            }
+        }
+        return kids;
+    }
+
     function hasRecords(id, depth) {
-        if (byOrder[id]?.length) return true;
+        if (getRecordsWithPriorChain(id).length) return true;
         if (depth >= maxDepth) return false;
-        const entry = orderIndex[id];
-        return entry && Array.from(entry.children).some(c => hasRecords(c, depth + 1));
+        return Array.from(getChildrenWithPriorChain(id)).some(c => hasRecords(c, depth + 1));
     }
 
     function dfs(id, depth, lastFlags) {
-        const recs = byOrder[id] || [];
+        const recs = getRecordsWithPriorChain(id);
         for (let i = 0; i < recs.length; i++) {
             let prefix = '';
             for (let d = 0; d < depth; d++) {
@@ -3964,11 +4042,10 @@ function buildChainDisplay(rootID, maxDepth, records) {
                         : (lastFlags[d] ? '    ' : '│   ');
                 }
             }
-            result.push({ record: recs[i], depth, orderID: id, isFirstOfOrder: i === 0, treePrefix: prefix });
+            result.push({ record: recs[i], depth, orderID: recs[i].orderID, isFirstOfOrder: i === 0, treePrefix: prefix });
         }
-        const entry = orderIndex[id];
-        if (entry && depth < maxDepth) {
-            const kids = Array.from(entry.children).sort().filter(c => hasRecords(c, depth + 1));
+        if (depth < maxDepth) {
+            const kids = Array.from(getChildrenWithPriorChain(id)).sort().filter(c => hasRecords(c, depth + 1));
             kids.forEach((c, i) => dfs(c, depth + 1, [...lastFlags, i === kids.length - 1]));
         }
     }
@@ -4426,7 +4503,10 @@ function updateChainBar() {
     document.querySelectorAll('.depth-btn').forEach(btn => {
         const d = btn.dataset.depth === 'Infinity' ? Infinity : btn.dataset.depth === 'branch' ? 'branch' : parseInt(btn.dataset.depth);
         btn.classList.toggle('active', d === orderChainDepth);
-        if (d === 'branch') btn.disabled = !hasParent && totalDescendants === 0;
+        if (d === 'branch') {
+            const hasPriorChain = getPriorChainIDs(orderChainRoot).size > 1;
+            btn.disabled = !hasParent && totalDescendants === 0 && !hasPriorChain;
+        }
     });
 }
 
@@ -6495,9 +6575,9 @@ const TL_DOT_R    = 5;    // event dot radius
 const TL_BAR_H    = 14;   // life-duration bar height
 const TL_AXIS_H   = 28;   // top time-axis area
 const TL_COLORS   = {
-    order: '#60a5fa', route: '#c084fc', trade: '#4ade80',
-    cancel: '#f87171', modify: '#fbbf24', quote: '#22d3ee',
-    alloc: '#f472b6', other: '#94a3b8',
+    order: '#facc15', route: '#c084fc', trade: '#60a5fa',
+    cancel: '#f87171', modify: '#fb923c', quote: '#22d3ee',
+    alloc: '#4ade80', other: '#94a3b8',
 };
 
 // Timeline state
@@ -6953,7 +7033,7 @@ function tlLaneAtY(y) {
 
 function tlHitTest(cx, cy) {
     const laneIdx = tlLaneAtY(cy);
-    // Check collapse toggle (in label area)
+    // Check collapse toggle and label click (in label area)
     if (cx < TL_LABEL_W && laneIdx >= 0) {
         const node = tlLanes[laneIdx];
         if (node.hasChildren) {
@@ -6962,6 +7042,12 @@ function tlHitTest(cx, cy) {
             if (cx >= triX - 6 && cx <= triX + 10 && cy >= triY - 8 && cy <= triY + 8) {
                 return { type: 'toggle', node };
             }
+        }
+        // Click on order ID label text
+        const indent = 8 + node.depth * TL_INDENT;
+        const textX = indent + (node.hasChildren ? 14 : 4);
+        if (cx >= textX && cx <= TL_LABEL_W - 6) {
+            return { type: 'label', node };
         }
     }
     // Check event dots and diamond markers
@@ -7969,6 +8055,10 @@ function tlSetupInteractions() {
         if (hit.type === 'toggle') {
             tlToggleCollapse(hit.node.orderID, e.shiftKey, e.ctrlKey || e.metaKey);
             tlScheduleDraw();
+        } else if (hit.type === 'label') {
+            enterOrderChain(hit.node.orderID, 'branch');
+            const record = filteredRecords.find(r => r.orderID === hit.node.orderID);
+            if (record) showDetail(record);
         } else if (hit.type === 'event') {
             tlSelectedRecord = hit.event.record;
             showDetail(hit.event.record, true);
@@ -8003,13 +8093,16 @@ function tlSetupInteractions() {
             canvas.style.cursor = 'pointer';
             const desc = FIELD_TOOLTIPS.type[r.type] || CATEGORY_LABELS[hit.event.cat] || 'Other';
             const ts = formatCATTimestampForDisplay(r.eventTimestamp, hit.event.t);
-            tooltip.innerHTML = `<strong>${escapeHtml(r.type)}</strong> (${escapeHtml(desc)})<br>${escapeHtml(r.orderID || '')}<br>${ts}`;
+            const priorLine = r.priorOrderID && r.priorOrderID !== r.orderID
+                ? `<br>${escapeHtml(r.priorOrderID)} \u2192 ${escapeHtml(r.orderID)}`
+                : `<br>${escapeHtml(r.orderID || '')}`;
+            tooltip.innerHTML = `<strong>${escapeHtml(r.type)}</strong> (${escapeHtml(desc)})${priorLine}<br>${ts}`;
             const tipX = Math.min(x + 12, rect.width - 200);
             const tipY = Math.max(y - 40, 4);
             tooltip.style.left = tipX + 'px';
             tooltip.style.top = tipY + 'px';
             tooltip.classList.add('visible');
-        } else if (hit && hit.type === 'toggle') {
+        } else if (hit && (hit.type === 'toggle' || hit.type === 'label')) {
             tlHoveredRecord = null;
             canvas.style.cursor = 'pointer';
             tooltip.classList.remove('visible');
@@ -8103,6 +8196,20 @@ function tlSetupInteractions() {
         tlStopKinetic();
         tlDirty = true; tlScheduleDraw();
     });
+
+    // ── Legend ──
+    const legend = $('tlLegend');
+    for (const cat of Object.keys(TL_COLORS)) {
+        if (cat === 'other') continue;
+        const item = document.createElement('span');
+        item.className = 'tl-legend-item';
+        const dot = document.createElement('span');
+        dot.className = 'tl-legend-dot';
+        dot.style.background = TL_COLORS[cat];
+        item.appendChild(dot);
+        item.appendChild(document.createTextNode(CATEGORY_LABELS[cat] || cat));
+        legend.appendChild(item);
+    }
 
     // ── Touch: single-finger pan with kinetic, two-finger pinch-to-zoom ──
     let touchState = null; // { mode: '1'|'2', ... }
@@ -8919,7 +9026,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.03.30 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.03.31 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
