@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.03.29
+  CAT File Viewer v2026.03.30
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -965,7 +965,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.03.29</span>
+    <span class="subtitle">v2026.03.30</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -7680,7 +7680,7 @@ function tlDrawHeatmap(canvasEl, buckets, isVertical) {
     }
 }
 
-let tlHeatBucketsH = null, tlHeatBucketsV = null;
+let tlHeatBucketsH = null;
 
 function tlBuildHeatmapBuckets() {
     const N_BUCKETS = 200;
@@ -7699,21 +7699,6 @@ function tlBuildHeatmapBuckets() {
             }
         }
         tlHeatBucketsH._cats = TL_HEAT_CATS.filter(c => usedCats.has(c));
-    }
-
-    // Vertical: per-category event density per lane region
-    tlHeatBucketsV = { _n: N_BUCKETS, _cats: [] };
-    for (const cat of TL_HEAT_CATS) tlHeatBucketsV[cat] = new Float32Array(N_BUCKETS);
-    if (tlLanes.length > 0) {
-        const usedCats = new Set();
-        for (let i = 0; i < tlLanes.length; i++) {
-            const idx = Math.min(N_BUCKETS - 1, Math.max(0, Math.floor((i / tlLanes.length) * N_BUCKETS)));
-            for (const ev of tlLanes[i].events) {
-                tlHeatBucketsV[ev.cat][idx]++;
-                usedCats.add(ev.cat);
-            }
-        }
-        tlHeatBucketsV._cats = TL_HEAT_CATS.filter(c => usedCats.has(c));
     }
 
     tlHeatmapDirty = false;
@@ -7780,7 +7765,25 @@ function tlUpdateScrollbars() {
         const scrollFrac = tlViewY / Math.max(1, totalH - visH);
         vThumb.style.top = (scrollFrac * (vTrack.clientHeight - thumbH)) + 'px';
         const vHeat = $('tlSbVHeat');
-        tlDrawHeatmap(vHeat, tlHeatBucketsV, true);
+        // Build vertical heatmap filtered to visible time range
+        const vTimeMin = tlViewX / tlZoom + tlTimeMin;
+        const vTimeMax = (tlViewX + plotW) / tlZoom + tlTimeMin;
+        const vBuckets = { _n: 200, _cats: [] };
+        for (const cat of TL_HEAT_CATS) vBuckets[cat] = new Float32Array(200);
+        if (tlLanes.length > 0) {
+            const usedCats = new Set();
+            for (let i = 0; i < tlLanes.length; i++) {
+                const bi = Math.min(199, Math.max(0, Math.floor((i / tlLanes.length) * 200)));
+                for (const ev of tlLanes[i].events) {
+                    if (ev.t >= vTimeMin && ev.t <= vTimeMax) {
+                        vBuckets[ev.cat][bi]++;
+                        usedCats.add(ev.cat);
+                    }
+                }
+            }
+            vBuckets._cats = TL_HEAT_CATS.filter(c => usedCats.has(c));
+        }
+        tlDrawHeatmap(vHeat, vBuckets, true);
         // Draw selected lane marker
         if (selLaneIdx >= 0 && tlLanes.length > 0) {
             const frac = (selLaneIdx + 0.5) / tlLanes.length;
@@ -8912,7 +8915,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.03.29 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.03.30 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
