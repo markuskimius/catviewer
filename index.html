@@ -7031,6 +7031,14 @@ function tlTimeToX(t) {
 function tlXToTime(x) {
     return (x - TL_LABEL_W + tlViewX) / tlZoom + tlTimeMin;
 }
+function tlMinZoom() {
+    const dpr = window.devicePixelRatio || 1;
+    const c = $('timelineCanvas');
+    if (!c) return 1e-9;
+    const plotW = c.width / dpr - TL_LABEL_W;
+    const timeRange = tlTimeMax - tlTimeMin;
+    return (timeRange > 0 && plotW > 0) ? plotW / timeRange : 1e-9;
+}
 function tlLaneY(idx) {
     return TL_AXIS_H + idx * TL_LANE_H - tlViewY;
 }
@@ -8065,7 +8073,7 @@ function tlSetupInteractions() {
             const mouseT = tlXToTime(mx);
             const factor = Math.pow(1.003, -e.deltaY);
             const oldZoom = tlZoom;
-            tlZoom = Math.max(1e-9, Math.min(1e6, tlZoom * factor));
+            tlZoom = Math.max(tlMinZoom(), Math.min(1e6, tlZoom * factor));
             // Adjust viewX so mouseT stays at same screen position
             tlViewX += (mouseT - tlTimeMin) * (tlZoom - oldZoom);
         } else if (isHShift) {
@@ -8393,7 +8401,7 @@ function tlSetupInteractions() {
             const anchorX = touchState.midX - rect.left;
             const anchorT = tlXToTime(anchorX);
             const oldZoom = tlZoom;
-            tlZoom = Math.max(1e-9, Math.min(1e6, touchState.startZoom * (dist / touchState.startDist)));
+            tlZoom = Math.max(tlMinZoom(), Math.min(1e6, touchState.startZoom * (dist / touchState.startDist)));
             tlViewX += (anchorT - tlTimeMin) * (tlZoom - oldZoom);
             // Pan from midpoint movement
             tlViewX = touchState.vx - (midX - touchState.midX);
