@@ -4572,7 +4572,6 @@ function initializeUI() {
     detailMode = 'translated';
     errorCodeFilterValues = [];
     ignoredErrors = new Set();
-    switchTab('table', false);
     $('showAllFields').checked = false;
     document.querySelectorAll('.detail-tab').forEach(t => t.classList.toggle('active', t.dataset.detailTab === 'translated'));
     orderChainRoot = null;
