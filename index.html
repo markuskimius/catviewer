@@ -957,9 +957,83 @@
         .error-bar .close-btn:hover { opacity: 1; }
 
         @media (max-width: 768px) {
+            body {
+                height: auto;
+                min-height: 100vh;
+                min-height: 100dvh;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            #app {
+                min-height: 0;
+                flex: none;
+            }
+            header {
+                padding: 10px 12px;
+                gap: 8px;
+            }
+            header h1 { font-size: 16px; }
+            header .subtitle { display: none; }
+            .summary-cards { display: none; }
+            .file-info {
+                margin: 0 8px;
+                padding: 8px 12px;
+                gap: 8px 16px;
+                font-size: 12px;
+            }
+            .toolbar {
+                margin: 8px 8px;
+                gap: 8px;
+            }
             .toolbar input[type="text"] { width: 100%; }
-            .summary-cards { grid-template-columns: repeat(2, 1fr); }
+            .tabs { margin: 0 8px; }
+            .tab { padding: 8px 12px; font-size: 13px; }
+            .table-container {
+                margin: 0 8px 4px;
+                min-height: 50vh;
+                min-height: 50dvh;
+                max-height: 70vh;
+                max-height: 70dvh;
+                flex: none;
+            }
+            #tabTimeline {
+                margin-left: 8px;
+                margin-right: 8px;
+                min-height: 50vh;
+                min-height: 50dvh;
+            }
+            .bottom-bar {
+                margin: 0 8px 8px;
+                gap: 6px;
+                flex-wrap: wrap;
+                font-size: 12px;
+            }
+            .bottom-bar .btn { padding: 6px 10px; font-size: 12px; }
+            .pagination { gap: 4px; font-size: 12px; }
+            .pagination button { padding: 4px 8px; font-size: 12px; }
+            .col-mgr {
+                width: calc(100vw - 24px);
+                max-height: 90vh;
+                max-height: 90dvh;
+            }
+            .detail-panel {
+                height: var(--detail-h, 50vh);
+            }
             .detail-grid { grid-template-columns: 1fr; }
+            .order-chain-bar {
+                flex-wrap: wrap;
+                gap: 4px;
+                margin: 0 8px;
+                padding: 6px 8px;
+            }
+            #tabSummary, #tabRaw {
+                margin-left: 8px;
+                margin-right: 8px;
+            }
+            .raw-json { margin: 0 8px 8px; }
+            .error-bar { margin: 0 8px; }
+            .drop-zone { margin: 12px; padding: 24px; }
+            .drop-zone h2 { font-size: 16px; }
         }
     </style>
 </head>
