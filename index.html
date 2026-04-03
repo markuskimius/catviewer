@@ -1230,6 +1230,10 @@
     <button id="colCtxManage">Manage columns...</button>
 </div>
 
+<div class="shake-popup-overlay" id="shakePopup">
+    <div class="shake-popup" id="shakePopupInner"></div>
+</div>
+
 <script>
 // ── CAT Event Type Metadata ──
 const EVENT_CATEGORIES = {
@@ -8946,10 +8950,10 @@ $('redoBtn').addEventListener('click', performRedo);
 // ── Shake-to-undo/redo (mobile) ──
 (function() {
     if (!window.DeviceMotionEvent) return;
-    const SHAKE_THRESHOLD = 25;
+    const SHAKE_THRESHOLD = 15;
     const SHAKE_COOLDOWN = 1500;
     let lastShake = 0;
-    let lastAx = 0, lastAy = 0, lastAz = 0, hasPrev = false;
+    let lastAx = null, lastAy = null, lastAz = null;
 
     function showShakePopup() {
         const canUndo = undoStack.length > 0;
@@ -8983,9 +8987,9 @@ $('redoBtn').addEventListener('click', performRedo);
     }
 
     function onMotion(e) {
-        const a = e.accelerationIncludingGravity;
-        if (!a) return;
-        if (hasPrev) {
+        const a = e.acceleration || e.accelerationIncludingGravity;
+        if (!a || a.x == null) return;
+        if (lastAx !== null) {
             const delta = Math.abs(a.x - lastAx) + Math.abs(a.y - lastAy) + Math.abs(a.z - lastAz);
             if (delta > SHAKE_THRESHOLD) {
                 const now = Date.now();
@@ -8996,19 +9000,19 @@ $('redoBtn').addEventListener('click', performRedo);
             }
         }
         lastAx = a.x; lastAy = a.y; lastAz = a.z;
-        hasPrev = true;
     }
 
-    // iOS 13+ requires permission
+    // iOS 13+ requires permission — request on first user gesture
     if (typeof DeviceMotionEvent.requestPermission === 'function') {
-        // Request on first user interaction
-        const requestOnce = () => {
+        let permissionRequested = false;
+        document.addEventListener('click', function reqPerm() {
+            if (permissionRequested) return;
+            permissionRequested = true;
             DeviceMotionEvent.requestPermission().then(state => {
                 if (state === 'granted') window.addEventListener('devicemotion', onMotion);
             }).catch(() => {});
-            document.removeEventListener('touchstart', requestOnce);
-        };
-        document.addEventListener('touchstart', requestOnce, { once: true });
+            document.removeEventListener('click', reqPerm);
+        });
     } else {
         window.addEventListener('devicemotion', onMotion);
     }
@@ -9453,10 +9457,6 @@ function debounce(fn, ms) {
     return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
 }
 </script>
-
-<div class="shake-popup-overlay" id="shakePopup">
-    <div class="shake-popup" id="shakePopupInner"></div>
-</div>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
     CAT File Viewer v2026.04.03 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
