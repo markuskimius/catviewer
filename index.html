@@ -996,6 +996,13 @@
                 max-height: 70dvh;
                 flex: none;
             }
+            body.detail-open .table-container {
+                min-height: 100px;
+                max-height: none;
+            }
+            body.detail-open #tabTimeline {
+                min-height: 100px;
+            }
             #tabTimeline {
                 margin-left: 8px;
                 margin-right: 8px;
@@ -1021,6 +1028,7 @@
             .detail-panel {
                 height: var(--detail-h, 50vh);
             }
+            .detail-resize-handle { height: 20px; }
             .detail-grid { grid-template-columns: 1fr; }
             .order-chain-bar {
                 flex-wrap: wrap;
@@ -8907,6 +8915,37 @@ $('closeDetail').addEventListener('click', () => closeDetail(true));
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', onMouseUp);
     });
+
+    function onTouchMove(e) {
+        e.preventDefault();
+        const t = e.touches[0];
+        const newH = Math.max(150, Math.min(window.innerHeight - 50, startH + (startY - t.clientY)));
+        const vh = (newH / window.innerHeight * 100);
+        document.documentElement.style.setProperty('--detail-h', vh + 'vh');
+        sizeTableContainer();
+        document.body.offsetHeight;
+        window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight);
+    }
+
+    function onTouchEnd() {
+        panel.classList.remove('resizing');
+        document.body.classList.remove('resizing');
+        document.removeEventListener('touchmove', onTouchMove);
+        document.removeEventListener('touchend', onTouchEnd);
+        document.removeEventListener('touchcancel', onTouchEnd);
+    }
+
+    handle.addEventListener('touchstart', e => {
+        e.preventDefault();
+        const t = e.touches[0];
+        startY = t.clientY;
+        startH = panel.getBoundingClientRect().height;
+        panel.classList.add('resizing');
+        document.body.classList.add('resizing');
+        document.addEventListener('touchmove', onTouchMove, { passive: false });
+        document.addEventListener('touchend', onTouchEnd);
+        document.addEventListener('touchcancel', onTouchEnd);
+    }, { passive: false });
 })();
 window.addEventListener('resize', sizeTableContainer);
 
