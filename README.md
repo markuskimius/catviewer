@@ -1,6 +1,6 @@
 # CAT File Viewer
 
-Version 0.1.1
+Version 0.2
 
 Copyright (c) 2026 Mark Kim. Licensed under [GPL-2.0](LICENSE).
 
@@ -11,6 +11,8 @@ Supports CAT Technical Specifications for Industry Members v4.1.0 r15.
 **Disclaimer:** This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review. Users are responsible for verifying the accuracy of any data presented.
 
 ## Usage
+
+**Live version:** https://app.cbreak.org/catviewer/
 
 Open `index.html` in any modern browser. No server, build step, or dependencies required.
 
