@@ -8894,7 +8894,7 @@ $('closeDetail').addEventListener('click', () => closeDetail(true));
 (function() {
     const handle = $('detailResizeHandle');
     const panel = $('detailPanel');
-    let startY, startH;
+    let startY, startH, startVH;
 
     function onMouseMove(e) {
         const newH = Math.max(150, Math.min(window.innerHeight - 50, startH + (startY - e.clientY)));
@@ -8927,12 +8927,9 @@ $('closeDetail').addEventListener('click', () => closeDetail(true));
     function onTouchMove(e) {
         e.preventDefault();
         const t = e.touches[0];
-        const newH = Math.max(150, Math.min(window.innerHeight - 50, startH + (startY - t.clientY)));
-        const vh = (newH / window.innerHeight * 100);
-        document.documentElement.style.setProperty('--detail-h', vh + 'vh');
+        const newH = Math.max(150, Math.min(startVH - 50, startH + (startY - t.clientY)));
+        document.documentElement.style.setProperty('--detail-h', newH + 'px');
         sizeTableContainer(true);
-        document.body.offsetHeight;
-        window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight);
     }
 
     function onTouchEnd() {
@@ -8948,6 +8945,9 @@ $('closeDetail').addEventListener('click', () => closeDetail(true));
         const t = e.touches[0];
         startY = t.clientY;
         startH = panel.getBoundingClientRect().height;
+        startVH = window.innerHeight;
+        // Lock to px immediately so address bar changes don't shift the panel
+        document.documentElement.style.setProperty('--detail-h', startH + 'px');
         panel.classList.add('resizing');
         document.body.classList.add('resizing');
         document.addEventListener('touchmove', onTouchMove, { passive: false });
