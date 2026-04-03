@@ -1446,7 +1446,9 @@ const undoStack = [];
 const redoStack = [];
 const MAX_UNDO = 50;
 const DEFAULT_FILTERS = ['type', 'symbol', 'underlying', 'optionID'];
-let activeFilters = [...DEFAULT_FILTERS]; // column names currently shown as filter dropdowns
+const DEFAULT_FILTERS_MOBILE = [];
+function defaultFilters() { return window.innerWidth <= 768 ? DEFAULT_FILTERS_MOBILE : DEFAULT_FILTERS; }
+let activeFilters = [...defaultFilters()]; // column names currently shown as filter dropdowns
 const expandedFilters = new Set(); // filters currently showing their combobox
 
 function visibleColumns() { return columns.filter(c => !hiddenColumns.has(c)); }
@@ -4644,7 +4646,7 @@ function initializeUI() {
     syncSearchClear();
     // Restore saved filter columns or use defaults
     const savedFilterCols = getSavedFilterColumns();
-    activeFilters = savedFilterCols ? [...savedFilterCols] : [...DEFAULT_FILTERS];
+    activeFilters = savedFilterCols ? [...savedFilterCols] : [...defaultFilters()];
     filterModes = getSavedFilterModes();
     $('detailPanel').classList.remove('visible');
     document.body.classList.remove('detail-open');
@@ -9034,7 +9036,7 @@ $('resetLayoutBtn').addEventListener('click', () => {
     for (const col of allCols.sort()) {
         if (!columns.includes(col)) columns.push(col);
     }
-    activeFilters = [...DEFAULT_FILTERS];
+    activeFilters = [...defaultFilters()];
     filterModes = {};
     renderFilterBar();
     applyFilters();
