@@ -997,6 +997,17 @@
                 max-height: 70dvh;
                 flex: none;
             }
+            body.detail-open {
+                overflow: hidden;
+                height: 100vh;
+                height: 100dvh;
+                padding-bottom: 0;
+            }
+            body.detail-open #app {
+                height: calc(100vh - var(--detail-h, 50vh));
+                height: calc(100dvh - var(--detail-h, 50vh));
+                overflow: hidden;
+            }
             body.detail-open .table-container {
                 min-height: 100px;
                 max-height: none;
@@ -4304,12 +4315,12 @@ function switchTab(name, push) {
             // Switching between detail-supporting tabs: resize but preserve scroll exactly
             const scrollSnap = window.scrollY;
             sizeTableContainer(true);
-            window.scrollTo({ top: scrollSnap });
+            if (!isMobileLayout()) window.scrollTo({ top: scrollSnap });
         } else {
             sizeTableContainer();
         }
         // Only animate scroll when detail is newly appearing, not when switching between detail-supporting tabs
-        if (!wasDetailOpen) {
+        if (!wasDetailOpen && !isMobileLayout()) {
             const scrollTarget = document.documentElement.scrollHeight - window.innerHeight;
             window.scrollTo({ top: scrollBefore });
             const startScroll = scrollBefore;
@@ -4382,7 +4393,7 @@ function sizeTableContainer(noScroll) {
         if (activeTab === 'timeline' && tl) {
             tl.style.height = Math.max(100, baseH - 8) + 'px';
         }
-        if (!noScroll) {
+        if (!noScroll && !isMobileLayout()) {
             window.scrollTo({
                 top     : document.documentElement.scrollHeight - window.innerHeight,
                 behavior: 'smooth',
