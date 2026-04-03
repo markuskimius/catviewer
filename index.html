@@ -8929,6 +8929,19 @@ $('redoBtn').addEventListener('click', performRedo);
             return;
         }
         menu.classList.add('open');
+        // Ensure menu stays within viewport
+        menu.style.left = ''; menu.style.right = '0';
+        requestAnimationFrame(() => {
+            const mr = menu.getBoundingClientRect();
+            if (mr.left < 4) {
+                menu.style.right = 'auto';
+                menu.style.left = '0';
+            }
+            if (mr.right > window.innerWidth - 4) {
+                menu.style.left = 'auto';
+                menu.style.right = '0';
+            }
+        });
         dragging = true;
     });
 
