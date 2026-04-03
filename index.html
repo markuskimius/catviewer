@@ -1043,6 +1043,27 @@
             .tl-sb-v .tl-sb-thumb { left: -5px; }
             #timelineCanvas { width: calc(100% - 14px); height: calc(100% - 14px); }
             .tl-legend { display: none; }
+            .shake-popup-overlay {
+                display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+                z-index: 300; align-items: center; justify-content: center;
+            }
+            .shake-popup-overlay.visible { display: flex; }
+            .shake-popup {
+                background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+                padding: 20px; min-width: 220px; text-align: center;
+                box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            }
+            .shake-popup h3 { font-size: 16px; margin-bottom: 16px; }
+            .shake-popup button {
+                display: block; width: 100%; padding: 10px; margin-bottom: 8px;
+                font-size: 14px; font-weight: 500; border: 1px solid var(--border);
+                border-radius: 8px; background: var(--surface2); color: var(--text);
+                cursor: pointer;
+            }
+            .shake-popup button:last-child { margin-bottom: 0; }
+            .shake-popup button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+            .shake-popup button:hover { opacity: 0.9; }
+            .shake-popup .cancel { background: none; border: none; color: var(--text-muted); font-size: 13px; }
         }
     </style>
 </head>
@@ -8921,6 +8942,83 @@ document.querySelector('.undo-shortcut').textContent = isMac ? '\u2318Z' : 'Ctrl
 document.querySelector('.redo-shortcut').textContent = isMac ? '\u21E7\u2318Z' : 'Ctrl+Y';
 $('undoBtn').addEventListener('click', performUndo);
 $('redoBtn').addEventListener('click', performRedo);
+
+// ── Shake-to-undo/redo (mobile) ──
+(function() {
+    if (!window.DeviceMotionEvent) return;
+    const SHAKE_THRESHOLD = 25;
+    const SHAKE_COOLDOWN = 1500;
+    let lastShake = 0;
+    let lastAx = 0, lastAy = 0, lastAz = 0, hasPrev = false;
+
+    function showShakePopup() {
+        const canUndo = undoStack.length > 0;
+        const canRedo = redoStack.length > 0;
+        if (!canUndo && !canRedo) return;
+        const overlay = $('shakePopup');
+        const inner = $('shakePopupInner');
+        inner.innerHTML = '';
+        const h = document.createElement('h3');
+        h.textContent = 'Undo / Redo';
+        inner.appendChild(h);
+        if (canUndo) {
+            const btn = document.createElement('button');
+            btn.className = 'primary';
+            btn.textContent = 'Undo ' + undoStack[undoStack.length - 1].label;
+            btn.addEventListener('click', () => { overlay.classList.remove('visible'); performUndo(); });
+            inner.appendChild(btn);
+        }
+        if (canRedo) {
+            const btn = document.createElement('button');
+            btn.textContent = 'Redo ' + redoStack[redoStack.length - 1].label;
+            btn.addEventListener('click', () => { overlay.classList.remove('visible'); performRedo(); });
+            inner.appendChild(btn);
+        }
+        const cancel = document.createElement('button');
+        cancel.className = 'cancel';
+        cancel.textContent = 'Cancel';
+        cancel.addEventListener('click', () => overlay.classList.remove('visible'));
+        inner.appendChild(cancel);
+        overlay.classList.add('visible');
+    }
+
+    function onMotion(e) {
+        const a = e.accelerationIncludingGravity;
+        if (!a) return;
+        if (hasPrev) {
+            const delta = Math.abs(a.x - lastAx) + Math.abs(a.y - lastAy) + Math.abs(a.z - lastAz);
+            if (delta > SHAKE_THRESHOLD) {
+                const now = Date.now();
+                if (now - lastShake > SHAKE_COOLDOWN) {
+                    lastShake = now;
+                    showShakePopup();
+                }
+            }
+        }
+        lastAx = a.x; lastAy = a.y; lastAz = a.z;
+        hasPrev = true;
+    }
+
+    // iOS 13+ requires permission
+    if (typeof DeviceMotionEvent.requestPermission === 'function') {
+        // Request on first user interaction
+        const requestOnce = () => {
+            DeviceMotionEvent.requestPermission().then(state => {
+                if (state === 'granted') window.addEventListener('devicemotion', onMotion);
+            }).catch(() => {});
+            document.removeEventListener('touchstart', requestOnce);
+        };
+        document.addEventListener('touchstart', requestOnce, { once: true });
+    } else {
+        window.addEventListener('devicemotion', onMotion);
+    }
+
+    // Close popup on overlay tap
+    $('shakePopup').addEventListener('click', e => {
+        if (e.target === $('shakePopup')) $('shakePopup').classList.remove('visible');
+    });
+})();
+
 (function() {
     const btn = $('toolsMenuBtn'), menu = $('toolsMenu');
     let dragging = false;
@@ -9355,6 +9453,10 @@ function debounce(fn, ms) {
     return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
 }
 </script>
+
+<div class="shake-popup-overlay" id="shakePopup">
+    <div class="shake-popup" id="shakePopupInner"></div>
+</div>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
     CAT File Viewer v2026.04.03 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
