@@ -997,6 +997,7 @@
                 height: 100vh;
                 height: 100dvh;
             }
+            body.detail-open .file-info { display: none; }
             body.detail-open #app {
                 flex: 1;
                 min-height: 0;
@@ -6647,13 +6648,11 @@ function showDetail(record, push) {
 
     const wasDetailOpen = document.body.classList.contains('detail-open');
     const scrollY = window.scrollY;
-    if (isMobileLayout()) {
-        // Scroll tabs to top before locking scroll
-        const tabBar = $('tabBar');
-        if (tabBar) window.scrollTo(0, tabBar.offsetTop);
-    }
     document.body.classList.add('detail-open');
-    if (!isMobileLayout()) {
+    if (isMobileLayout()) {
+        // Pin tabs to top of viewport
+        window.scrollTo(0, 0);
+    } else {
         window.scrollTo({
             top     : scrollY,
             behavior: 'smooth',
