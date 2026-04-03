@@ -956,7 +956,7 @@
         }
         .error-bar .close-btn:hover { opacity: 1; }
 
-        @media (max-width: 768px) {
+        @media (max-width: 768px), (max-height: 500px) and (pointer: coarse) {
             body {
                 height: auto;
                 min-height: 100vh;
@@ -1481,7 +1481,8 @@ const redoStack = [];
 const MAX_UNDO = 50;
 const DEFAULT_FILTERS = ['type', 'symbol', 'underlying', 'optionID'];
 const DEFAULT_FILTERS_MOBILE = [];
-function defaultFilters() { return window.innerWidth <= 768 ? DEFAULT_FILTERS_MOBILE : DEFAULT_FILTERS; }
+function isMobileLayout() { return window.innerWidth <= 768 || (window.innerHeight <= 500 && matchMedia('(pointer: coarse)').matches); }
+function defaultFilters() { return isMobileLayout() ? DEFAULT_FILTERS_MOBILE : DEFAULT_FILTERS; }
 let activeFilters = [...defaultFilters()]; // column names currently shown as filter dropdowns
 const expandedFilters = new Set(); // filters currently showing their combobox
 
