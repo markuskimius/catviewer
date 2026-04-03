@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.04.01
+  CAT File Viewer v2026.04.03
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -970,7 +970,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.04.01</span>
+    <span class="subtitle">v2026.04.03</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -4384,6 +4384,7 @@ function handleLinkClick(el) {
     const scrollY = window.scrollY;
 
     // Clear all filters before navigating
+    const prevChainDepth = orderChainRoot ? orderChainDepth : Infinity;
     $('searchInput').value = '';
     syncSearchClear();
     errorCodeFilterValues = [];
@@ -4403,7 +4404,7 @@ function handleLinkClick(el) {
 
     // If target is orderID, use order chain view
     if (target === 'orderID') {
-        enterOrderChain(value);
+        enterOrderChain(value, prevChainDepth);
         const record = filteredRecords.find(r => r.orderID === value);
         if (record) showDetail(record);
         window.scrollTo(0, scrollY);
@@ -9178,7 +9179,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.04.01 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.04.03 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
