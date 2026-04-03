@@ -6648,11 +6648,12 @@ function showDetail(record, push) {
 
     const wasDetailOpen = document.body.classList.contains('detail-open');
     const scrollY = window.scrollY;
-    document.body.classList.add('detail-open');
     if (isMobileLayout()) {
-        // Pin tabs to top of viewport
+        // Scroll tabs to top before locking layout
         window.scrollTo(0, 0);
-    } else {
+    }
+    document.body.classList.add('detail-open');
+    if (!isMobileLayout()) {
         window.scrollTo({
             top     : scrollY,
             behavior: 'smooth',
