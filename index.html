@@ -4318,41 +4318,29 @@ function switchTab(name, push) {
     // Animate detail panel when switching tabs
     const panel = $('detailPanel');
     const wasDetailOpen = document.body.classList.contains('detail-open');
-    if ((name === 'table' || name === 'timeline') && currentDetailRecord) {
-        // Capture current scroll before layout change
+    if ((name === 'table' || name === 'timeline') && currentDetailRecord && wasDetailOpen) {
+        // Preserve current detail panel height across tab switch
+        const currentH = document.documentElement.style.getPropertyValue('--detail-h');
         const scrollBefore = window.scrollY;
         document.body.classList.add('detail-open');
-        // Restore panel height from before tab switch
-        if (savedDetailH) {
-            document.documentElement.style.setProperty('--detail-h', savedDetailH);
+        if (currentH) {
+            document.documentElement.style.setProperty('--detail-h', currentH);
         }
         panel.classList.add('visible');
-        if (wasDetailOpen) {
-            // Switching between detail-supporting tabs: resize but preserve scroll exactly
-            const scrollSnap = window.scrollY;
-            sizeTableContainer(true);
-            if (!isMobileLayout()) window.scrollTo({ top: scrollSnap });
+        if (isMobileLayout()) {
+            // On mobile, scroll tabs to top so flex layout fits viewport
+            window.scrollTo(0, 0);
         } else {
-            sizeTableContainer();
-        }
-        // Only animate scroll when detail is newly appearing, not when switching between detail-supporting tabs
-        if (!wasDetailOpen && !isMobileLayout()) {
-            const scrollTarget = document.documentElement.scrollHeight - window.innerHeight;
-            window.scrollTo({ top: scrollBefore });
-            const startScroll = scrollBefore;
-            const distance = scrollTarget - startScroll;
-            if (Math.abs(distance) > 1) {
-                const duration = 300;
-                const startTime = performance.now();
-                function animateScroll(now) {
-                    const elapsed = now - startTime;
-                    const t = Math.min(elapsed / duration, 1);
-                    const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-                    window.scrollTo({ top: startScroll + distance * ease });
-                    if (t < 1) requestAnimationFrame(animateScroll);
-                }
-                requestAnimationFrame(animateScroll);
-            }
+            // On desktop, resize content then align tabs just below header
+            // Use rAF to scroll after sizeTableContainer's async layout completes
+            sizeTableContainer(true);
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    const headerH = document.querySelector('header').offsetHeight;
+                    const tabTop = $('tabBar').offsetTop;
+                    window.scrollTo({ top: Math.max(0, tabTop - headerH) });
+                });
+            });
         }
     } else if (name !== 'table' && name !== 'timeline' && currentDetailRecord && document.body.classList.contains('detail-open')) {
         // Save current panel height so it can be restored when switching back
