@@ -214,7 +214,7 @@
         .tl-sb-v .tl-sb-thumb { width: 100%; left: -4px; }
         .tl-sb-heat { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 6px; pointer-events: none; }
         .tl-sb-v { top: 28px; right: 6px; bottom: 24px; width: 12px; }
-        .tl-sb-h { left: 180px; right: 24px; bottom: 6px; height: 12px; }
+        .tl-sb-h { left: 180px; right: 24px; bottom: 6px; height: 12px; } /* left updated dynamically by tlSyncLabelW */
         .tl-fit-btn {
             position: absolute; right: 0; bottom: 0; z-index: 6;
             width: 24px; height: 24px; border-radius: 4px; box-sizing: border-box;
@@ -999,8 +999,10 @@
             #tabTimeline {
                 margin-left: 8px;
                 margin-right: 8px;
-                min-height: 50vh;
-                min-height: 50dvh;
+                height: 60vh;
+                height: 60dvh;
+                min-height: 300px;
+                flex: none;
             }
             .bottom-bar {
                 margin: 0 8px 8px;
@@ -1034,6 +1036,12 @@
             .error-bar { margin: 0 8px; }
             .drop-zone { margin: 12px; padding: 24px; }
             .drop-zone h2 { font-size: 16px; }
+            .tl-sb-v { width: 20px; right: 2px; }
+            .tl-sb-h { height: 20px; bottom: 2px; }
+            .tl-sb-thumb { min-width: 28px; min-height: 28px; }
+            .tl-sb-h .tl-sb-thumb { top: -8px; }
+            .tl-sb-v .tl-sb-thumb { left: -8px; }
+            #timelineCanvas { width: calc(100% - 20px); height: calc(100% - 20px); }
         }
     </style>
 </head>
@@ -6653,7 +6661,7 @@ function showDetail(record, push) {
 // ══════════════════════════════════════════════════════════════
 
 const TL_LANE_H   = 28;   // px per lane row
-const TL_LABEL_W  = 180;  // left label area width
+let   TL_LABEL_W  = 180;  // left label area width (dynamic, computed from lane labels)
 const TL_INDENT   = 16;   // indentation per depth level
 const TL_DOT_R    = 5;    // event dot radius
 const TL_BAR_H    = 14;   // life-duration bar height
@@ -7051,6 +7059,29 @@ function tlFlattenLanes() {
         }
     }
     for (const r of tlTree) walk(r);
+    tlComputeLabelW();
+}
+
+function tlComputeLabelW() {
+    const canvas = $('timelineCanvas');
+    if (!canvas || !tlLanes.length) { TL_LABEL_W = 60; tlSyncLabelW(); return; }
+    const ctx = canvas.getContext('2d');
+    ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    let maxW = 0;
+    for (const node of tlLanes) {
+        const indent = 8 + node.depth * TL_INDENT + (node.hasChildren ? 14 : 4);
+        const tw = ctx.measureText(node.orderID).width;
+        const badgeW = (node.segments && node.segments.length > 1) ? 24 : 0;
+        const total = indent + tw + badgeW + 8; // 8px right padding
+        if (total > maxW) maxW = total;
+    }
+    TL_LABEL_W = Math.max(60, Math.min(Math.ceil(maxW), 240));
+    tlSyncLabelW();
+}
+
+function tlSyncLabelW() {
+    const sbH = $('tlSbH');
+    if (sbH) sbH.style.left = TL_LABEL_W + 'px';
 }
 
 function tlToggleCollapse(orderID, shiftKey, ctrlKey) {
@@ -8408,6 +8439,61 @@ function tlSetupInteractions() {
             if (axis === 'h') tlViewX = Math.max(0, Math.min(target, totalContent - viewSize));
             else tlViewY = Math.max(0, Math.min(target, totalContent - viewSize));
             tlDirty = true; tlScheduleDraw();
+        });
+        // Touch support for scrollbar thumb dragging
+        track.addEventListener('touchstart', e => {
+            e.preventDefault(); e.stopPropagation();
+            const t = e.touches[0];
+            const onThumb = e.target === thumb || thumb.contains(e.target);
+            if (onThumb) {
+                dragging = true; thumb.classList.add('active');
+                lastPos = axis === 'h' ? t.clientX : t.clientY;
+            } else {
+                // Tap on track to jump
+                const rect = track.getBoundingClientRect();
+                const clickPos = axis === 'h' ? (t.clientX - rect.left) / rect.width : (t.clientY - rect.top) / rect.height;
+                const timeRange = tlTimeMax - tlTimeMin;
+                const totalContent = axis === 'h' ? timeRange * tlZoom : tlLanes.length * TL_LANE_H;
+                const viewSize = axis === 'h'
+                    ? (canvas.width / (window.devicePixelRatio || 1)) - TL_LABEL_W
+                    : (canvas.height / (window.devicePixelRatio || 1)) - TL_AXIS_H;
+                if (totalContent <= viewSize) return;
+                const target = clickPos * totalContent - viewSize / 2;
+                if (axis === 'h') tlViewX = Math.max(0, Math.min(target, totalContent - viewSize));
+                else tlViewY = Math.max(0, Math.min(target, totalContent - viewSize));
+                tlDirty = true; tlScheduleDraw();
+                // Start dragging from jump position
+                dragging = true; thumb.classList.add('active');
+                lastPos = axis === 'h' ? t.clientX : t.clientY;
+            }
+        }, { passive: false });
+        track.addEventListener('touchmove', e => {
+            if (!dragging) return;
+            e.preventDefault(); e.stopPropagation();
+            const t = e.touches[0];
+            const curPos = axis === 'h' ? t.clientX : t.clientY;
+            const delta = curPos - lastPos;
+            lastPos = curPos;
+            const trackSize = axis === 'h' ? track.clientWidth : track.clientHeight;
+            const timeRange = tlTimeMax - tlTimeMin;
+            const totalContent = axis === 'h' ? timeRange * tlZoom : tlLanes.length * TL_LANE_H;
+            const viewSize = axis === 'h'
+                ? (canvas.width / (window.devicePixelRatio || 1)) - TL_LABEL_W
+                : (canvas.height / (window.devicePixelRatio || 1)) - TL_AXIS_H;
+            if (totalContent <= viewSize) return;
+            const thumbSize = axis === 'h' ? thumb.offsetWidth : thumb.offsetHeight;
+            const scrollRatio = (totalContent - viewSize) / (trackSize - thumbSize);
+            const cur = axis === 'h' ? tlViewX : tlViewY;
+            const next = Math.max(0, Math.min(cur + delta * scrollRatio, totalContent - viewSize));
+            if (axis === 'h') tlViewX = next;
+            else tlViewY = next;
+            tlDirty = true; tlScheduleDraw();
+        }, { passive: false });
+        track.addEventListener('touchend', () => {
+            dragging = false; thumb.classList.remove('active');
+        });
+        track.addEventListener('touchcancel', () => {
+            dragging = false; thumb.classList.remove('active');
         });
     }
     tlSetupScrollbar($('tlSbH'), $('tlSbHThumb'), 'h');
