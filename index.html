@@ -969,12 +969,7 @@
                 min-height: 0;
                 flex: none;
             }
-            header {
-                padding: 10px 12px;
-                gap: 8px;
-            }
-            header h1 { font-size: 16px; }
-            header .subtitle { display: none; }
+            header { display: none; }
             .summary-cards { display: none; }
             .file-info {
                 margin: 0 8px;
@@ -4421,7 +4416,7 @@ function closeDetail(push) {
     const panel = $('detailPanel');
     if (!panel.classList.contains('visible')) return;
     panel.classList.remove('visible');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!isMobileLayout()) window.scrollTo({ top: 0, behavior: 'smooth' });
     currentDetailRecord = null;
     tlSelectedRecord = null;
     tlDirty = true;
@@ -6652,11 +6647,18 @@ function showDetail(record, push) {
 
     const wasDetailOpen = document.body.classList.contains('detail-open');
     const scrollY = window.scrollY;
+    if (isMobileLayout()) {
+        // Scroll tabs to top before locking scroll
+        const tabBar = $('tabBar');
+        if (tabBar) window.scrollTo(0, tabBar.offsetTop);
+    }
     document.body.classList.add('detail-open');
-    window.scrollTo({
-        top     : scrollY,
-        behavior: 'smooth',
-    });
+    if (!isMobileLayout()) {
+        window.scrollTo({
+            top     : scrollY,
+            behavior: 'smooth',
+        });
+    }
 
     // Calculate initial height: enough for 30 fields or 50vh, whichever is smaller
     if (!document.documentElement.style.getPropertyValue('--detail-h')) {
