@@ -4364,10 +4364,14 @@ function sizeTableContainer(noScroll) {
     function tick() {
         const panelRect = panel.getBoundingClientRect();
         const visibleDetailH = Math.max(0, window.innerHeight - panelRect.top);
-        const bottomBarH = document.querySelector('#tabTable > .bottom-bar').offsetHeight;
         const baseH = window.innerHeight - headerH - tabBarH - gap - visibleDetailH;
-        if (tc) tc.style.height = Math.max(100, baseH - (bottomBarH + 16)) + 'px';
-        if (tl) tl.style.height = Math.max(100, baseH - 8) + 'px';
+        if (activeTab === 'table' && tc) {
+            const bottomBarH = document.querySelector('#tabTable > .bottom-bar').offsetHeight;
+            tc.style.height = Math.max(100, baseH - (bottomBarH + 16)) + 'px';
+        }
+        if (activeTab === 'timeline' && tl) {
+            tl.style.height = Math.max(100, baseH - 8) + 'px';
+        }
         if (!noScroll) {
             window.scrollTo({
                 top     : document.documentElement.scrollHeight - window.innerHeight,
