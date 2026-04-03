@@ -1001,19 +1001,24 @@
                 overflow: hidden;
                 height: 100vh;
                 height: 100dvh;
-                padding-bottom: 0;
             }
             body.detail-open #app {
-                height: calc(100vh - var(--detail-h, 50vh));
-                height: calc(100dvh - var(--detail-h, 50vh));
+                flex: 1;
+                min-height: 0;
                 overflow: hidden;
             }
             body.detail-open .table-container {
-                min-height: 100px;
+                flex: 1;
+                min-height: 0;
                 max-height: none;
             }
+            body.detail-open #tabTable {
+                flex: 1;
+                min-height: 0;
+            }
             body.detail-open #tabTimeline {
-                min-height: 100px;
+                flex: 1;
+                min-height: 0;
             }
             #tabTimeline {
                 margin-left: 8px;
@@ -4366,6 +4371,12 @@ function sizeTableContainer(noScroll) {
     const tc = document.querySelector('.table-container');
     const tl = document.querySelector('#tabTimeline');
     if (!document.body.classList.contains('detail-open')) {
+        if (tc) tc.style.height = '';
+        if (tl) tl.style.height = '';
+        return;
+    }
+    // On mobile, CSS flex layout handles sizing — just clear explicit heights
+    if (isMobileLayout()) {
         if (tc) tc.style.height = '';
         if (tl) tl.style.height = '';
         return;
