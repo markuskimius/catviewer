@@ -8900,7 +8900,7 @@ $('closeDetail').addEventListener('click', () => closeDetail(true));
         const newH = Math.max(150, Math.min(window.innerHeight - 50, startH + (startY - e.clientY)));
         const vh = (newH / window.innerHeight * 100);
         document.documentElement.style.setProperty('--detail-h', vh + 'vh');
-        sizeTableContainer();
+        sizeTableContainer(true);
         document.body.offsetHeight; // force reflow so scrollHeight is current
         window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight);
     }
@@ -8930,7 +8930,7 @@ $('closeDetail').addEventListener('click', () => closeDetail(true));
         const newH = Math.max(150, Math.min(window.innerHeight - 50, startH + (startY - t.clientY)));
         const vh = (newH / window.innerHeight * 100);
         document.documentElement.style.setProperty('--detail-h', vh + 'vh');
-        sizeTableContainer();
+        sizeTableContainer(true);
         document.body.offsetHeight;
         window.scrollTo(0, document.documentElement.scrollHeight - window.innerHeight);
     }
