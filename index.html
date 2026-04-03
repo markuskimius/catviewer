@@ -8651,7 +8651,14 @@ function tlSetupInteractions() {
                 const hit = tlHitTest(x, y);
                 if (hit) {
                     if (hit.type === 'toggle') { tlToggleCollapse(hit.node.orderID, false); tlScheduleDraw(); }
-                    else if (hit.type === 'event') { tlSelectedRecord = hit.event.record; showDetail(hit.event.record, true); tlDirty = true; tlScheduleDraw(); }
+                    else if (hit.type === 'event') {
+                        let target = hit.event;
+                        if (hit.group && hit.group.length > 1 && tlSelectedRecord) {
+                            const selIdx = hit.group.findIndex(ev => ev.record._idx === tlSelectedRecord._idx);
+                            if (selIdx >= 0) target = hit.group[(selIdx + 1) % hit.group.length];
+                        }
+                        tlSelectedRecord = target.record; showDetail(target.record, true); tlDirty = true; tlScheduleDraw();
+                    }
                 }
             }
         }
