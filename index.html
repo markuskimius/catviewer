@@ -959,15 +959,15 @@
 
         @media (max-width: 768px), (max-height: 500px) and (pointer: coarse) {
             body {
-                height: auto;
-                min-height: 100vh;
-                min-height: 100dvh;
-                overflow-y: auto;
+                height: 100vh;
+                height: 100dvh;
+                overflow: hidden;
                 -webkit-overflow-scrolling: touch;
             }
             #app {
                 min-height: 0;
-                flex: none;
+                flex: 1;
+                overflow: hidden;
             }
             header { display: none; }
             .summary-cards { display: none; }
@@ -986,11 +986,8 @@
             .tab { padding: 8px 12px; font-size: 13px; }
             .table-container {
                 margin: 0 8px 4px;
-                min-height: 50vh;
-                min-height: 50dvh;
-                max-height: 70vh;
-                max-height: 70dvh;
-                flex: none;
+                flex: 1;
+                min-height: 0;
             }
             body.detail-open {
                 overflow: hidden;
@@ -1000,31 +997,11 @@
                 padding-bottom: var(--detail-h, 50vh);
             }
             body.detail-open .file-info { display: none; }
-            body.detail-open #app {
-                flex: 1;
-                min-height: 0;
-                overflow: hidden;
-            }
-            body.detail-open .table-container {
-                flex: 1;
-                min-height: 0;
-                max-height: none;
-            }
-            body.detail-open #tabTable {
-                flex: 1;
-                min-height: 0;
-            }
-            body.detail-open #tabTimeline {
-                flex: 1;
-                min-height: 0;
-            }
             #tabTimeline {
                 margin-left: 8px;
                 margin-right: 8px;
-                height: 60vh;
-                height: 60dvh;
-                min-height: 300px;
-                flex: none;
+                flex: 1;
+                min-height: 0;
             }
             .bottom-bar {
                 margin: 0 8px 8px;
@@ -1057,9 +1034,7 @@
             #tabSummary, #tabRaw {
                 margin-left: 8px;
                 margin-right: 8px;
-                max-height: calc(100vh - 80px);
-                max-height: calc(100dvh - 80px);
-                overflow: hidden;
+                min-height: 0;
             }
             .raw-json { margin: 0 8px 8px; }
             .error-bar { margin: 0 8px; }
