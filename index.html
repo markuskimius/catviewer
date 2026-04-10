@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.04.03
+  CAT File Viewer v2026.04.09
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -1101,7 +1101,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.04.03</span>
+    <span class="subtitle">v2026.04.09</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -6955,7 +6955,20 @@ function tlBuildData() {
         if (t === null) continue;
         if (!byOrder.has(oid)) byOrder.set(oid, { events: [], minT: Infinity, maxT: -Infinity });
         const entry = byOrder.get(oid);
-        entry.events.push({ record: r, t, cat: EVENT_CATEGORIES[r.type] || 'other' });
+        // Compute worst validation severity for this record (error > warn > null)
+        let sev = null;
+        if (validationEnabled && r._errors) {
+            const vis = getVisibleErrors(r._errors);
+            if (vis) {
+                outer: for (const f in vis) {
+                    for (const e of vis[f]) {
+                        if (e.severity === 'error') { sev = 'error'; break outer; }
+                        if (e.severity === 'warning' && !sev) sev = 'warn';
+                    }
+                }
+            }
+        }
+        entry.events.push({ record: r, t, cat: EVENT_CATEGORIES[r.type] || 'other', sev });
         if (t < entry.minT) entry.minT = t;
         if (t > entry.maxT) entry.maxT = t;
     }
@@ -7356,6 +7369,37 @@ function tlScrollToSelected(animate) {
     requestAnimationFrame(tick);
 }
 
+function tlDrawValBadge(ctx, cx, cy, sev) {
+    const s = 6;
+    ctx.save();
+    if (sev === 'error') {
+        ctx.beginPath();
+        ctx.arc(cx, cy, s, 0, Math.PI * 2);
+        ctx.fillStyle = '#ef4444';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(15,23,42,0.85)';
+        ctx.lineWidth = 0.75;
+        ctx.stroke();
+    } else {
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - s - 0.5);
+        ctx.lineTo(cx + s + 0.5, cy + s - 0.5);
+        ctx.lineTo(cx - s - 0.5, cy + s - 0.5);
+        ctx.closePath();
+        ctx.fillStyle = '#f59e0b';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(15,23,42,0.85)';
+        ctx.lineWidth = 0.75;
+        ctx.stroke();
+    }
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('!', cx, sev === 'error' ? cy : cy + 1);
+    ctx.restore();
+}
+
 function tlDraw() {
     Perf.start('tlDraw');
     const canvas = $('timelineCanvas');
@@ -7739,7 +7783,7 @@ function tlDraw() {
     // ── Event dots ──
     ctx.save();
     ctx.beginPath();
-    ctx.rect(plotL - TL_DOT_R, TL_AXIS_H, plotW + TL_DOT_R * 2, visH);
+    ctx.rect(plotL - TL_DOT_R - 8, TL_AXIS_H, plotW + (TL_DOT_R + 8) * 2, visH);
     ctx.clip();
     for (let i = firstLane; i <= lastLane; i++) {
         const node = tlLanes[i];
@@ -7760,9 +7804,12 @@ function tlDraw() {
             if (group.length > 1) {
                 // Count categories for pie segments
                 const catCounts = {};
+                let groupSev = null;
                 for (const ev of group) {
                     const cat = ev.cat || 'other';
                     catCounts[cat] = (catCounts[cat] || 0) + 1;
+                    if (ev.sev === 'error') groupSev = 'error';
+                    else if (ev.sev === 'warn' && groupSev !== 'error') groupSev = 'warn';
                 }
                 const cats = Object.keys(catCounts);
                 const selInGroup = tlSelectedRecord && group.some(ev => ev.record._idx === tlSelectedRecord._idx);
@@ -7815,20 +7862,27 @@ function tlDraw() {
                 ctx.stroke();
                 ctx.fillStyle = '#e2e8f0';
                 ctx.fillText(label, bx, by);
+                if (groupSev) {
+                    tlDrawValBadge(ctx, px - r - 1, cy - r - 1, groupSev);
+                }
             } else {
                 // Single event — normal dot
                 const ev = group[0];
                 const color = TL_COLORS[ev.cat] || TL_COLORS.other;
                 const isSel = tlSelectedRecord && ev.record._idx === tlSelectedRecord._idx;
                 const isHov = tlHoveredRecord && ev.record._idx === tlHoveredRecord._idx;
+                const rr = isSel ? TL_DOT_R + 2 : TL_DOT_R;
                 ctx.beginPath();
-                ctx.arc(px, cy, isSel ? TL_DOT_R + 2 : TL_DOT_R, 0, Math.PI * 2);
+                ctx.arc(px, cy, rr, 0, Math.PI * 2);
                 ctx.fillStyle = color;
                 ctx.fill();
                 if (isSel) {
                     ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
                 } else if (isHov) {
                     ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.5; ctx.stroke();
+                }
+                if (ev.sev) {
+                    tlDrawValBadge(ctx, px - rr - 1, cy - rr - 1, ev.sev);
                 }
             }
         }
@@ -8407,7 +8461,21 @@ function tlSetupInteractions() {
                     groupLine = `<br><span style="color:#94a3b8">${hit.group.length} events \u2014 click to cycle</span>`;
                 }
             }
-            tooltip.innerHTML = `<strong>${escapeHtml(r.type)}</strong> (${escapeHtml(desc)})${priorLine}<br>${ts}${groupLine}`;
+            let valLine = '';
+            if (validationEnabled && r._errors) {
+                const vis = getVisibleErrors(r._errors);
+                if (vis) {
+                    let errN = 0, warnN = 0;
+                    for (const f in vis) for (const e of vis[f]) {
+                        if (e.severity === 'error') errN++; else if (e.severity === 'warning') warnN++;
+                    }
+                    const parts = [];
+                    if (errN) parts.push(`<span style="color:#fca5a5">${errN} error${errN > 1 ? 's' : ''}</span>`);
+                    if (warnN) parts.push(`<span style="color:#fcd34d">${warnN} warning${warnN > 1 ? 's' : ''}</span>`);
+                    if (parts.length) valLine = `<br>${parts.join(', ')}`;
+                }
+            }
+            tooltip.innerHTML = `<strong>${escapeHtml(r.type)}</strong> (${escapeHtml(desc)})${priorLine}<br>${ts}${valLine}${groupLine}`;
         } else {
             tlHoveredRecord = null;
             tooltip.classList.remove('visible');
@@ -9538,7 +9606,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.04.03 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.04.09 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
