@@ -50,7 +50,7 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
   - Kinetic scrolling with momentum, Ctrl/Cmd+wheel zoom, pinch-to-zoom on touch devices
   - Fit-all button to reset zoom and scroll; highlighted when zoomed/panned away from home
   - Heatmap scrollbars showing color-coded event density
-  - Validation badges on event dots — red circle with "!" for errors, amber triangle with "!" for warnings — drawn at the top-left of each dot, with error/warning counts shown in the hover tooltip
+  - Validation badges on event dots — red triangle with "!" for errors, amber for warnings — drawn at the top-left of each dot (matches the Records tab row indicator), with error/warning counts shown in the hover tooltip
   - Selection highlighting across lane, time crosshair, and scrollbar markers; integrates with the record detail panel
   - Cross-tab selection sync: selecting in Records scrolls the timeline to that event; selecting in the timeline updates the Records page and scroll position (smooth animated transitions)
 - **Event Summary tab** — counts by event type and action type

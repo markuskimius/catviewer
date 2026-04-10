@@ -534,7 +534,7 @@
         td.val-error { border-left: 3px solid var(--red); background: rgba(239,68,68,0.1); }
         td.val-warn  { border-left: 3px solid var(--orange); background: rgba(245,158,11,0.07); }
         tr.has-errors td:first-child { position: relative; }
-        .val-icon { color: var(--orange); font-size: 11px; cursor: help; margin-right: 2px; }
+        .val-icon { display: inline-block; width: 12px; height: 12px; vertical-align: -2px; cursor: help; margin-right: 2px; }
         .detail-field.has-val-error { border: 1px solid var(--red); border-radius: 4px; background: rgba(239,68,68,0.08); }
         .detail-field.has-val-warn  { border: 1px solid var(--orange); border-radius: 4px; background: rgba(245,158,11,0.05); }
         .val-badge { display: inline-block; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: normal; vertical-align: middle; position: relative; }
@@ -3684,6 +3684,15 @@ function isErrorIgnored(code, field) {
     return ignoredErrors.has(key) || ignoredErrors.has(key + ':' + field);
 }
 
+function valIconSvg(sev) {
+    const fill = sev === 'error' ? '#ef4444' : '#f59e0b';
+    const title = sev === 'error' ? 'Validation errors' : 'Validation warnings';
+    return `<svg class="val-icon" viewBox="0 0 12 12" aria-label="${title}"><title>${title}</title>` +
+        `<polygon points="6,0.5 11.5,11 0.5,11" fill="${fill}" stroke="rgba(15,23,42,0.85)" stroke-width="0.75" stroke-linejoin="round"/>` +
+        `<text x="6" y="9.5" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#ffffff">!</text>` +
+        `</svg>`;
+}
+
 function getVisibleErrors(errors) {
     if (!errors) return null;
     const result = {};
@@ -5922,10 +5931,19 @@ function renderRowHtml(record, globalIdx, visCols) {
     const groupFirst = chainEntry && chainEntry.isFirstOfOrder && chainEntry.depth > 0;
     const visErrors = validationEnabled ? getVisibleErrors(record._errors) : null;
     const hasErrors = visErrors && Object.keys(visErrors).length > 0;
+    let worstSev = null;
+    if (hasErrors) {
+        outer: for (const f in visErrors) {
+            for (const e of visErrors[f]) {
+                if (e.severity === 'error') { worstSev = 'error'; break outer; }
+                if (e.severity === 'warn' && !worstSev) worstSev = 'warn';
+            }
+        }
+    }
     let cls = selectedRow === globalIdx ? 'selected' : '';
     if (groupFirst) cls += ' order-group-first';
     let h = `<tr data-idx="${globalIdx}" class="${cls}" style="height:${ROW_HEIGHT}px">`;
-    h += `<td>${hasErrors ? '<span class="val-icon" title="Validation errors">\u26A0</span>' : ''}${record._idx + 1}</td>`;
+    h += `<td>${hasErrors ? valIconSvg(worstSev) : ''}${record._idx + 1}</td>`;
     if (chainDisplayData) {
         h += `<td class="tree-cell">${chainEntry ? escapeHtml(chainEntry.treePrefix) : ''}</td>`;
     }
@@ -6963,7 +6981,7 @@ function tlBuildData() {
                 outer: for (const f in vis) {
                     for (const e of vis[f]) {
                         if (e.severity === 'error') { sev = 'error'; break outer; }
-                        if (e.severity === 'warning' && !sev) sev = 'warn';
+                        if (e.severity === 'warn' && !sev) sev = 'warn';
                     }
                 }
             }
@@ -7372,31 +7390,21 @@ function tlScrollToSelected(animate) {
 function tlDrawValBadge(ctx, cx, cy, sev) {
     const s = 6;
     ctx.save();
-    if (sev === 'error') {
-        ctx.beginPath();
-        ctx.arc(cx, cy, s, 0, Math.PI * 2);
-        ctx.fillStyle = '#ef4444';
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(15,23,42,0.85)';
-        ctx.lineWidth = 0.75;
-        ctx.stroke();
-    } else {
-        ctx.beginPath();
-        ctx.moveTo(cx, cy - s - 0.5);
-        ctx.lineTo(cx + s + 0.5, cy + s - 0.5);
-        ctx.lineTo(cx - s - 0.5, cy + s - 0.5);
-        ctx.closePath();
-        ctx.fillStyle = '#f59e0b';
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(15,23,42,0.85)';
-        ctx.lineWidth = 0.75;
-        ctx.stroke();
-    }
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - s - 0.5);
+    ctx.lineTo(cx + s + 0.5, cy + s - 0.5);
+    ctx.lineTo(cx - s - 0.5, cy + s - 0.5);
+    ctx.closePath();
+    ctx.fillStyle = sev === 'error' ? '#ef4444' : '#f59e0b';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(15,23,42,0.85)';
+    ctx.lineWidth = 0.75;
+    ctx.stroke();
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 9px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('!', cx, sev === 'error' ? cy : cy + 1);
+    ctx.fillText('!', cx, cy + 1);
     ctx.restore();
 }
 
@@ -8467,7 +8475,7 @@ function tlSetupInteractions() {
                 if (vis) {
                     let errN = 0, warnN = 0;
                     for (const f in vis) for (const e of vis[f]) {
-                        if (e.severity === 'error') errN++; else if (e.severity === 'warning') warnN++;
+                        if (e.severity === 'error') errN++; else if (e.severity === 'warn') warnN++;
                     }
                     const parts = [];
                     if (errN) parts.push(`<span style="color:#fca5a5">${errN} error${errN > 1 ? 's' : ''}</span>`);

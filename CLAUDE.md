@@ -42,7 +42,7 @@ A single-file web application for compliance officers to inspect CAT data files.
   - Hierarchical swimlanes grouped by orderID with parent-child connector lines, collapse/expand
   - Prior order chain merging: orders linked via priorOrderID share a single swimlane with diamond transition markers and chain count badges; tooltip on hover shows old → new orderID
   - Color-coded event dots by category (order/route/trade/cancel/modify/quote/allocation)
-  - Validation badges on event dots when validation is enabled: a small red circle with white "!" for records with errors, or an amber triangle with white "!" for warnings only, drawn at the top-left of the dot (mirroring the overlap count badge on the top-right). Worst severity wins (error > warn) for overlap-grouped events. Tooltip on hover includes error/warning counts.
+  - Validation badges on event dots when validation is enabled: a small filled triangle with white "!" — red for records with errors, amber for warnings only — drawn at the top-left of the dot (mirroring the overlap count badge on the top-right). Same triangle shape is used in the Records tab row indicator for consistency. Worst severity wins (error > warn) for overlap-grouped events. Tooltip on hover includes error/warning counts.
   - Life-duration bars showing order time span
   - Adaptive time axis from nanosecond to decade granularity with clean interval alignment and minor gridlines
   - Date pills at midnight boundaries and timeline start (YYYY-MM-DD format)
