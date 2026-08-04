@@ -1,6 +1,6 @@
 # CAT File Viewer
 
-Version v2026.05.23
+Version v2026.08.03
 
 Copyright (c) 2026 Mark Kim. Licensed under [GPL-2.0](LICENSE).
 
