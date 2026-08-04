@@ -31,15 +31,15 @@ A single-file web application for compliance officers to inspect CAT data files.
 - Filters by event type (with detailed descriptions), action type (NEW/RPR/COR/DEL), side, error code, and free-text search; default filters include type, symbol, underlying, and optionID
 - Color-coded event type badges (order/route/trade/cancel/modify/quote/allocation)
 - Fixed, resizable record detail panel at bottom of viewport with animated slide-up/down transitions and translated/original view modes
-- Translated display for timestamps (both string format and epoch nanoseconds → Eastern Time), dates, side codes, compound fields (legDetails, buyDetails, sellDetails)
-- Clickable linkage fields (orderID, tradeID, parentOrderID, priorOrderID, routedOrderID, etc.) for navigating between related records; clicking clears other active filters
+- Translated display for timestamps (both string format and epoch nanoseconds → Eastern Time), dates, side codes, compound fields (legDetails, buyDetails, sellDetails, clientDetails, firmDetails)
+- Clickable linkage fields (orderID, tradeID, fulfillmentID/priorFulfillmentID, allocationID/priorAllocationID, quoteID/routedQuoteID/receivedQuoteID, RFQID, parentOrderID, priorOrderID, routedOrderID, etc.) for navigating between related records; clicking clears other active filters. Events without a top-level orderID (Order Trade / Order Fulfillment: MEOT, MEOTS, MOOT, MEOF, MEOFS, MEFA, MOOF, MOOFS, MOFA) are linked to orders via the orderIDs inside their side details (buyDetails/sellDetails/clientDetails/firmDetails) — `getRecordLaneOrderIDs()` resolves a record's effective orderIDs, used by the ID index, order chain views, and timeline lanes. Free-text search covers nested compound field values.
 - Order chain view with hierarchy tree, depth controls (This order, + Children, + Branch) that toggle off when clicked again; + Children shows all descendants; Branch shows direct ancestor chain plus descendants, excluding siblings
 - URL hash state with deep linking to selected records
 - Tools dropdown menu (keyboard shortcut accessible) with layout export/import, drag-and-drop layout reordering, validation toggle, and performance panel toggle. Reset Layout followed by Save Layout clears saved layout so defaults are always used.
 - Performance panel (Tools menu toggle): floating overlay showing timing stats (last/avg/count) for critical paths (parse, flatten, validate, filter, sort, column widths, timeline build/draw). Auto-refreshes every 500ms. Zero overhead when disabled.
 - Virtual scrolling for large datasets with sub-pixel-accurate column width locking (samples longest values per column to prevent clipping)
 - Timeline tab with canvas-based order event visualization:
-  - Hierarchical swimlanes grouped by orderID with parent-child connector lines, collapse/expand
+  - Hierarchical swimlanes grouped by orderID with parent-child connector lines, collapse/expand; trade/fulfillment events without a top-level orderID join the lane(s) of the order(s) referenced in their side details (both lanes if buy and sell orders are both present)
   - Prior order chain merging: orders linked via priorOrderID share a single swimlane with diamond transition markers and chain count badges; tooltip on hover shows old → new orderID
   - Color-coded event dots by category (order/route/trade/cancel/modify/quote/allocation)
   - Validation badges on event dots when validation is enabled: a small filled triangle with white "!" — red for records with errors, amber for warnings only — drawn at the top-left of the dot (mirroring the overlap count badge on the top-right). Same triangle shape is used in the Records tab row indicator for consistency. Worst severity wins (error > warn) for overlap-grouped events. Tooltip on hover includes error/warning counts.
@@ -70,7 +70,7 @@ A single-file web application for compliance officers to inspect CAT data files.
 - Event type prefixes: `ME` = equity, `MO` = option, `ML` = multi-leg
 
 ### Sample data
-- `1234_TEST_20250317_Sample_OrderEvents_000001.json` — 68 records covering MEAA, MECO, MEIM, MEIR, MENO, MEOA, MEOM, MEOR, MEOT, MLNO, MLOR, MOCO, MOOT events
+- `1234_TEST_20250317_Sample_OrderEvents_000001.json` — 75 records covering MEAA, MECO, MEFA, MEIM, MEIR, MENO, MEOA, MEOF, MEOFS, MEOM, MEOR, MEOT, MLNO, MLOR, MOCO, MONO, MOOF, MOOT events. Includes a fulfillment scenario (client order TE-001 filled from representative order TE-012 via MEOF/MEOFS, amended by MEFA), a trade with buy-side details (TRD-TE-004 → TE-007), and an options fulfillment (OPT-001 filled from firm order OPT-009 via MOOF) — these exercise side-detail orderID linkage in timelines, order chains, and clickable links
 
 ### Versioning
 Version is automatically set by a git pre-commit hook (`.git/hooks/pre-commit`). Format: `vYYYY.MM.DD`. Do not manually set version numbers in `index.html`.

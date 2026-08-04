@@ -35,8 +35,8 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 - **Color-coded event types** — orders, routes, trades, cancels, modifications, quotes, and allocations are visually distinguished
 - **Dynamic filters** — searchable, collapsible comboboxes with range support for event type (with detailed descriptions), action type (NEW/RPR/COR/DEL), side (Buy/Sell/Short), error code, and free-text search across all fields; filter layout persists across sessions
 - **Record detail panel** — fixed and resizable at the bottom of the viewport with animated slide-up/down transitions and translated/original view modes
-- **Translated display** — human-readable timestamps (string format and epoch nanoseconds → Eastern Time), dates, side codes, and compound fields (legDetails, buyDetails, sellDetails)
-- **Clickable linkage fields** — navigate between related records via orderID, tradeID, parentOrderID, priorOrderID, routedOrderID, etc.; clicking clears other active filters
+- **Translated display** — human-readable timestamps (string format and epoch nanoseconds → Eastern Time), dates, side codes, and compound fields (legDetails, buyDetails, sellDetails, clientDetails, firmDetails)
+- **Clickable linkage fields** — navigate between related records via orderID, tradeID, fulfillmentID/priorFulfillmentID, allocationID/priorAllocationID, quoteID/routedQuoteID/receivedQuoteID, RFQID, parentOrderID, priorOrderID, routedOrderID, etc.; clicking clears other active filters. Events without a top-level orderID (Order Trade and Order Fulfillment events like MEOT/MEOF) are linked to orders via the orderIDs inside their side details (buyDetails/sellDetails/clientDetails/firmDetails), so orderID links, free-text search, and order chain views include them
 - **Order chain view** — hierarchy tree showing parent/child order relationships with depth controls (This order, + Children, + Branch); buttons toggle off when clicked again; + Children shows all descendants; Branch shows direct ancestor chain plus descendants, excluding siblings
 - **URL deep linking** — hash-based URL state with direct links to selected records
 - **Multi-file support** — load multiple files (JSON, CSV, ZIP, GZIP) via drag-and-drop or file picker; hold Shift to append
@@ -46,6 +46,7 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 - **Timeline visualization** — canvas-based interactive timeline showing order events as color-coded dots in hierarchical swimlanes:
   - Parent-child order hierarchy with connector lines and collapse/expand controls
   - Prior order chain merging — orders linked via priorOrderID share a single swimlane with diamond markers at orderID transitions
+  - Trade and fulfillment events (MEOT/MEOF and variants) appear on the lane(s) of the order(s) referenced in their side details — an event referencing both a buy and sell order shows on both lanes
   - Adaptive time axis from nanosecond to decade granularity with date pills at midnight boundaries
   - Kinetic scrolling with momentum, Ctrl/Cmd+wheel zoom, pinch-to-zoom on touch devices
   - Fit-all button to reset zoom and scroll; highlighted when zoomed/panned away from home
@@ -61,7 +62,7 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 
 ## Sample Data
 
-- `1234_TEST_20250317_Sample_OrderEvents_000001.json` — 68 records covering MEAA, MECO, MEIM, MEIR, MENO, MEOA, MEOM, MEOR, MEOT, MLNO, MLOR, MOCO, and MOOT events
+- `1234_TEST_20250317_Sample_OrderEvents_000001.json` — 75 records covering MEAA, MECO, MEFA, MEIM, MEIR, MENO, MEOA, MEOF, MEOFS, MEOM, MEOR, MEOT, MLNO, MLOR, MOCO, MONO, MOOF, and MOOT events, including equity and options fulfillment scenarios and a trade with side details that demonstrate order linkage in timelines and order chains
 
 ## Reference
 
