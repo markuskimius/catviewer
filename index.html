@@ -530,6 +530,19 @@
         .side-buy { color: var(--green); font-weight: 600; }
         .side-sell { color: var(--red); font-weight: 600; }
 
+        /* Side-slot column chips (side1.*/side2.* virtual columns) */
+        .side-role {
+            display: inline-block; font-size: 9px; font-weight: 700; line-height: 1;
+            padding: 2px 4px; border-radius: 3px; vertical-align: 1px; cursor: help;
+            border: 1px solid currentColor; opacity: 0.85;
+        }
+        .side-role.side-client, .side-role.side-firm { color: var(--cyan); }
+        .side-extra {
+            display: inline-block; font-size: 9px; font-weight: 600; line-height: 1;
+            padding: 2px 4px; border-radius: 3px; vertical-align: 1px; cursor: help;
+            background: var(--surface2); color: var(--text-muted);
+        }
+
         /* Validation highlighting */
         td.val-error { border-left: 3px solid var(--red); background: rgba(239,68,68,0.1); }
         td.val-warn  { border-left: 3px solid var(--orange); background: rgba(245,158,11,0.07); }
@@ -1435,7 +1448,10 @@ const PRIORITY_COLUMNS = [
     'orderType', 'timeInForce.name', 'timeInForce.value', 'deptType', 'manualFlag',
     'CATReporterIMID', 'firmDesignatedID', 'accountHolderType',
     'destination', 'senderIMID',
-    'tradeKeyDate', 'tradeID', 'fillPrice', 'fillQty',
+    'tradeKeyDate', 'tradeID',
+    'side1.orderID', 'side1.side', 'side1.quantity', 'side1.firmDesignatedID', 'side1.accountHolderType', 'side1.originatingIMID', 'side1.orderKeyDate', 'side1.BFMMFlag',
+    'side2.orderID', 'side2.side', 'side2.quantity', 'side2.firmDesignatedID', 'side2.accountHolderType', 'side2.originatingIMID', 'side2.orderKeyDate', 'side2.BFMMFlag',
+    'fillPrice', 'fillQty',
     'errorROEID',
 ];
 
@@ -3543,6 +3559,47 @@ const LEG_DETAIL_FIELDS = ['legRefID', 'symbol', 'optionID', 'openCloseIndicator
 const TRADE_SIDE_FIELDS = ['orderKeyDate', 'orderID', 'side', 'retiredFieldPosition', 'firmDesignatedID', 'accountHolderType', 'originatingIMID', 'BFMMFlag'];
 const AGGREGATED_ORDER_FIELDS = ['orderID', 'orderKeyDate', 'quantity', 'originatingIMID'];
 
+// Side-slot virtual columns: positional flattening of the side-detail compound
+// arrays so their first element's fields appear as regular table columns.
+// Slot side1 = buy/client side, side2 = sell/firm side, so trades (buyDetails/
+// sellDetails) and fulfillments (clientDetails/firmDetails) line up in the same
+// columns. Elements beyond the first are summarized by a "+N" chip.
+const SIDE_SLOT_SOURCES = [['buyDetails', 'clientDetails'], ['sellDetails', 'firmDetails']];
+const SIDE_SLOT_ROLES = {
+    buyDetails: { letter: 'B', cls: 'side-buy' },
+    sellDetails: { letter: 'S', cls: 'side-sell' },
+    clientDetails: { letter: 'C', cls: 'side-client' },
+    firmDetails: { letter: 'F', cls: 'side-firm' },
+};
+const SIDE_SLOT_SUBFIELDS = ['orderKeyDate', 'orderID', 'side', 'quantity', 'firmDesignatedID', 'accountHolderType', 'originatingIMID', 'BFMMFlag'];
+// Hidden unless the user shows them: raw side-detail columns, replaced by the
+// slot columns.
+const DEFAULT_HIDDEN_COLUMNS = new Set(['buyDetails', 'sellDetails', 'clientDetails', 'firmDetails']);
+
+// Emit sideN.* keys for every type whose schema defines side-detail fields, even
+// when the record leaves them empty — discoverColumns() samples one record per
+// type, so the emitted key set must be deterministic per type.
+function flattenSideSlots(record, flat) {
+    const typeSpec = CAT_ARRAY_ELEMENTS[record.type];
+    let slots = null;
+    SIDE_SLOT_SOURCES.forEach((sources, i) => {
+        const field = sources.find(f => (typeSpec ? typeSpec[f] : record[f] != null));
+        if (!field) return;
+        const slot = 'side' + (i + 1);
+        const elemFields = sideDetailElementFields(record.type, field);
+        const items = parseSideDetails(record[field], elemFields);
+        const item = items[0] || {};
+        for (const sub of elemFields) {
+            if (!SIDE_SLOT_SUBFIELDS.includes(sub)) continue;
+            flat[slot + '.' + sub] = (item[sub] === undefined || item[sub] === null) ? '' : item[sub];
+        }
+        if (items.length) {
+            (slots ||= {})[slot] = { field, extra: items.length - 1 };
+        }
+    });
+    flat._sideSlots = slots;
+}
+
 function flattenRecord(record) {
     const flat = {};
     flat._errors = record._errors || null;
@@ -3585,16 +3642,18 @@ function flattenRecord(record) {
             flat[key] = value;
         }
     }
+    flattenSideSlots(record, flat);
     // Pre-compute searchable text for fast text filtering.
     // Compound fields (buyDetails, clientDetails, …) are objects — stringify so
-    // nested values like side-detail orderIDs are searchable too.
+    // nested values like side-detail orderIDs are searchable too. Side-slot
+    // columns are excluded: their values duplicate the compound field's.
     flat._searchText = Object.entries(flat)
-        .filter(([k, v]) => v != null && k !== '_errors' && k !== '_original')
+        .filter(([k, v]) => v != null && k !== '_errors' && k !== '_original' && k !== '_sideSlots' && !/^side[12]\./.test(k))
         .map(([, v]) => (typeof v === 'object' ? JSON.stringify(v) : String(v)).toLowerCase()).join('\0');
     return flat;
 }
 
-const _internalFields = new Set(['_idx', '_timeInForce_original', '_errors', '_original', '_searchText']);
+const _internalFields = new Set(['_idx', '_timeInForce_original', '_errors', '_original', '_searchText', '_sideSlots']);
 
 function discoverColumns(records, colSet) {
     const seenTypes = new Set();
@@ -4827,8 +4886,14 @@ function initializeUI() {
         }
     }
 
-    // Restore hidden columns from saved state
+    // Restore hidden columns from saved state. Default-hidden columns stay
+    // hidden unless a saved column order knows about them (i.e. the layout was
+    // saved after the column existed, so its visibility reflects a user choice).
     hiddenColumns.clear();
+    const knownCols = new Set(savedOrder || []);
+    for (const col of columns) {
+        if (DEFAULT_HIDDEN_COLUMNS.has(col) && !knownCols.has(col)) hiddenColumns.add(col);
+    }
     try {
         const savedHidden = localStorage.getItem('catViewer_hiddenColumns');
         if (savedHidden) {
@@ -4962,9 +5027,11 @@ function translateFilterValue(col, rawValue) {
         const labels = { NEW: 'NEW', RPR: 'RPR (Repair)', COR: 'COR (Correction)', DEL: 'DEL (Delete)' };
         return labels[s] || null;
     }
-    // FIELD_LABELS lookups (side, orderType, capacity, deptType, etc.)
-    if (FIELD_LABELS[col] && FIELD_LABELS[col][s]) {
-        return `${FIELD_LABELS[col][s]} (${s})`;
+    // FIELD_LABELS lookups (side, orderType, capacity, deptType, etc.);
+    // side-slot columns (side1.side, …) translate like their base field
+    const baseCol = /^side[12]\./.test(col) ? col.slice(6) : col;
+    if (FIELD_LABELS[baseCol] && FIELD_LABELS[baseCol][s]) {
+        return `${FIELD_LABELS[baseCol][s]} (${s})`;
     }
     // Timestamps STRING format: YYYYMMDDTHHMMSS.fff → YYYY-MM-DD HH:MM:SS.fff
     if (/Timestamp$|KeyDate$/.test(col) && /^\d{8}[T ]\d{6}(\.\d+)?$/.test(s)) {
@@ -6027,11 +6094,22 @@ function renderRowHtml(record, globalIdx, visCols) {
     }
     for (const col of visCols) {
         const errs = visErrors && visErrors[col];
-        const parentErrs = !errs && col.includes('.') && visErrors && visErrors[col.split('.')[0]];
+        let parentErrs = !errs && col.includes('.') && visErrors && visErrors[col.split('.')[0]];
+        if (!errs && !parentErrs && visErrors) {
+            // Side-slot columns surface their source compound field's errors —
+            // via the slot metadata when populated, else via the slot's
+            // candidate source fields (e.g. "buyDetails must be populated")
+            const slotIdx = col.startsWith('side1.') ? 0 : col.startsWith('side2.') ? 1 : -1;
+            if (slotIdx >= 0) {
+                const meta = record._sideSlots && record._sideSlots['side' + (slotIdx + 1)];
+                parentErrs = meta ? visErrors[meta.field]
+                    : SIDE_SLOT_SOURCES[slotIdx].map(f => visErrors[f]).find(Boolean);
+            }
+        }
         const allErrs = errs || parentErrs;
         const errCls = allErrs ? (allErrs.some(e => e.severity === 'error') ? ' val-error' : ' val-warn') : '';
         const errTip = allErrs ? allErrs.map(formatErrorWithCode).join('; ') : '';
-        h += `<td${errCls ? ` class="${errCls}"` : ''}${errTip ? ` data-tooltip="${escapeHtml(errTip)}"` : ''}>${formatCell(col, record[col])}</td>`;
+        h += `<td${errCls ? ` class="${errCls}"` : ''}${errTip ? ` data-tooltip="${escapeHtml(errTip)}"` : ''}>${formatCell(col, record[col], record)}</td>`;
     }
     h += '</tr>';
     return h;
@@ -6413,7 +6491,27 @@ function translateValue(col, raw) {
     return map && map[raw] ? map[raw] : null;
 }
 
-function formatCell(col, value) {
+function formatCell(col, value, record) {
+    // Side-slot columns render like their base field (side, orderKeyDate,
+    // linkage on orderID, …); the orderID cell also carries a role chip
+    // (B/S/C/F for the source array) and a "+N" chip when elements beyond the
+    // first exist (open the record's detail panel for those).
+    const slot = col.startsWith('side1.') ? 'side1' : col.startsWith('side2.') ? 'side2' : null;
+    if (slot) {
+        const base = col.slice(6);
+        let html = formatCellBase(base, value);
+        const meta = record && record._sideSlots && record._sideSlots[slot];
+        if (base === 'orderID' && meta) {
+            const role = SIDE_SLOT_ROLES[meta.field];
+            if (role) html = `<span class="side-role ${role.cls}" data-tooltip="${escapeHtml(meta.field)}">${role.letter}</span> ` + html;
+            if (meta.extra > 0) html += ` <span class="side-extra" data-tooltip="${meta.extra} more ${escapeHtml(meta.field)} element${meta.extra > 1 ? 's' : ''} — open the record for full details">+${meta.extra}</span>`;
+        }
+        return html;
+    }
+    return formatCellBase(col, value);
+}
+
+function formatCellBase(col, value) {
     if (value === undefined || value === null || value === '') return '<span style="color:var(--surface2)">&mdash;</span>';
     const s = String(value);
 
@@ -6637,7 +6735,9 @@ function renderDetailGrid(record, mode, showAll) {
 
     let html = '';
     for (const key of keys) {
-        if (key === '_idx' || key === '_errors' || key === '_original' || key === '_searchText') continue;
+        if (key === '_idx' || key === '_errors' || key === '_original' || key === '_searchText' || key === '_sideSlots') continue;
+        // Side-slot virtual columns duplicate the compound field sub-tables
+        if (/^side[12]\./.test(key)) continue;
         if (key === '_placeholder') {
             html += '<div class="detail-field" style="visibility:hidden"></div>';
             continue;
@@ -8892,7 +8992,7 @@ function renderEventSummary() {
 function renderRawTab() {
     const maxShow = Infinity;
     const sample = allRecords.slice(0, maxShow);
-    const replacer = (k, v) => (k === '_idx' || k === '_timeInForce_original' || k === '_errors' || k === '_original' || k === '_searchText') ? undefined : v;
+    const replacer = (k, v) => (k === '_idx' || k === '_timeInForce_original' || k === '_errors' || k === '_original' || k === '_searchText' || k === '_sideSlots' || /^side[12]\./.test(k)) ? undefined : v;
     $('rawContent').textContent = JSON.stringify(sample, replacer, 2) +
         (allRecords.length > maxShow ? `\n\n... (${allRecords.length - maxShow} more records)` : '');
 }
@@ -9379,6 +9479,9 @@ $('resetLayoutBtn').addEventListener('click', () => {
     for (const col of allCols.sort()) {
         if (!columns.includes(col)) columns.push(col);
     }
+    for (const col of columns) {
+        if (DEFAULT_HIDDEN_COLUMNS.has(col)) hiddenColumns.add(col);
+    }
     activeFilters = [...defaultFilters()];
     filterModes = {};
     renderFilterBar();
@@ -9426,10 +9529,13 @@ function applyLayout(layout) {
     } else {
         columns = layout.columnOrder;
     }
-    // Apply hidden columns
+    // Apply hidden columns; default-hidden columns the layout file predates stay hidden
     hiddenColumns.clear();
     if (Array.isArray(layout.hiddenColumns)) {
         for (const col of layout.hiddenColumns) hiddenColumns.add(col);
+    }
+    for (const col of columns) {
+        if (DEFAULT_HIDDEN_COLUMNS.has(col) && !layout.columnOrder.includes(col)) hiddenColumns.add(col);
     }
     // Apply filter columns
     if (Array.isArray(layout.filterColumns)) {
