@@ -1,6 +1,6 @@
 # CAT File Viewer
 
-Version v2026.08.03
+Version v2026.08.18
 
 Copyright (c) 2026 Mark Kim. Licensed under [GPL-2.0](LICENSE).
 
@@ -36,7 +36,7 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 - **Dynamic filters** — searchable, collapsible comboboxes with range support for event type (with detailed descriptions), action type (NEW/RPR/COR/DEL), side (Buy/Sell/Short), error code, and free-text search across all fields; filter layout persists across sessions
 - **Record detail panel** — fixed and resizable at the bottom of the viewport with animated slide-up/down transitions and translated/original view modes
 - **Translated display** — human-readable timestamps (string format and epoch nanoseconds → Eastern Time), dates, side codes, and compound fields (legDetails, buyDetails, sellDetails, clientDetails, firmDetails)
-- **Clickable linkage fields** — navigate between related records via orderID, tradeID, fulfillmentID/priorFulfillmentID, allocationID/priorAllocationID, quoteID/routedQuoteID/receivedQuoteID, RFQID, parentOrderID, priorOrderID, routedOrderID, etc.; clicking clears other active filters. Events without a top-level orderID (Order Trade and Order Fulfillment events like MEOT/MEOF) are linked to orders via the orderIDs inside their side details (buyDetails/sellDetails/clientDetails/firmDetails), so orderID links, free-text search, and order chain views include them
+- **Clickable linkage fields** — navigate between related records via orderID, tradeID, fulfillmentID/priorFulfillmentID, allocationID/priorAllocationID, quoteID/routedQuoteID/receivedQuoteID, RFQID, parentOrderID, priorOrderID, routedOrderID, etc.; clicking clears other active filters. Events without a top-level orderID (Order Trade and Order Fulfillment events like MEOT/MEOF) are linked to orders via the orderIDs inside their side details (buyDetails/sellDetails/clientDetails/firmDetails). Nested orderID linkage works for any compound array field on any event type (side details plus aggregatedOrders/askAggregatedOrders/bidAggregatedOrders), so orderID links, the orderID filter, free-text search, and order chain views all include these events — filtering by an order ID also shows the trades/fulfillments that reference it in their side details, and the orderID filter dropdown lists orderIDs that appear only inside compound arrays
 - **Order chain view** — hierarchy tree showing parent/child order relationships with depth controls (This order, + Children, + Branch); buttons toggle off when clicked again; + Children shows all descendants; Branch shows direct ancestor chain plus descendants, excluding siblings
 - **URL deep linking** — hash-based URL state with direct links to selected records
 - **Multi-file support** — load multiple files (JSON, CSV, ZIP, GZIP) via drag-and-drop or file picker; hold Shift to append
