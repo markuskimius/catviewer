@@ -1,6 +1,6 @@
 # CAT File Viewer
 
-Version v2026.08.18
+Version v2026.08.21
 
 Copyright (c) 2026 Mark Kim. Licensed under [GPL-2.0](LICENSE).
 
@@ -38,7 +38,7 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 - **Translated display** — human-readable timestamps (string format and epoch nanoseconds → Eastern Time), dates, side codes, and compound fields (legDetails, buyDetails, sellDetails, clientDetails, firmDetails)
 - **Side-slot columns** — side-detail compound arrays are flattened into positional `side1.*` (buy/client side) and `side2.*` (sell/firm side) columns, so trades (buyDetails/sellDetails) and fulfillments (clientDetails/firmDetails) line up in the same columns. All subfields (orderID, side, quantity, firmDesignatedID, accountHolderType, originatingIMID, orderKeyDate, BFMMFlag) are shown by default, grouped per slot; the orderID cells carry a role chip (B/S/C/F for the source array) and clickable orderID linkage. The raw compound columns are hidden by default and available via the column manager. Slot columns support sorting, filtering, and CSV export like regular columns, and surface their source field's validation errors. Arrays with more than one element show a "+N" chip — open the record's detail panel for the full list
 - **Clickable linkage fields** — navigate between related records via orderID, tradeID, fulfillmentID/priorFulfillmentID, allocationID/priorAllocationID, quoteID/routedQuoteID/receivedQuoteID, RFQID, parentOrderID, priorOrderID, routedOrderID, etc.; clicking clears other active filters. Events without a top-level orderID (Order Trade and Order Fulfillment events like MEOT/MEOF) are linked to orders via the orderIDs inside their side details (buyDetails/sellDetails/clientDetails/firmDetails). Nested orderID linkage works for any compound array field on any event type (side details plus aggregatedOrders/askAggregatedOrders/bidAggregatedOrders), so orderID links, the orderID filter, free-text search, and order chain views all include these events — filtering by an order ID also shows the trades/fulfillments that reference it in their side details, and the orderID filter dropdown lists orderIDs that appear only inside compound arrays
-- **Order chain view** — hierarchy tree showing parent/child order relationships with depth controls (This order, + Children, + Branch); buttons toggle off when clicked again; + Children shows all descendants; Branch shows direct ancestor chain plus descendants, excluding siblings
+- **Order chain view** — hierarchy tree showing parent/child order relationships with depth controls (This order, + Children, + Branch); buttons toggle off when clicked again; + Children shows all descendants; Branch shows direct ancestor chain plus descendants, excluding siblings; when events share a timestamp, order-origination events (MENO/MEOA/MECO/MEIR and options/multi-leg equivalents) list first, then their supplements (MENOS/MONOS/MLOS), then other events
 - **URL deep linking** — hash-based URL state with direct links to selected records
 - **Multi-file support** — load multiple files (JSON, CSV, ZIP, GZIP) via drag-and-drop or file picker; hold Shift to append
 - **File validation** — verifies files are CAT format before loading
@@ -63,7 +63,17 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 
 ## Sample Data
 
-- `1234_TEST_20250317_Sample_OrderEvents_000001.json` — 75 records covering MEAA, MECO, MEFA, MEIM, MEIR, MENO, MEOA, MEOF, MEOFS, MEOM, MEOR, MEOT, MLNO, MLOR, MOCO, MONO, MOOF, and MOOT events, including equity and options fulfillment scenarios and a trade with side details that demonstrate order linkage in timelines and order chains
+- `1234_TEST_20250317_Sample_OrderEvents_000001.json` — 84 records covering MEAA, MECO, MEFA, MEIM, MEIR, MENO, MENOS, MEOA, MEOC, MEOF, MEOFS, MEOM, MEOR, MEOT, MLNO, MLOR, MOCO, MONO, MOOF, and MOOT events, including equity and options fulfillment scenarios, a trade with side details that demonstrate order linkage in timelines and order chains, and same-timestamp event groups (in scrambled file order) that demonstrate origination-first ordering in the order chain view
+
+## Testing
+
+Run the test suite with Node.js (v18+, no dependencies):
+
+```
+node --test tests/
+```
+
+Tests cover the order chain event ordering logic (origination events and their supplements sort ahead of other events sharing a timestamp) and sample data integrity, extracting the code under test directly from `index.html`.
 
 ## Reference
 
