@@ -1,5 +1,5 @@
 <!--
-  CAT File Viewer v2026.08.21
+  CAT File Viewer v2026.09.28
   Copyright (c) 2026 Mark Kim
   Licensed under GPL-2.0
 -->
@@ -1114,7 +1114,7 @@
     <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
-    <span class="subtitle">v2026.08.21</span>
+    <span class="subtitle">v2026.09.28</span>
 </header>
 
 <div class="drop-zone" id="dropZone">
@@ -1445,7 +1445,7 @@ const PRIORITY_COLUMNS = [
     'type', 'actionType', 'firmROEID', 'symbol', 'underlying', 'optionID', 'eventTimestamp',
     'orderKeyDate', 'orderID', 'priorOrderID', 'parentOrderID', 'routedOrderID',
     'side', 'price', 'quantity',
-    'orderType', 'timeInForce.name', 'timeInForce.value', 'deptType', 'manualFlag',
+    'orderType', 'timeInForce.name', 'timeInForce.value', 'handlingInstructions', 'deptType', 'manualFlag',
     'CATReporterIMID', 'firmDesignatedID', 'accountHolderType',
     'destination', 'senderIMID',
     'tradeKeyDate', 'tradeID',
@@ -1871,6 +1871,47 @@ const HI_NON_BOOLEAN = new Set(['APCL','AucResp','CASH','DISP','DISQ','DLVF','DL
 
 // bidRelativePrice / askRelativePrice: all attributes are Boolean
 const BRP_ARP_ATTRS = new Set(['BNCH','M','MOC','NAV','OFF','OPM','OTH','PCT','PEG','SPRD']);
+
+// Name/Value Pair fields are flattened into a summary column in spec CSV
+// notation (e.g. "AOK|DISP=10.00|DLVT=MM1@MM2") plus one hidden-by-default
+// column per attribute (e.g. "handlingInstructions.AOK").
+const NVP_FIELDS = new Set(['handlingInstructions', 'bidRelativePrice', 'askRelativePrice']);
+
+// Parse a Name/Value Pair value into {name: value}. JSON objects pass through;
+// CSV strings are pipe-delimited attributes where "=" pairs a value with its
+// name and "@" separates multiple values. Boolean attributes map to true.
+function parseNameValuePairs(value) {
+    if (value === undefined || value === null || value === '') return null;
+    if (typeof value === 'object') return Array.isArray(value) ? null : value;
+    const obj = {};
+    for (const part of String(value).split('|')) {
+        const trimmed = part.trim();
+        if (!trimmed) continue;
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx < 0) {
+            obj[trimmed] = true;
+            continue;
+        }
+        const v = trimmed.slice(eqIdx + 1);
+        obj[trimmed.slice(0, eqIdx)] = v.includes('@') ? v.split('@') : v;
+    }
+    return obj;
+}
+
+// A single attribute's value with multiple values joined by "@", as in CSV
+function formatNVPValue(v) {
+    return Array.isArray(v) ? v.join('@') : v;
+}
+
+function formatNameValuePairs(obj) {
+    return Object.entries(obj).map(([k, v]) => v === true ? k : k + '=' + formatNVPValue(v)).join('|');
+}
+
+// True for per-attribute columns such as "handlingInstructions.AOK"
+function isNVPAttrColumn(col) {
+    const dot = col.indexOf('.');
+    return dot > 0 && NVP_FIELDS.has(col.slice(0, dot));
+}
 
 
 function parseCSV(text) {
@@ -2461,34 +2502,19 @@ function validateRecord(record, format) {
                 }
             } else if (fieldName === 'handlingInstructions') {
                 // Validate handlingInstructions Name/Value Pairs
-                let hiObj = null;
-                if (!isCSV && typeof value === 'object' && value !== null && !Array.isArray(value)) {
-                    hiObj = value;
-                } else if (isCSV && typeof value === 'string') {
-                    hiObj = {};
-                    const parts = value.split(';');
-                    for (const part of parts) {
-                        const trimmed = part.trim();
-                        if (!trimmed) continue;
-                        const eqIdx = trimmed.indexOf('=');
-                        if (eqIdx >= 0) {
-                            hiObj[trimmed.slice(0, eqIdx)] = trimmed.slice(eqIdx + 1);
-                        } else {
-                            hiObj[trimmed] = true;
-                        }
-                    }
-                }
+                const hiObj = (isCSV || typeof value === 'object') ? parseNameValuePairs(value) : null;
                 if (hiObj) {
                     for (const [hiKey, hiVal] of Object.entries(hiObj)) {
                         if (HI_BOOLEAN.has(hiKey)) {
-                            if (!isCSV && hiVal !== true) {
-                                addError(fieldName, 'error', `handlingInstructions "${hiKey}" must have value true, got ${JSON.stringify(hiVal)}`, 2036);
+                            if (hiVal !== true) {
+                                addError(fieldName, 'error', isCSV
+                                    ? `handlingInstructions "${hiKey}" is Boolean and must not have a value, got "${formatNVPValue(hiVal)}"`
+                                    : `handlingInstructions "${hiKey}" must have value true, got ${JSON.stringify(hiVal)}`, 2036);
                             }
                         } else if (HI_NON_BOOLEAN.has(hiKey)) {
-                            if (!isCSV && hiVal === true) {
+                            if (hiVal === true) {
                                 addError(fieldName, 'warn', `handlingInstructions "${hiKey}" requires a non-boolean value`, 2036);
-                            }
-                            if (hiVal === undefined || hiVal === null || hiVal === '') {
+                            } else if (hiVal === undefined || hiVal === null || hiVal === '') {
                                 addError(fieldName, 'warn', `handlingInstructions "${hiKey}" requires a value`, 2036);
                             }
                         } else {
@@ -2498,28 +2524,14 @@ function validateRecord(record, format) {
                 }
             } else if (fieldName === 'bidRelativePrice' || fieldName === 'askRelativePrice') {
                 // Validate bidRelativePrice/askRelativePrice Name/Value Pairs (all Boolean)
-                let rpObj = null;
-                if (!isCSV && typeof value === 'object' && value !== null && !Array.isArray(value)) {
-                    rpObj = value;
-                } else if (isCSV && typeof value === 'string') {
-                    rpObj = {};
-                    const parts = value.split(';');
-                    for (const part of parts) {
-                        const trimmed = part.trim();
-                        if (!trimmed) continue;
-                        const eqIdx = trimmed.indexOf('=');
-                        if (eqIdx >= 0) {
-                            rpObj[trimmed.slice(0, eqIdx)] = trimmed.slice(eqIdx + 1);
-                        } else {
-                            rpObj[trimmed] = true;
-                        }
-                    }
-                }
+                const rpObj = (isCSV || typeof value === 'object') ? parseNameValuePairs(value) : null;
                 if (rpObj) {
                     for (const [rpKey, rpVal] of Object.entries(rpObj)) {
                         if (BRP_ARP_ATTRS.has(rpKey)) {
-                            if (!isCSV && rpVal !== true) {
-                                addError(fieldName, 'error', `${fieldName} "${rpKey}" must have value true, got ${JSON.stringify(rpVal)}`, fc);
+                            if (rpVal !== true) {
+                                addError(fieldName, 'error', isCSV
+                                    ? `${fieldName} "${rpKey}" is Boolean and must not have a value, got "${formatNVPValue(rpVal)}"`
+                                    : `${fieldName} "${rpKey}" must have value true, got ${JSON.stringify(rpVal)}`, fc);
                             }
                         } else {
                             addError(fieldName, 'warn', `Unknown ${fieldName} attribute: "${rpKey}"`, fc);
@@ -2787,14 +2799,8 @@ function validateRecord(record, format) {
 
     // 2247: quantity must be 0 for CASH handlingInstructions
     if (schema.handlingInstructions && schema.quantity) {
-        const hi = val('handlingInstructions');
-        let hasCash = false;
-        if (hi && typeof hi === 'object' && !Array.isArray(hi)) {
-            hasCash = hi.CASH === true || hi.CASH !== undefined;
-        } else if (typeof hi === 'string') {
-            hasCash = /\bCASH\b/.test(hi);
-        }
-        if (hasCash) {
+        const hi = parseNameValuePairs(val('handlingInstructions'));
+        if (hi && hi.CASH !== undefined) {
             const qty = val('quantity');
             if (qty !== undefined && Number(qty) !== 0) {
                 addError('quantity', 'error', 'quantity must be 0 for orders with CASH handlingInstructions', 2247);
@@ -3573,8 +3579,12 @@ const SIDE_SLOT_ROLES = {
 };
 const SIDE_SLOT_SUBFIELDS = ['orderKeyDate', 'orderID', 'side', 'quantity', 'firmDesignatedID', 'accountHolderType', 'originatingIMID', 'BFMMFlag'];
 // Hidden unless the user shows them: raw side-detail columns, replaced by the
-// slot columns.
+// slot columns, and per-attribute Name/Value Pair columns, summarized by their
+// field's column.
 const DEFAULT_HIDDEN_COLUMNS = new Set(['buyDetails', 'sellDetails', 'clientDetails', 'firmDetails']);
+function isDefaultHiddenColumn(col) {
+    return DEFAULT_HIDDEN_COLUMNS.has(col) || isNVPAttrColumn(col);
+}
 
 // Emit sideN.* keys for every type whose schema defines side-detail fields, even
 // when the record leaves them empty — discoverColumns() samples one record per
@@ -3632,6 +3642,16 @@ function flattenRecord(record) {
         } else if (COMPOUND_FIELDS.has(key)) {
             // Keep compound fields as-is (array or CSV string)
             flat[key] = value;
+        } else if (NVP_FIELDS.has(key)) {
+            // Name/Value Pairs (JSON object or CSV string): summary column plus
+            // one column per attribute
+            const nvp = parseNameValuePairs(value);
+            if (nvp) {
+                flat[key] = formatNameValuePairs(nvp);
+                for (const [attr, v] of Object.entries(nvp)) flat[key + '.' + attr] = formatNVPValue(v);
+            } else {
+                flat[key] = Array.isArray(value) ? JSON.stringify(value) : value;
+            }
         } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
             for (const [subKey, subVal] of Object.entries(value)) {
                 flat[key + '.' + subKey] = subVal;
@@ -3645,10 +3665,11 @@ function flattenRecord(record) {
     flattenSideSlots(record, flat);
     // Pre-compute searchable text for fast text filtering.
     // Compound fields (buyDetails, clientDetails, …) are objects — stringify so
-    // nested values like side-detail orderIDs are searchable too. Side-slot
-    // columns are excluded: their values duplicate the compound field's.
+    // nested values like side-detail orderIDs are searchable too. Side-slot and
+    // Name/Value Pair attribute columns are excluded: their values duplicate
+    // the compound field's or the summary column's.
     flat._searchText = Object.entries(flat)
-        .filter(([k, v]) => v != null && k !== '_errors' && k !== '_original' && k !== '_sideSlots' && !/^side[12]\./.test(k))
+        .filter(([k, v]) => v != null && k !== '_errors' && k !== '_original' && k !== '_sideSlots' && !/^side[12]\./.test(k) && !isNVPAttrColumn(k))
         .map(([, v]) => (typeof v === 'object' ? JSON.stringify(v) : String(v)).toLowerCase()).join('\0');
     return flat;
 }
@@ -3657,7 +3678,20 @@ const _internalFields = new Set(['_idx', '_timeInForce_original', '_errors', '_o
 
 function discoverColumns(records, colSet) {
     const seenTypes = new Set();
+    const seenNVP = new Set();
     for (const r of records) {
+        // Name/Value Pair attribute columns vary per record, not per type, so
+        // collect them from every record (once per distinct summary value)
+        for (const f of NVP_FIELDS) {
+            const s = r[f];
+            if (!s || typeof s !== 'string' || seenNVP.has(f + '\0' + s)) continue;
+            seenNVP.add(f + '\0' + s);
+            colSet.add(f);
+            const prefix = f + '.';
+            for (const k of Object.keys(r)) {
+                if (k.startsWith(prefix)) colSet.add(k);
+            }
+        }
         const t = r.type;
         if (t && seenTypes.has(t)) continue;
         if (t) seenTypes.add(t);
@@ -4904,7 +4938,7 @@ function initializeUI() {
     hiddenColumns.clear();
     const knownCols = new Set(savedOrder || []);
     for (const col of columns) {
-        if (DEFAULT_HIDDEN_COLUMNS.has(col) && !knownCols.has(col)) hiddenColumns.add(col);
+        if (isDefaultHiddenColumn(col) && !knownCols.has(col)) hiddenColumns.add(col);
     }
     try {
         const savedHidden = localStorage.getItem('catViewer_hiddenColumns');
@@ -6107,6 +6141,12 @@ function renderRowHtml(record, globalIdx, visCols) {
     for (const col of visCols) {
         const errs = visErrors && visErrors[col];
         let parentErrs = !errs && col.includes('.') && visErrors && visErrors[col.split('.')[0]];
+        if (parentErrs && isNVPAttrColumn(col)) {
+            // Attribute columns only surface errors naming their own attribute
+            const attr = '"' + col.slice(col.indexOf('.') + 1) + '"';
+            parentErrs = parentErrs.filter(e => e.message.includes(attr));
+            if (!parentErrs.length) parentErrs = null;
+        }
         if (!errs && !parentErrs && visErrors) {
             // Side-slot columns surface their source compound field's errors —
             // via the slot metadata when populated, else via the slot's
@@ -6748,13 +6788,16 @@ function renderDetailGrid(record, mode, showAll) {
     let html = '';
     for (const key of keys) {
         if (key === '_idx' || key === '_errors' || key === '_original' || key === '_searchText' || key === '_sideSlots') continue;
-        // Side-slot virtual columns duplicate the compound field sub-tables
-        if (/^side[12]\./.test(key)) continue;
+        // Side-slot virtual columns duplicate the compound field sub-tables, and
+        // Name/Value Pair attribute columns duplicate their summary field
+        if (/^side[12]\./.test(key) || isNVPAttrColumn(key)) continue;
         if (key === '_placeholder') {
             html += '<div class="detail-field" style="visibility:hidden"></div>';
             continue;
         }
-        const value = record[key];
+        // Original mode shows Name/Value Pairs as reported (JSON object or CSV string)
+        const value = (mode === 'original' && NVP_FIELDS.has(key) && record._original && record._original[key] !== undefined)
+            ? record._original[key] : record[key];
         const isEmpty = value === undefined || value === null || value === '';
 
         const displayKey = key === '_timeInForce_original' ? 'timeInForce' : key;
@@ -9004,7 +9047,7 @@ function renderEventSummary() {
 function renderRawTab() {
     const maxShow = Infinity;
     const sample = allRecords.slice(0, maxShow);
-    const replacer = (k, v) => (k === '_idx' || k === '_timeInForce_original' || k === '_errors' || k === '_original' || k === '_searchText' || k === '_sideSlots' || /^side[12]\./.test(k)) ? undefined : v;
+    const replacer = (k, v) => (k === '_idx' || k === '_timeInForce_original' || k === '_errors' || k === '_original' || k === '_searchText' || k === '_sideSlots' || /^side[12]\./.test(k) || isNVPAttrColumn(k)) ? undefined : v;
     $('rawContent').textContent = JSON.stringify(sample, replacer, 2) +
         (allRecords.length > maxShow ? `\n\n... (${allRecords.length - maxShow} more records)` : '');
 }
@@ -9492,7 +9535,7 @@ $('resetLayoutBtn').addEventListener('click', () => {
         if (!columns.includes(col)) columns.push(col);
     }
     for (const col of columns) {
-        if (DEFAULT_HIDDEN_COLUMNS.has(col)) hiddenColumns.add(col);
+        if (isDefaultHiddenColumn(col)) hiddenColumns.add(col);
     }
     activeFilters = [...defaultFilters()];
     filterModes = {};
@@ -9547,7 +9590,7 @@ function applyLayout(layout) {
         for (const col of layout.hiddenColumns) hiddenColumns.add(col);
     }
     for (const col of columns) {
-        if (DEFAULT_HIDDEN_COLUMNS.has(col) && !layout.columnOrder.includes(col)) hiddenColumns.add(col);
+        if (isDefaultHiddenColumn(col) && !layout.columnOrder.includes(col)) hiddenColumns.add(col);
     }
     // Apply filter columns
     if (Array.isArray(layout.filterColumns)) {
@@ -9815,7 +9858,7 @@ function debounce(fn, ms) {
 </script>
 
 <footer style="text-align:center; padding:16px; color:#64748b; font-size:12px; border-top:1px solid #334155;">
-    CAT File Viewer v2026.08.21 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
+    CAT File Viewer v2026.09.28 &copy; 2026 Mark Kim &mdash; Licensed under <a href="https://github.com/markuskimius/catviewer/blob/main/LICENSE" target="_blank" style="color:#64748b;">GPL-2.0</a> | <a href="https://github.com/markuskimius/catviewer" target="_blank" style="color:#64748b;">GitHub</a>
     <br>Disclaimer: This application was developed with the assistance of AI. It should be used with caution and is not a substitute for professional review.
 </footer>
 
