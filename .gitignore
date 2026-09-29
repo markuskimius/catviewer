@@ -3,3 +3,4 @@
 *.swp
 *.swo
 .claude/
+!tests/fixtures/*.bz2
