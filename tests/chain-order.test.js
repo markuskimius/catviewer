@@ -27,8 +27,13 @@ const chainSnippet = extract(
     /const CHAIN_ORIGIN_TYPES[\s\S]*?return rank\(a\) - rank\(b\);\n\}/,
     'CHAIN_ORIGIN_TYPES / compareChainRecords'
 );
-const { CHAIN_ORIGIN_TYPES, CHAIN_ORIGIN_SUPPLEMENT_TYPES, compareChainRecords } = new Function(
-    `${chainSnippet}; return { CHAIN_ORIGIN_TYPES, CHAIN_ORIGIN_SUPPLEMENT_TYPES, compareChainRecords };`
+// compareChainRecords orders timestamps via catTimestampToNs, which needs getETHour
+const timestampSnippet = extract(
+    /let _etHourFormat = null;[\s\S]*?function catTimestampToNs\(raw\) \{[\s\S]*?\n\}/,
+    'getETHour / catTimestampToNs'
+);
+const { CHAIN_ORIGIN_TYPES, CHAIN_ORIGIN_SUPPLEMENT_TYPES, compareChainRecords, catTimestampToNs } = new Function(
+    `${timestampSnippet}; ${chainSnippet}; return { CHAIN_ORIGIN_TYPES, CHAIN_ORIGIN_SUPPLEMENT_TYPES, compareChainRecords, catTimestampToNs };`
 )();
 
 const allowedSnippet = extract(
@@ -132,6 +137,61 @@ describe('compareChainRecords', () => {
         ];
         const sorted = [...group].sort(compareChainRecords);
         assert.deepStrictEqual(sorted.map(r => r.type), ['MECO', 'MENO', 'MENOS', 'MEOT', 'MEOR', 'MEOC']);
+    });
+});
+
+// --- Timestamp forms: ET strings and UTC epoch numbers ---
+
+describe('catTimestampToNs', () => {
+    test('string timestamps are Eastern Time (EDT and EST)', () => {
+        // 2025-03-17 09:30 EDT = 13:30 UTC; 2025-01-15 09:30 EST = 14:30 UTC
+        assert.strictEqual(catTimestampToNs('20250317 093000'), BigInt(Date.UTC(2025, 2, 17, 13, 30)) * 1000000n);
+        assert.strictEqual(catTimestampToNs('20250115T093000'), BigInt(Date.UTC(2025, 0, 15, 14, 30)) * 1000000n);
+    });
+
+    test('keeps full nanosecond precision', () => {
+        assert.strictEqual(catTimestampToNs('1742218200123456789'), 1742218200123456789n);
+        assert.strictEqual(
+            catTimestampToNs('20250317T093000.123456789') - catTimestampToNs('20250317T093000.123456788'), 1n);
+    });
+
+    test('epoch ms and us scale to ns', () => {
+        assert.strictEqual(catTimestampToNs(1742218200123), 1742218200123000000n);
+        assert.strictEqual(catTimestampToNs('1742218200123456'), 1742218200123456000n);
+    });
+
+    test('T and space separators are equivalent', () => {
+        assert.strictEqual(catTimestampToNs('20250317 093000.5'), catTimestampToNs('20250317T093000.5'));
+    });
+
+    test('non-timestamps return null', () => {
+        for (const v of [undefined, null, '', 'abc', '2025-03-17', '20250317']) {
+            assert.strictEqual(catTimestampToNs(v), null, String(v));
+        }
+    });
+});
+
+describe('compareChainRecords with epoch timestamps', () => {
+    test('numeric eventTimestamps do not throw and order chronologically', () => {
+        const a = rec('MEOR', 1742218200000000002);
+        const b = rec('MENO', 1742218200000000001 - 1000);
+        assert.doesNotThrow(() => [a, b].sort(compareChainRecords));
+        assert.ok(compareChainRecords(b, a) < 0);
+    });
+
+    test('string and epoch forms of the same instant tie, so origin-first applies', () => {
+        // 20250317T093000 ET = 1742218200 s UTC
+        const epoch = rec('MEOR', '1742218200000000000');
+        const str = rec('MENO', '20250317T093000');
+        assert.ok(compareChainRecords(str, epoch) < 0);
+        assert.ok(compareChainRecords(epoch, str) > 0);
+    });
+
+    test('mixed forms order by instant, not by text', () => {
+        // 09:29:59 ET string vs 09:30:00 ET epoch: text order would put "1742..." first
+        const early = rec('MEOR', '20250317 092959');
+        const late = rec('MEOR', 1742218200000000000);
+        assert.ok(compareChainRecords(early, late) < 0);
     });
 });
 

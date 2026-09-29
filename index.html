@@ -314,6 +314,11 @@
         }
         .tools-menu-item:hover:not(:disabled) { background: var(--surface2); }
         .tools-menu-item:disabled { color: var(--text-muted); cursor: default; opacity: 0.5; }
+        tr.row-superseded td { opacity: 0.5; }
+        tr.row-superseded.selected td { opacity: 0.8; }
+        .correction-chip { font-size: 10px; padding: 0 4px; border-radius: 3px; background: var(--surface2); color: var(--text-muted); }
+        .detail-correction { color: var(--orange); font-size: 11px; font-weight: normal; margin-left: 6px; cursor: pointer; text-decoration: underline; }
+        .detail-spec { color: var(--text-muted); font-size: 11px; font-weight: normal; margin-left: 6px; }
         .tools-menu-sep { height: 1px; background: var(--border); margin: 4px 0; }
         .tools-menu-shortcut { color: var(--text-muted); font-size: 11px; margin-left: 24px; }
 
@@ -959,6 +964,7 @@
             justify-content: space-between;
         }
         .error-bar.visible { display: flex; }
+        .error-bar.warning { background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.35); color: var(--orange); }
         .error-bar .close-btn {
             background: none;
             border: none;
@@ -1111,7 +1117,7 @@
 
 <header>
     <h1>CAT File Viewer</h1>
-    <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
+    <span class="subtitle">Consolidated Audit Trail &mdash; Industry Member File Reader &mdash; <a id="specLink" href="https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Spec v4.1.0 r15</a></span>
     <span class="subtitle"><a href="https://catnmsplan.com/reference-data" target="_blank" rel="noopener" style="color:var(--text-muted);text-decoration:underline">Reference Data</a></span>
     <span class="spacer" style="flex:1"></span>
     <span class="subtitle">v2026.09.28</span>
@@ -1119,8 +1125,8 @@
 
 <div class="drop-zone" id="dropZone">
     <h2>Drop a CAT file here or click to browse</h2>
-    <p>Supports JSON and CSV format CAT data files (.json, .csv, .txt, .gz, .zip)</p>
-    <input type="file" id="fileInput" accept=".json,.csv,.txt,.gz,.zip" multiple>
+    <p>Supports JSON and CSV format CAT data files (.json, .csv, .txt, .bz2, .gz, .zip)</p>
+    <input type="file" id="fileInput" accept=".json,.csv,.txt,.bz2,.gz,.zip" multiple>
 </div>
 
 <div class="drag-overlay" id="dragOverlay"><h2>Drop to open &mdash; Hold Shift to add</h2></div>
@@ -1163,7 +1169,9 @@
                         <div class="tools-menu-sep"></div>
                         <button class="tools-menu-item" id="exportBtn">Export CSV</button>
                         <div class="tools-menu-sep"></div>
+                        <button class="tools-menu-item" id="effectiveToggle" title="Hide records replaced by COR/RPR or removed by DEL, and the DEL instructions themselves (matched by firmROEID)">Apply Corrections</button>
                         <button class="tools-menu-item" id="validationToggle">&#10003; Validation</button>
+                        <button class="tools-menu-item" id="specVersionBtn" title="Which CAT spec version records are validated against. Auto uses the version in effect on each record's event date.">Spec: Auto (by event date)</button>
                         <button class="tools-menu-item" id="perfToggle">Performance</button>
                     </div>
                 </div>
@@ -1466,7 +1474,7 @@ let currentPage = 0;
 let PAGE_SIZE = 100;
 let selectedRow = -1;
 let _pendingScrollToRow = -1;
-let orderIndex = {};
+let orderIndex = Object.create(null);
 let orderChainRoot = null;
 let orderChainDepth = Infinity;
 let chainDisplayData = null;
@@ -1637,7 +1645,18 @@ fileInput.addEventListener('change', e => {
 
 function showError(msg) {
     errorBar.innerHTML = `<span>${escapeHtml(msg)}</span><button class="close-btn" onclick="clearError()">&times;</button>`;
+    errorBar.classList.remove('warning');
     errorBar.classList.add('visible');
+}
+// Non-fatal problems (e.g. skipped lines). Warnings from files loaded together
+// accumulate; an error replaces them.
+function showWarning(msg) {
+    if (errorBar.classList.contains('visible') && errorBar.classList.contains('warning')) {
+        errorBar.querySelector('.error-bar-messages').insertAdjacentHTML('beforeend', `<div>${escapeHtml(msg)}</div>`);
+        return;
+    }
+    errorBar.innerHTML = `<div class="error-bar-messages"><div>${escapeHtml(msg)}</div></div><button class="close-btn" onclick="clearError()">&times;</button>`;
+    errorBar.classList.add('visible', 'warning');
 }
 function clearError() {
     errorBar.classList.remove('visible');
@@ -1854,7 +1873,9 @@ const CAT_SCHEMA = {
   MLOE:{"actionType":["R", "S"],"errorROEID":["C", "N", 20, 0],"firmROEID":["R", "S", 64],"type":["R", "S", 5],"CATReporterIMID":["O", "S", 7],"orderKeyDate":["R", "SN"],"orderID":["R", "S", 64],"priorOrderKeyDate":["C", "SN"],"priorOrderID":["C", "S", 64],"underlying":["O", "S", 22],"eventTimestamp":["R", "SN"],"price":["C", "N", 10, 8],"quantity":["R", "N", 12, 6],"minQty":["C", "N", 12, 0],"orderType":["R", "S"],"timeInForce":["R", "O"],"tradingSession":["R", "S"],"numberOfLegs":["R", "N", 12, 0],"priceType":["C", "S"],"triggerPrice":["C", "N", 10, 8],"legDetails":["R", "A"]},
 };
 
-const CAT_ALLOWED_EXCHANGES = new Set(["AMER", "AMEROP", "ARCA", "ARCAOP", "BOX", "BSTX", "BX", "BYX", "BZX", "BZXOP", "C2", "CBOE", "CHX", "EDGA", "EDGX", "EDGXOP", "EMLD", "GEMX", "IEX", "ISE", "LTSE", "MEMX", "MEMXOP", "MIAMI", "MRX", "NOBO", "NOM", "NSDQ", "NSX", "NYSE", "PEARL", "PEARLEQ", "PHLX", "PSX", "SPHR", "24X", "TXSE"]);
+const CAT_ALLOWED_EXCHANGES = new Set(["AMER", "AMEROP", "ARCA", "ARCAOP", "BOX", "BSTX", "BX", "BYX", "BZX", "BZXOP", "C2", "CBOE", "CHX", "EDGA", "EDGX", "EDGXOP", "EMLD", "GEMX", "IEX", "ISE", "LTSE", "MEMX", "MEMXOP", "MIAMI", "MRX", "NOBO", "NOM", "NSDQ", "NSX", "NYSE", "PEARL", "PEARLEQ", "PHLX", "PSX", "SPHR", "24X", "TXSE",
+    // Added in v4.2.0 and live in production before its 12/7/2026 cutover: MX2 Options (9/14/2026), IEX Options (10/2/2026)
+    "IEXOP", "MX2OP"]);
 const CAT_ALLOWED_TYPES = new Set(["MENO", "MENOS", "MEOR", "MEMR", "MECR", "MEORS", "MEMRS", "MECRS", "MEOA", "MEIR", "MEIM", "MEIC", "MEIMR", "MEICR", "MECO", "MECOM", "MECOC", "MEOM", "MEOMS", "MEOMR", "MEOJ", "MEOC", "MEOCR", "MENQ", "MENQS", "MERQ", "MERQS", "MEQR", "MEQC", "MEQM", "MEQS", "MEOT", "MEOTS", "MEOF", "MEOFS", "MEFA", "MEPA", "MEAA", "MEOE", "MONO", "MONOS", "MOOR", "MOMR", "MOCR", "MOORS", "MOMRS", "MOCRS", "MOOA", "MOIR", "MOIM", "MOIC", "MOIMR", "MOICR", "MOCO", "MOCOM", "MOCOC", "MOOM", "MOOMS", "MOOMR", "MOOJ", "MOOC", "MOOCR", "MONQ", "MORQ", "MOQR", "MOQC", "MOQM", "MOOT", "MOOF", "MOOFS", "MOFA", "MOPA", "MOAA", "MOOE", "MLNO", "MLOR", "MLMR", "MLCR", "MLOA", "MLIR", "MLIM", "MLIC", "MLIMR", "MLICR", "MLCO", "MLCOM", "MLCOC", "MLOM", "MLOMR", "MLOC", "MLOCR", "MLNQ", "MLRQ", "MLQS", "MLQR", "MLQC", "MLQM", "MLOS", "MLOE"]);
 
 // Array element schemas per event type per compound field: [fieldName, required, typeCode, ...constraints]
@@ -1914,6 +1935,18 @@ function isNVPAttrColumn(col) {
 }
 
 
+// Byte length of a source line, for the 8190-byte line limit (error 2132).
+// A line of at most 2730 UTF-16 units is under the limit whatever its encoding,
+// so only longer lines pay for exact UTF-8 measurement.
+function lineByteLength(line) {
+    return line.length <= 2730 ? line.length : new TextEncoder().encode(line).length;
+}
+
+// Record metadata kept off the enumerable fields (columns, exports, raw view)
+function setRecordMeta(record, key, value) {
+    Object.defineProperty(record, key, { value, configurable: true });
+}
+
 function parseCSV(text) {
     const lines = text.split(/\r?\n/).filter(l => l.trim());
     if (!lines.length) return [];
@@ -1921,11 +1954,22 @@ function parseCSV(text) {
     const records = [];
     for (const line of lines) {
         const values = parseCSVLine(line);
+        // A delimiter may follow the last field (Section 6.1.2); drop the empty value it creates
+        while (values.length > 1 && values[values.length - 1] === '') values.pop();
         const eventType = values[3] || '';
         const fields = CAT_CSV_FIELDS[eventType];
         const record = {};
+        setRecordMeta(record, '_lineBytes', lineByteLength(line));
 
-        if (fields) {
+        if (values[0] === 'DEL') {
+            // Delete instruction (Table 165): actionType, errorROEID, firmROEID only
+            record.actionType = 'DEL';
+            if (values[1]) record.errorROEID = values[1];
+            if (values[2]) record.firmROEID = values[2];
+            for (let i = 3; i < values.length; i++) {
+                if (values[i] !== '') record['field_' + (i + 1)] = values[i];
+            }
+        } else if (fields) {
             // Known event type: use spec-defined field names
             let retiredCount = 0;
             for (let i = 0; i < values.length; i++) {
@@ -1988,36 +2032,150 @@ function parseCSVLine(line) {
     return result;
 }
 
-function parseJSON(text) {
-    // CAT JSON files: each line is a separate JSON object (NDJSON / JSON Lines)
-    const lines = text.split(/\r?\n/).filter(l => l.trim());
-    const records = [];
-    let jsonArrayAttempt = false;
+// ── Lossless JSON numbers ──
+// A double holds about 15 significant digits, so JSON.parse would silently
+// change epoch-nanosecond timestamps (19 digits), 20-digit errorROEIDs and
+// 8-decimal prices. Numbers with more than 15 significant digits are kept as
+// their exact source text instead. Each holder object and key of such a value
+// is recorded, so validation still treats it as a JSON number and the Raw Data
+// view prints it unquoted.
+const _losslessNumbers = new WeakMap(); // holder object → Set of keys
+function isLosslessNumber(holder, key) {
+    const keys = holder && typeof holder === 'object' ? _losslessNumbers.get(holder) : undefined;
+    return !!keys && keys.has(String(key));
+}
 
-    // First, try as a JSON array
-    try {
-        const parsed = JSON.parse(text);
-        if (Array.isArray(parsed)) {
-            return parsed;
+const LOSSLESS_SENTINEL = '\u0000#';
+// 16 or more consecutive digit/decimal-point characters: the text may hold a long number
+const LONG_NUMBER_HINT = /[0-9.]{16}/;
+
+function significantDigits(token) {
+    const mantissa = token.replace(/^-/, '').split(/[eE]/)[0].replace('.', '');
+    return mantissa.replace(/^0+/, '').length;
+}
+
+// Wraps long number tokens (outside strings) in sentinel strings; null if there are none
+function quoteLongNumbers(text) {
+    let parts = null, last = 0, i = 0;
+    const n = text.length;
+    while (i < n) {
+        const c = text.charCodeAt(i);
+        if (c === 34) { // skip a string, honoring backslash escapes
+            i++;
+            while (i < n) {
+                const d = text.charCodeAt(i);
+                if (d === 92) i += 2;
+                else if (d === 34) break;
+                else i++;
+            }
+            i++;
+        } else if (c === 45 || (c >= 48 && c <= 57)) {
+            let j = i + 1;
+            while (j < n) {
+                const d = text.charCodeAt(j);
+                if ((d >= 48 && d <= 57) || d === 46 || d === 101 || d === 69 || d === 43 || d === 45) j++;
+                else break;
+            }
+            const token = text.slice(i, j);
+            if (significantDigits(token) > 15) {
+                (parts ||= []).push(text.slice(last, i), '"\\u0000#', token, '"');
+                last = j;
+            }
+            i = j;
+        } else {
+            i++;
         }
-    } catch (e) {
-        // Not a JSON array, try line-by-line
+    }
+    if (!parts) return null;
+    parts.push(text.slice(last));
+    return parts.join('');
+}
+
+function losslessReviver(key, value) {
+    if (typeof value === 'string' && value.startsWith(LOSSLESS_SENTINEL)) {
+        let keys = _losslessNumbers.get(this);
+        if (!keys) _losslessNumbers.set(this, keys = new Set());
+        keys.add(key);
+        return value.slice(LOSSLESS_SENTINEL.length);
+    }
+    return value;
+}
+
+function parseJSONLossless(text) {
+    const quoted = LONG_NUMBER_HINT.test(text) ? quoteLongNumbers(text) : null;
+    return quoted === null ? JSON.parse(text) : JSON.parse(quoted, losslessReviver);
+}
+
+// Decimal text of a JSON number without exponent notation (1e-8 → "0.00000001")
+function plainNumberText(value) {
+    const s = String(value);
+    const m = /^(-?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/.exec(s);
+    if (!m) return s;
+    const [, sign, int, frac = '', expText] = m;
+    const digits = int + frac;
+    const point = int.length + Number(expText);
+    let out;
+    if (point <= 0) out = '0.' + '0'.repeat(-point) + digits;
+    else if (point >= digits.length) out = digits + '0'.repeat(point - digits.length);
+    else out = digits.slice(0, point) + '.' + digits.slice(point);
+    out = out.replace(/^0+(?=\d)/, '');
+    if (out.includes('.')) out = out.replace(/\.?0+$/, '');
+    return sign + out;
+}
+
+// CAT JSON files hold one record per line (NDJSON). A whole-file JSON array
+// (or a single pretty-printed object) is also accepted. The returned array
+// carries skippedLines: [{ line, message }] for lines that are not valid JSON,
+// so the caller can report them instead of dropping records silently.
+function parseJSON(text) {
+    const records = [];
+    const skippedLines = [];
+    records.skippedLines = skippedLines;
+    const start = text.trimStart();
+
+    if (start.startsWith('[')) {
+        try {
+            const parsed = parseJSONLossless(text);
+            if (Array.isArray(parsed)) {
+                parsed.skippedLines = skippedLines;
+                return parsed;
+            }
+        } catch (e) {
+            skippedLines.push({ line: 1, message: `not a valid JSON array: ${e.message}` });
+            return records;
+        }
     }
 
-    for (const line of lines) {
+    const lines = text.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line.trim()) continue;
         try {
-            records.push(JSON.parse(line));
+            const record = parseJSONLossless(line);
+            if (record && typeof record === 'object') setRecordMeta(record, '_lineBytes', lineByteLength(line));
+            records.push(record);
         } catch (e) {
-            // skip unparseable lines
+            skippedLines.push({ line: i + 1, message: e.message });
         }
+    }
+
+    // No line parsed on its own: the file may be one object spread over lines
+    if (!records.length && start.startsWith('{')) {
+        try {
+            const parsed = parseJSONLossless(text);
+            if (parsed && typeof parsed === 'object') {
+                const single = [parsed];
+                single.skippedLines = [];
+                return single;
+            }
+        } catch { /* keep the per-line errors */ }
     }
     return records;
 }
 
+// Name without a compression extension (.gz or .bz2)
 function stripGzExtension(filename) {
-    const lower = filename.toLowerCase();
-    if (lower.endsWith('.gz')) return filename.slice(0, -3);
-    return filename;
+    return filename.replace(/\.(gz|bz2)$/i, '');
 }
 
 function detectFormat(filename, text) {
@@ -2036,6 +2194,204 @@ function detectFormat(filename, text) {
     return 'csv';
 }
 
+// ── bzip2 ──
+// CAT Data Files are BZip2-compressed (spec Section 6.1), and browsers have no
+// built-in bzip2 decoder, so this is a compact one: Huffman + MTF/RLE2 decode,
+// inverse Burrows-Wheeler transform, RLE1 decode, with block and stream CRC
+// checks. Concatenated streams (as parallel bzip2 tools write) are supported.
+// Returns the decompressed bytes as a list of chunks, one per block.
+const BZ2_CRC_TABLE = (() => {
+    const t = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+        let c = i << 24;
+        for (let k = 0; k < 8; k++) c = c & 0x80000000 ? (c << 1) ^ 0x04c11db7 : c << 1;
+        t[i] = c >>> 0;
+    }
+    return t;
+})();
+
+function bunzip2(bytes) {
+    // MSB-first bit reader; n <= 24
+    let bitBuf = 0, bitCount = 0, bytePos = 0;
+    const bits = n => {
+        while (bitCount < n) {
+            if (bytePos >= bytes.length) throw new Error('bzip2 data is truncated');
+            bitBuf = ((bitBuf << 8) | bytes[bytePos++]) >>> 0;
+            bitCount += 8;
+        }
+        bitCount -= n;
+        const v = (bitBuf >>> bitCount) & ((1 << n) - 1);
+        bitBuf &= (1 << bitCount) - 1;
+        return v >>> 0;
+    };
+    const bits32 = () => ((bits(16) << 16) | bits(16)) >>> 0;
+    const bitsLeft = () => (bytes.length - bytePos) * 8 + bitCount;
+    const chunks = [];
+    while (bitsLeft() >= 32) {
+        if (bits(8) !== 0x42 || bits(8) !== 0x5a || bits(8) !== 0x68) {
+            if (!chunks.length) throw new Error('not a bzip2 file');
+            break; // trailing bytes after the last stream
+        }
+        const level = bits(8) - 0x30;
+        if (level < 1 || level > 9) throw new Error('invalid bzip2 block size');
+        const maxBlock = level * 100000;
+        let streamCRC = 0;
+        for (;;) {
+            const magicHi = bits(24), magicLo = bits(24);
+            const blockCRC = bits32();
+            if (magicHi === 0x177245 && magicLo === 0x385090) {
+                if (blockCRC !== streamCRC >>> 0) throw new Error('bzip2 stream CRC mismatch');
+                bits(bitCount & 7); // streams start on a byte boundary
+                break;
+            }
+            if (magicHi !== 0x314159 || magicLo !== 0x265359) throw new Error('invalid bzip2 block header');
+            const out = bunzip2Block(bits, maxBlock);
+            let crc = 0xffffffff;
+            for (let i = 0; i < out.length; i++) crc = (crc << 8) ^ BZ2_CRC_TABLE[((crc >>> 24) ^ out[i]) & 0xff];
+            if ((~crc >>> 0) !== blockCRC) throw new Error('bzip2 block CRC mismatch (corrupt file)');
+            streamCRC = ((streamCRC << 1) | (streamCRC >>> 31)) ^ blockCRC;
+            chunks.push(out);
+        }
+    }
+    return chunks;
+}
+
+function bunzip2Block(bits, maxBlock) {
+    if (bits(1)) throw new Error('randomized bzip2 blocks are not supported');
+    const origPtr = bits(24);
+    // Symbol map: which byte values occur in the block
+    const seqToUnseq = [];
+    const used16 = bits(16);
+    for (let i = 0; i < 16; i++) {
+        if (used16 & (0x8000 >>> i)) {
+            const used = bits(16);
+            for (let j = 0; j < 16; j++) if (used & (0x8000 >>> j)) seqToUnseq.push(i * 16 + j);
+        }
+    }
+    if (!seqToUnseq.length) throw new Error('invalid bzip2 symbol map');
+    const alphaSize = seqToUnseq.length + 2;
+    const nGroups = bits(3), nSelectors = bits(15);
+    if (nGroups < 2 || nGroups > 6 || nSelectors < 1) throw new Error('invalid bzip2 Huffman groups');
+    // Selectors, MTF-coded in unary
+    const groupMTF = [0, 1, 2, 3, 4, 5].slice(0, nGroups);
+    const selectors = new Uint8Array(nSelectors);
+    for (let i = 0; i < nSelectors; i++) {
+        let j = 0;
+        while (bits(1)) if (++j >= nGroups) throw new Error('invalid bzip2 selector');
+        const g = groupMTF[j];
+        groupMTF.splice(j, 1);
+        groupMTF.unshift(g);
+        selectors[i] = g;
+    }
+    // Code lengths (delta-coded) → canonical decode tables
+    const tables = [];
+    for (let g = 0; g < nGroups; g++) {
+        const lens = new Uint8Array(alphaSize);
+        let len = bits(5);
+        for (let i = 0; i < alphaSize; i++) {
+            for (;;) {
+                if (len < 1 || len > 20) throw new Error('invalid bzip2 code length');
+                if (!bits(1)) break;
+                len += bits(1) ? -1 : 1;
+            }
+            lens[i] = len;
+        }
+        let minLen = 32, maxLen = 0;
+        for (const l of lens) { if (l < minLen) minLen = l; if (l > maxLen) maxLen = l; }
+        const perm = [], base = new Int32Array(22), limit = new Int32Array(21);
+        for (let l = minLen; l <= maxLen; l++) for (let i = 0; i < alphaSize; i++) if (lens[i] === l) perm.push(i);
+        for (let i = 0; i < alphaSize; i++) base[lens[i] + 1]++;
+        for (let i = 1; i < 22; i++) base[i] += base[i - 1];
+        let vec = 0;
+        for (let l = minLen; l <= maxLen; l++) {
+            vec += base[l + 1] - base[l];
+            limit[l] = vec - 1;
+            vec <<= 1;
+        }
+        for (let l = minLen + 1; l <= maxLen; l++) base[l] = ((limit[l - 1] + 1) << 1) - base[l];
+        tables.push({ minLen, maxLen, perm, base, limit });
+    }
+    // Huffman → MTF/RLE2 → block bytes (the BWT last column)
+    const block = new Uint8Array(maxBlock);
+    const counts = new Int32Array(256);
+    const mtf = Uint8Array.from(seqToUnseq, (_, i) => i);
+    const EOB = alphaSize - 1;
+    let n = 0, selIdx = 0, left = 0, table = null, run = 0, runWeight = 1;
+    const flushRun = () => {
+        if (!run) return;
+        const b = seqToUnseq[mtf[0]];
+        if (n + run > maxBlock) throw new Error('bzip2 block overflow');
+        block.fill(b, n, n + run);
+        counts[b] += run;
+        n += run;
+        run = 0;
+        runWeight = 1;
+    };
+    for (;;) {
+        if (!left) {
+            if (selIdx >= nSelectors) throw new Error('bzip2 selectors exhausted');
+            table = tables[selectors[selIdx++]];
+            left = 50;
+        }
+        left--;
+        let len = table.minLen, v = bits(len);
+        while (len <= table.maxLen && v > table.limit[len]) { len++; v = (v << 1) | bits(1); }
+        if (len > table.maxLen) throw new Error('invalid bzip2 Huffman code');
+        const sym = table.perm[v - table.base[len]];
+        if (sym <= 1) { // RUNA / RUNB: bijective base-2 run length of the front symbol
+            run += (sym + 1) * runWeight;
+            runWeight <<= 1;
+            if (run > maxBlock) throw new Error('bzip2 block overflow');
+            continue;
+        }
+        flushRun();
+        if (sym === EOB) break;
+        const idx = sym - 1;
+        const s = mtf[idx];
+        mtf.copyWithin(1, 0, idx);
+        mtf[0] = s;
+        const b = seqToUnseq[s];
+        if (n >= maxBlock) throw new Error('bzip2 block overflow');
+        block[n++] = b;
+        counts[b]++;
+    }
+    if (origPtr >= n) throw new Error('invalid bzip2 origin pointer');
+    // Inverse BWT: next[] links each position to its successor in the original text
+    const next = new Int32Array(n);
+    const cum = new Int32Array(256);
+    for (let i = 0, sum = 0; i < 256; i++) { cum[i] = sum; sum += counts[i]; }
+    for (let i = 0; i < n; i++) next[cum[block[i]]++] = i;
+    // Undo the initial run-length encoding: 4 equal bytes are followed by a repeat count
+    const out = [];
+    let buf = new Uint8Array(Math.max(n, 16)), o = 0;
+    const put = b => {
+        if (o === buf.length) { const bigger = new Uint8Array(buf.length * 2); bigger.set(buf); buf = bigger; }
+        buf[o++] = b;
+    };
+    let p = next[origPtr], last = -1, same = 0;
+    for (let k = 0; k < n; k++) {
+        const b = block[p];
+        p = next[p];
+        if (same === 4) {
+            for (let r = 0; r < b; r++) put(last);
+            same = 0;
+            last = -1;
+            continue;
+        }
+        put(b);
+        if (b === last) same++;
+        else { last = b; same = 1; }
+    }
+    return buf.subarray(0, o);
+}
+
+function bytesToText(chunks) {
+    const decoder = new TextDecoder();
+    let text = '';
+    for (const c of chunks) text += decoder.decode(c, { stream: true });
+    return text + decoder.decode();
+}
+
 async function decompressGzip(file) {
     const ds = new DecompressionStream('gzip');
     const stream = file.stream().pipeThrough(ds);
@@ -2043,79 +2399,156 @@ async function decompressGzip(file) {
     return await resp.text();
 }
 
+// Files load one at a time in the order given: concurrent reads finish in
+// arbitrary order, and a replacing (non-append) load finishing last would
+// discard files that had already been appended. The first file that loads
+// replaces the current data unless append is true; every later one appends.
+let _fileLoadQueue = Promise.resolve();
 function handleFiles(files, append) {
-    // First file replaces unless append is true; rest always append
-    handleFile(files[0], append);
-    for (let i = 1; i < files.length; i++) {
-        handleFile(files[i], true);
+    _fileLoadQueue = _fileLoadQueue.then(async () => {
+        clearError();
+        let replace = !append;
+        for (const file of files) {
+            if (await handleFile(file, !replace)) replace = false;
+        }
+    });
+}
+
+// Entries of a ZIP archive, located through the central directory. Local
+// headers can't be trusted for sizes: streaming zip writers set bit 3 and put
+// the sizes in a data descriptor after the data, leaving zeros in the header.
+// ZIP64 sizes and offsets come from the 0x0001 extra field.
+function listZipEntries(buf) {
+    const view = new DataView(buf);
+    const u16 = o => view.getUint16(o, true), u32 = o => view.getUint32(o, true);
+    const u64 = o => Number(view.getBigUint64(o, true));
+    let eocd = -1;
+    for (let o = buf.byteLength - 22; o >= Math.max(0, buf.byteLength - 22 - 0xffff); o--) {
+        if (u32(o) === 0x06054b50) { eocd = o; break; }
     }
+    if (eocd < 0) throw new Error('not a ZIP archive (no central directory)');
+    let count = u16(eocd + 10), cdOffset = u32(eocd + 16);
+    if ((count === 0xffff || cdOffset === 0xffffffff) && eocd >= 20 && u32(eocd - 20) === 0x07064b50) {
+        const zip64 = u64(eocd - 12);
+        if (u32(zip64) !== 0x06064b50) throw new Error('corrupt ZIP64 end of central directory');
+        count = u64(zip64 + 32);
+        cdOffset = u64(zip64 + 48);
+    }
+    const entries = [];
+    let p = cdOffset;
+    for (let k = 0; k < count; k++) {
+        if (p + 46 > buf.byteLength || u32(p) !== 0x02014b50) throw new Error('corrupt ZIP central directory');
+        const flags = u16(p + 8), method = u16(p + 10);
+        let compSize = u32(p + 20), uncompSize = u32(p + 24);
+        const nameLen = u16(p + 28), extraLen = u16(p + 30), commentLen = u16(p + 32);
+        let localOffset = u32(p + 42);
+        const name = new TextDecoder().decode(new Uint8Array(buf, p + 46, nameLen));
+        for (let e = p + 46 + nameLen, end = e + extraLen; e + 4 <= end; e += 4 + u16(e + 2)) {
+            if (u16(e) !== 0x0001) continue;
+            let q = e + 4; // only the fields whose 32-bit values overflowed are present, in this order
+            if (uncompSize === 0xffffffff) { uncompSize = u64(q); q += 8; }
+            if (compSize === 0xffffffff) { compSize = u64(q); q += 8; }
+            if (localOffset === 0xffffffff) { localOffset = u64(q); q += 8; }
+        }
+        if (u32(localOffset) !== 0x04034b50) throw new Error(`corrupt ZIP entry ${name}`);
+        // The local header's name/extra lengths can differ from the central copy
+        const dataStart = localOffset + 30 + u16(localOffset + 26) + u16(localOffset + 28);
+        entries.push({ name, method, compSize, uncompSize, dataStart, encrypted: (flags & 1) !== 0 });
+        p += 46 + nameLen + extraLen + commentLen;
+    }
+    return entries;
+}
+
+// Text of a file's bytes, decompressing by extension (.gz, .bz2)
+async function decodeFileBytes(name, bytes) {
+    const lower = name.toLowerCase();
+    if (lower.endsWith('.bz2')) return bytesToText(bunzip2(bytes));
+    if (lower.endsWith('.gz')) {
+        return await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+    }
+    return new TextDecoder().decode(bytes);
 }
 
 async function handleZipFile(file, append) {
     const buf = await file.arrayBuffer();
-    const view = new DataView(buf);
-    const entries = [];
-    // Parse local file headers (signature 0x04034b50)
-    let offset = 0;
-    while (offset + 30 <= buf.byteLength && view.getUint32(offset, true) === 0x04034b50) {
-        const method = view.getUint16(offset + 8, true);
-        const compSize = view.getUint32(offset + 18, true);
-        const uncompSize = view.getUint32(offset + 22, true);
-        const nameLen = view.getUint16(offset + 26, true);
-        const extraLen = view.getUint16(offset + 28, true);
-        const nameBytes = new Uint8Array(buf, offset + 30, nameLen);
-        const name = new TextDecoder().decode(nameBytes);
-        const dataStart = offset + 30 + nameLen + extraLen;
-        if (!name.endsWith('/') && !name.startsWith('__MACOSX') && /\.(json|csv|txt)$/i.test(name)) {
-            entries.push({ name, method, compSize, uncompSize, dataStart });
-        }
-        offset = dataStart + compSize;
-    }
+    const entries = listZipEntries(buf).filter(e =>
+        !e.name.endsWith('/') && !e.name.startsWith('__MACOSX') && /\.(json|csv|txt)(\.(gz|bz2))?$/i.test(e.name));
     if (!entries.length) {
-        showError('No supported files (.json, .csv, .txt) found in ZIP archive.');
-        return;
+        showError('No supported files (.json, .csv, .txt, optionally .gz/.bz2) found in ZIP archive.');
+        return false;
     }
-    for (let i = 0; i < entries.length; i++) {
-        const e = entries[i];
-        const raw = new Uint8Array(buf, e.dataStart, e.compSize);
+    let loaded = false;
+    for (const e of entries) {
+        // A bad entry is reported and skipped; the rest of the archive still loads
         let text;
-        if (e.method === 0) {
-            // Stored (no compression)
-            text = new TextDecoder().decode(raw);
-        } else if (e.method === 8) {
-            // Deflate
-            const ds = new DecompressionStream('deflate-raw');
-            const writer = ds.writable.getWriter();
-            writer.write(raw);
-            writer.close();
-            text = await new Response(ds.readable).text();
-        } else {
-            showError(`Unsupported compression method (${e.method}) for ${e.name}`);
+        try {
+            if (e.encrypted) throw new Error('encrypted entries are not supported');
+            const raw = new Uint8Array(buf, e.dataStart, e.compSize);
+            let bytes;
+            if (e.method === 0) {
+                bytes = raw;
+            } else if (e.method === 8) {
+                bytes = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+            } else if (e.method === 12) {
+                bytes = concatBytes(bunzip2(raw));
+            } else {
+                throw new Error(`unsupported compression method ${e.method}`);
+            }
+            text = await decodeFileBytes(e.name, bytes);
+        } catch (err) {
+            showWarning(`${file.name}: skipped ${e.name} — ${describeReadError(err)}`);
             continue;
         }
         const virtualFile = { name: e.name, size: text.length };
-        processFileText(virtualFile, text, append || i > 0);
+        if (processFileText(virtualFile, text, append || loaded)) loaded = true;
     }
+    return loaded;
 }
 
-function handleFile(file, append) {
-    clearError();
+function concatBytes(chunks) {
+    const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+    let o = 0;
+    for (const c of chunks) { out.set(c, o); o += c.length; }
+    return out;
+}
+
+// Browsers cap a string at about 512M characters (V8) and fail with a bare
+// RangeError, so name the limit and what to do about it
+const MAX_TEXT_CHARS = 512 * 1024 * 1024;
+function describeReadError(err) {
+    if (err instanceof RangeError || /string length|allocation failed|out of memory/i.test(String(err && err.message))) {
+        return 'the decompressed text is larger than a browser can hold in memory (about 512 MB). Split the file, or load a subset of it.';
+    }
+    return err && err.message ? err.message : String(err);
+}
+
+// Resolves true when at least one file's records were loaded
+async function handleFile(file, append) {
     const lower = file.name.toLowerCase();
 
     if (lower.endsWith('.zip')) {
-        handleZipFile(file, append).catch(err => {
-            showError('Error reading ZIP file: ' + err.message);
-        });
-    } else if (lower.endsWith('.gz')) {
-        decompressGzip(file).then(text => processFileText(file, text, append)).catch(err => {
-            showError('Error decompressing file: ' + err.message);
-        });
-    } else {
-        const reader = new FileReader();
-        reader.onload = e => processFileText(file, e.target.result, append);
-        reader.onerror = () => showError('Error reading file.');
-        reader.readAsText(file);
+        try {
+            return await handleZipFile(file, append);
+        } catch (err) {
+            showError(`Error reading ZIP file ${file.name}: ${describeReadError(err)}`);
+            return false;
+        }
     }
+    const compressed = /\.(gz|bz2)$/i.test(lower);
+    if (!compressed && file.size > MAX_TEXT_CHARS) {
+        showError(`${file.name} is ${(file.size / 1024 ** 3).toFixed(1)} GB; a browser can hold at most about 512 MB of text in memory. Split the file, or load a subset of it.`);
+        return false;
+    }
+    let text;
+    try {
+        if (lower.endsWith('.gz')) text = await decompressGzip(file);
+        else if (lower.endsWith('.bz2')) text = bytesToText(bunzip2(new Uint8Array(await file.arrayBuffer())));
+        else text = await file.text();
+    } catch (err) {
+        showError(`${compressed ? 'Error decompressing' : 'Error reading'} ${file.name}: ${describeReadError(err)}`);
+        return false;
+    }
+    return processFileText(file, text, append);
 }
 
 function validateCATFile(records) {
@@ -2125,6 +2558,9 @@ function validateCATFile(records) {
     for (const rec of records) {
         const t = rec.type || '';
         if (t && CAT_TYPE_PREFIXES.some(p => t.startsWith(p))) {
+            validCount++;
+        } else if (rec.actionType === 'DEL' && (rec.firmROEID || rec.errorROEID)) {
+            // Delete instructions have no type (Table 165)
             validCount++;
         }
     }
@@ -2163,12 +2599,175 @@ const CAT_CHOICE_VALUES = {
     quotePriceType: new Set(['PU', 'TC', 'TS']),
     fulfillmentLinkType: new Set(['Y', 'YS', 'YP', 'YE', 'FOR', 'O', 'OS', 'OE', 'OML', 'OME']),
     unsolicitedInd: new Set(['A', 'B', 'N', 'U']),
-    marketCenterID: new Set(['A', 'AMEROP', 'ARCAOP', 'B', 'BF', 'BOX', 'BZXOP', 'C', 'C2', 'CBOE', 'CHX', 'D', 'DC', 'DN', 'EDGXOP', 'EMLD', 'F', 'G', 'GEMX', 'H', 'I', 'ISE', 'J', 'K', 'L', 'LT', 'M', 'MEMXOP', 'MIAMI', 'MRX', 'N', 'NOBO', 'NOM', 'O', 'P', 'PEARL', 'PHLX', 'Q', 'SPHR', 'TXSE', 'U', 'V', 'W', 'X', 'Y', 'Z']),
+    marketCenterID: new Set(['A', 'AMEROP', 'ARCAOP', 'B', 'BF', 'BOX', 'BZXOP', 'C', 'C2', 'CBOE', 'CHX', 'D', 'DC', 'DN', 'EDGXOP', 'EMLD', 'F', 'G', 'GEMX', 'H', 'I', 'ISE', 'J', 'K', 'L', 'LT', 'M', 'MEMXOP', 'MIAMI', 'MRX', 'N', 'NOBO', 'NOM', 'O', 'P', 'PEARL', 'PHLX', 'Q', 'SPHR', 'TXSE', 'U', 'V', 'W', 'X', 'Y', 'Z',
+        'IEXOP', 'MX2OP']), // v4.2.0 values already live in production (see CAT_ALLOWED_EXCHANGES)
 };
 
-function validateRecord(record, format) {
+// <generated:spec-deltas> — written by tools/gen-spec.js from the official schema files; do not edit
+const CAT_SPEC_DELTAS = {
+  "4.2.0": {
+    source: "08.14.26-IM-4.2.0.json",
+    removedTypes: ["MONQ","MORQ","MOQR","MOQC","MOQM","MLNQ","MLRQ","MLQS","MLQR","MLQC","MLQM"],
+    addedTypes: [],
+    fields: {"MENQ":{"RFQID":null,"RFQFlag":null,"bidRelativePrice":null,"askRelativePrice":null,"validUntilDuration":null},"MERQ":{"destination":["R","S",16],"retiredFieldPosition":["O","S"],"RFQID":null,"bidRelativePrice":null,"askRelativePrice":null,"validUntilDuration":null},"MEQR":{"senderIMID":["R","S",16],"RFQID":null,"RFQFlag":null,"bidRelativePrice":null,"askRelativePrice":null,"senderType":null,"validUntilDuration":null},"MEQC":{"RFQID":null},"MEQM":{"retiredFieldPosition":["O","S"],"RFQID":null,"bidRelativePrice":null,"askRelativePrice":null,"validUntilDuration":null}},
+    arrayElements: {},
+    choices: {"destinationType":["F","E","N","O","D"],"marketCenterID":["D","DC","DN","L","O","A","B","BF","C","F","G","H","I","J","K","LT","M","N","P","Q","TXSE","U","V","W","X","Y","Z","ARCAOP","AMEROP","BOX","BZXOP","C2","CBOE","CHX","EDGXOP","EMLD","GEMX","IEXOP","ISE","MEMXOP","MIAMI","MRX","MX2OP","NOBO","NOM","PEARL","PHLX","SPHR"],"senderType":["F","E","O"],"quotePriceType":[]},
+    exchanges: ["24X","AMER","AMEROP","ARCA","ARCAOP","BOX","BSTX","BX","BYX","BZX","BZXOP","C2","CBOE","CHX","EDGA","EDGX","EDGXOP","EMLD","GEMX","IEX","IEXOP","ISE","LTSE","MEMX","MEMXOP","MIAMI","MRX","MX2OP","NOBO","NOM","NSDQ","NSX","NYSE","PEARL","PEARLEQ","PHLX","PSX","SPHR","TXSE"],
+  },
+};
+// </generated:spec-deltas>
+
+// Spec versions in effect by Eastern Time event date (YYYYMMDD). The base
+// version's tables are CAT_SCHEMA, CAT_ARRAY_ELEMENTS, CAT_CHOICE_VALUES,
+// CAT_ALLOWED_EXCHANGES and CAT_ALLOWED_TYPES; later versions apply their
+// generated CAT_SPEC_DELTAS entry to those.
+// v4.2.0 production: 12/7/2026 per the 8/27/2026 IM release plan (the spec's
+// own revision history still says 12/14; the later-dated release plan wins).
+const CAT_SPEC_VERSIONS = [
+    { version: '4.1.0r15', label: 'v4.1.0 r15', from: null, retiredCodes: [],
+      url: 'https://www.catnmsplan.com/sites/default/files/2026-03/03.06.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.1.0r15_CLEAN.pdf' },
+    { version: '4.2.0', label: 'v4.2.0 r2', from: '20261207',
+      // RFQ fields removed with the "Not Immediately Actionable" RFQ requirements; quotePriceType with the options/multi-leg quote events
+      retiredCodes: [2249, 2250, 2254, 2255, 2256, 2257],
+      url: 'https://www.catnmsplan.com/sites/default/files/2026-09/09.23.26_CAT_Reporting_Technical_Specifications_for_Industry_Members_v4.2.0r2_CLEAN.pdf' },
+];
+// Error codes retired in production partway through a spec version
+const CAT_CODE_RETIREMENTS = [
+    { code: 2247, from: '20260601' }, // CASH quantity (v4.2.0 revision history: production June 1, 2026)
+];
+
+function applySpecDelta(base, delta) {
+    const removed = new Set(delta.removedTypes);
+    const schema = Object.create(null), arrayElements = Object.create(null);
+    for (const [t, fields] of Object.entries(base.schema)) {
+        if (removed.has(t)) continue;
+        const changes = delta.fields[t];
+        if (!changes) { schema[t] = fields; continue; }
+        const merged = Object.assign(Object.create(null), fields);
+        for (const [f, rule] of Object.entries(changes)) {
+            if (rule === null) delete merged[f];
+            else merged[f] = rule;
+        }
+        schema[t] = merged;
+    }
+    for (const t of delta.addedTypes) schema[t] = Object.assign(Object.create(null), delta.fields[t]);
+    for (const t of Object.keys(schema)) {
+        const elems = Object.assign(Object.create(null), base.arrayElements[t], delta.arrayElements[t]);
+        if (Object.keys(elems).length) arrayElements[t] = elems;
+    }
+    const choices = Object.assign(Object.create(null), base.choices);
+    for (const [k, v] of Object.entries(delta.choices)) choices[k] = new Set(v);
+    return {
+        schema, arrayElements, choices,
+        exchanges: delta.exchanges ? new Set(delta.exchanges) : base.exchanges,
+        types: new Set(Object.keys(schema)),
+    };
+}
+
+const CAT_SPECS = (() => {
+    const specs = Object.create(null);
+    let prev = null;
+    for (const v of CAT_SPEC_VERSIONS) {
+        const tables = prev === null
+            ? { schema: CAT_SCHEMA, arrayElements: CAT_ARRAY_ELEMENTS, choices: CAT_CHOICE_VALUES,
+                exchanges: CAT_ALLOWED_EXCHANGES, types: CAT_ALLOWED_TYPES }
+            : applySpecDelta(specs[CAT_SPEC_VERSIONS[0].version], CAT_SPEC_DELTAS[v.version]);
+        specs[v.version] = { ...v, ...tables, retiredCodes: new Set(v.retiredCodes) };
+        prev = v;
+    }
+    return specs;
+})();
+const CAT_BASE_SPEC = CAT_SPECS[CAT_SPEC_VERSIONS[0].version];
+
+// 'auto' picks the spec by event date; otherwise a CAT_SPEC_VERSIONS version
+let specVersionSetting = 'auto';
+
+// Eastern Time event date (YYYYMMDD) of a raw record: eventTimestamp, else the
+// firmROEID date (delete instructions), else tradeDate; null if none is usable
+function recordEventDate(record) {
+    const ts = record.eventTimestamp;
+    if (ts !== undefined && ts !== null && ts !== '') {
+        const s = String(ts);
+        if (/^\d{8}[T ]/.test(s)) return s.slice(0, 8);
+        const ns = catTimestampToNs(s);
+        if (ns !== null) return formatETDateCompact(Number(ns / 1000000n));
+    }
+    const roe = /^(\d{8})_/.exec(String(record.firmROEID ?? ''));
+    if (roe) return roe[1];
+    const td = String(record.tradeDate ?? '');
+    return /^\d{8}$/.test(td) ? td : null;
+}
+
+function specForDate(date) {
+    let spec = CAT_BASE_SPEC;
+    for (const v of CAT_SPEC_VERSIONS) if (v.from === null || v.from <= date) spec = CAT_SPECS[v.version];
+    return spec;
+}
+
+function specForRecord(record) {
+    if (specVersionSetting !== 'auto' && CAT_SPECS[specVersionSetting]) return CAT_SPECS[specVersionSetting];
+    return specForDate(recordEventDate(record) || formatETDateCompact(Date.now()));
+}
+
+// Codes that no longer apply to a record validated against spec with this event date
+function retiredCodesFor(spec, eventDate) {
+    const codes = new Set(spec.retiredCodes);
+    for (const r of CAT_CODE_RETIREMENTS) if (!eventDate || r.from <= eventDate) codes.add(r.code);
+    return codes;
+}
+
+// Child order events: exempt from ingestion error 2027 (eventTimestamp precision)
+const CHILD_ORDER_TYPES = new Set(['MECO', 'MECOM', 'MECOC', 'MOCO', 'MOCOM', 'MOCOC', 'MLCO', 'MLCOM', 'MLCOC']);
+
+// Quote events use different destinationType/senderType values than order events (Appendix G)
+const QUOTE_EVENT_TYPES = new Set(['MENQ', 'MENQS', 'MERQ', 'MERQS', 'MEQR', 'MEQC', 'MEQM', 'MEQS',
+    'MONQ', 'MORQ', 'MOQR', 'MOQC', 'MOQM', 'MLNQ', 'MLRQ', 'MLQS', 'MLQR', 'MLQC', 'MLQM']);
+
+// Allowed values that depend on the product (equity/option) or on quote vs order
+// events; CAT_CHOICE_VALUES holds the union. Returns null when the full set applies.
+function productChoiceValues(fieldName, type, isOptionLeg) {
+    const isQuote = QUOTE_EVENT_TYPES.has(type);
+    const isOption = isOptionLeg !== undefined ? isOptionLeg : (type || '').startsWith('MO');
+    switch (fieldName) {
+        case 'side':
+            return isOption ? PRODUCT_CHOICES.optionSide : PRODUCT_CHOICES.equitySide;
+        case 'destinationType':
+            return isQuote ? PRODUCT_CHOICES.quoteDestinationType
+                : isOption || (type || '').startsWith('ML') ? PRODUCT_CHOICES.optionOrderDestinationType
+                : PRODUCT_CHOICES.orderDestinationType;
+        case 'senderType':
+            return isQuote ? PRODUCT_CHOICES.quoteSenderType : PRODUCT_CHOICES.orderSenderType;
+    }
+    return null;
+}
+const PRODUCT_CHOICES = {
+    equitySide: new Set(['B', 'SL', 'SS', 'SX']),
+    optionSide: new Set(['B', 'S']),
+    quoteDestinationType: new Set(['D', 'F', 'N', 'S']),
+    orderDestinationType: new Set(['F', 'E', 'N', 'O']),
+    optionOrderDestinationType: new Set(['F', 'E', 'O']), // Foreign (N) is not applicable to options
+    quoteSenderType: new Set(['F', 'N', 'S']),
+    orderSenderType: new Set(['E', 'F', 'O']),
+};
+
+// Validates a raw record against the spec in effect on its event date (or the
+// one passed in), dropping error codes CAT has retired by then
+function validateRecord(record, format, spec = specForRecord(record)) {
+    const errors = validateRecordAgainstSpec(record, format, spec);
+    if (!errors) return null;
+    const retired = retiredCodesFor(spec, recordEventDate(record) || formatETDateCompact(Date.now()));
+    let count = 0;
+    for (const field of Object.keys(errors)) {
+        errors[field] = errors[field].filter(e => !retired.has(e.code));
+        if (errors[field].length) count++;
+        else delete errors[field];
+    }
+    return count ? errors : null;
+}
+
+function validateRecordAgainstSpec(record, format, spec) {
     const type = record.type;
-    const schema = CAT_SCHEMA[type];
+    const schema = spec.schema[type];
     const errors = {};
 
     function addError(field, severity, message, code) {
@@ -2181,7 +2780,7 @@ function validateRecord(record, format) {
         accountHolderType: 2001, actionType: 2002, affiliateFlag: 2003, aggregatedOrders: 2004,
         askPrice: 2005, askQty: 2006, atsDisplayInd: 2007, atsOrderType: 2008,
         bidPrice: 2009, bidQty: 2010, CATReporterIMID: 2011, cancelQty: 2012,
-        cancelFlag: 2013, cancelTimestamp: 2014, capacity: 2015, counterparty: 2185, custDspIntrFlag: 2017,
+        cancelFlag: 2013, cancelTimestamp: 2014, capacity: 2015, custDspIntrFlag: 2017,
         deptType: 2018, destinationType: 2020, displayPrice: 2021, displayQty: 2022,
         dupROIDCond: 2023, electronicDupFlag: 2024, electronicTimestamp: 2025,
         errorROEID: 2026, eventTimestamp: 2027, exchOriginCode: 2028, fillKeyDate: 2030,
@@ -2247,21 +2846,36 @@ function validateRecord(record, format) {
     function extractTimestampDate(ts) {
         const s = String(ts);
         if (/^\d{8}[T ]/.test(s)) return s.slice(0, 8);
-        // Epoch nanos — convert to date string
-        if (/^\d{13,20}$/.test(s)) {
-            const ms = Number(s.length > 13 ? s.slice(0, 13) : s);
-            const d = new Date(ms);
-            const yyyy = d.getUTCFullYear();
-            const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-            const dd = String(d.getUTCDate()).padStart(2, '0');
-            return `${yyyy}${mm}${dd}`;
-        }
+        // Epoch timestamps are UTC; the Event Date is the Eastern Time date
+        if (/^\d{13,19}$/.test(s)) return formatETDateCompact(Number(catTimestampToNs(s) / 1000000n));
         return null;
+    }
+
+    // Delete instructions (Table 165) carry only actionType plus errorROEID or
+    // firmROEID; they do not restate the record, so there is no type or event schema
+    if (record.actionType === 'DEL') {
+        const has = fn => record[fn] !== undefined && record[fn] !== null && record[fn] !== '';
+        if (!has('errorROEID') && !has('firmROEID')) {
+            addError('firmROEID', 'error', 'Delete instruction must populate errorROEID or firmROEID', 2032);
+        }
+        if (has('errorROEID') && !/^\d{1,20}$/.test(String(record.errorROEID))) {
+            addError('errorROEID', 'error', 'errorROEID must be an unsigned number', 2026);
+        }
+        if (has('firmROEID') && !/^\d{8}_.+$/.test(String(record.firmROEID))) {
+            addError('firmROEID', 'error', 'firmROEID must be formatted as YYYYMMDD_<identifier>', 2032);
+        }
+        for (const key of Object.keys(record)) {
+            if (key === 'actionType' || key === 'errorROEID' || key === 'firmROEID' || VALIDATION_SKIP_FIELDS.has(key)) continue;
+            if (has(key)) addError(key, 'warn', 'Delete instructions carry only actionType and errorROEID or firmROEID; this field is ignored', 2133);
+        }
+        return Object.keys(errors).length ? errors : null;
     }
 
     // 1. Unknown event type
     if (!schema) {
-        if (type) {
+        if (type && CAT_BASE_SPEC.schema[type]) {
+            addError('type', 'error', `${type} is not an event type in ${spec.label}`, 2105);
+        } else if (type) {
             addError('type', 'error', `Unknown event type: ${type}`, 2105);
         } else {
             addError('type', 'error', 'Missing event type', 2105);
@@ -2269,8 +2883,9 @@ function validateRecord(record, format) {
         return Object.keys(errors).length ? errors : null;
     }
 
-    const isNew = record.actionType === 'NEW';
     const isCSV = format === 'csv';
+    // Boolean values are not case sensitive (Section 2.5): JSON true or CSV "true"/"TRUE"
+    const isTrue = v => v === true || (typeof v === 'string' && v.toLowerCase() === 'true');
     const val = (fn) => { const v = record[fn]; return v === undefined || v === null || v === '' ? undefined : v; };
     const strVal = (fn) => { const v = val(fn); return v !== undefined ? String(v) : undefined; };
 
@@ -2281,19 +2896,20 @@ function validateRecord(record, format) {
         const isEmpty = value === undefined || value === null || value === '';
         const fc = fieldCode(fieldName);
 
-        // 2156: reservedForFutureUse must not be populated
-        if (fieldName === 'reservedForFutureUse') {
-            if (!isEmpty) addError(fieldName, 'error', 'reservedForFutureUse must not be populated', 2156);
-            continue;
-        }
-        // 2207: retiredFieldPosition must not be populated
-        if (fieldName === 'retiredFieldPosition') {
-            if (!isEmpty) addError(fieldName, 'error', 'retiredFieldPosition must not be populated', 2207);
+        // 2156 / 2207: reserved and retired positions must be blank. CSV parsing
+        // numbers repeated positions (retiredFieldPosition_1, _2, ...), so check every one.
+        if (fieldName === 'reservedForFutureUse' || fieldName === 'retiredFieldPosition') {
+            const populated = Object.keys(record).filter(k => (k === fieldName || k.startsWith(fieldName + '_'))
+                && record[k] !== undefined && record[k] !== null && record[k] !== '');
+            for (const k of populated) {
+                addError(k, 'error', `${fieldName} must not be populated`, fieldName === 'reservedForFutureUse' ? 2156 : 2207);
+            }
             continue;
         }
 
-        // Required field missing (only for NEW action type)
-        if (req === 'R' && isEmpty && isNew) {
+        // Required field missing. In JSON an absent Boolean means false (Section 2.5),
+        // so only CSV requires Booleans to be present.
+        if (req === 'R' && isEmpty && !(typeCode === 'B' && !isCSV && value === undefined)) {
             addError(fieldName, 'error', `Required field is missing`, fc);
             continue;
         }
@@ -2312,7 +2928,7 @@ function validateRecord(record, format) {
         // Type checking
         if (typeCode === 'B') {
             if (isCSV) {
-                if (value !== 'true' && value !== 'false') {
+                if (!/^(true|false)$/i.test(String(value))) {
                     addError(fieldName, 'error', `Expected boolean (true/false), got: ${String(value).slice(0, 20)}`, fc);
                 }
             } else {
@@ -2321,14 +2937,14 @@ function validateRecord(record, format) {
                 }
             }
         } else if (typeCode === 'N') {
-            const numStr = String(value);
+            const numStr = plainNumberText(value);
             if (isCSV) {
                 if (!/^-?\d+(\.\d+)?$/.test(numStr)) {
                     addError(fieldName, 'error', `Expected number, got: ${numStr.slice(0, 20)}`, fc);
                     continue;
                 }
             } else {
-                if (typeof value !== 'number') {
+                if (typeof value !== 'number' && !isLosslessNumber(record, fieldName)) {
                     addError(fieldName, 'error', `Expected number, got ${typeof value}`, fc);
                     continue;
                 }
@@ -2363,23 +2979,30 @@ function validateRecord(record, format) {
             if (!isCSV && typeof value !== 'string' && typeof value !== 'number') {
                 addError(fieldName, 'error', `Expected string or number timestamp, got ${typeof value}`, fc);
             }
-            // Validate timestamp format
+            // Validate timestamp format: YYYYMMDD[T| ]HHMMSS[.fraction] in Eastern Time,
+            // or an unsigned count of nanoseconds since the UTC epoch (Section 2.5)
             const s = String(value);
-            if (typeof value === 'string' || isCSV) {
-                if (!/^\d{8}[T ]\d{6}(\.\d{1,9})?$/.test(s) && !/^\d{13,20}$/.test(s)) {
-                    addError(fieldName, 'warn', `Invalid timestamp format: ${s.slice(0, 30)}`, fc);
+            if (/^\d+$/.test(s)) {
+                if (s.length !== 19) {
+                    const unit = s.length === 13 ? ' (looks like milliseconds)' : s.length === 16 ? ' (looks like microseconds)' : '';
+                    addError(fieldName, 'error', `Epoch timestamps must be nanoseconds since 1970-01-01 UTC (19 digits); got ${s.length} digits${unit}`, fc);
                 }
+            } else if (!/^\d{8}[T ]\d{6}(\.\d{1,9})?$/.test(s)) {
+                addError(fieldName, 'error', `Invalid timestamp format: ${s.slice(0, 30)}`, fc);
             }
         } else if (typeCode === 'A') {
             // Array type — check it's actually an array (JSON) or non-empty string (CSV)
             if (!isCSV && !Array.isArray(value) && typeof value !== 'string') {
                 addError(fieldName, 'error', `Expected array, got ${typeof value}`, fc);
-            } else if (!isCSV && Array.isArray(value)) {
-                // Deep validation of array elements
-                const elemSchema = CAT_ARRAY_ELEMENTS[type] && CAT_ARRAY_ELEMENTS[type][fieldName];
+            } else if (Array.isArray(value) || typeof value === 'string') {
+                // Deep validation of array elements. CSV arrays are text: elements
+                // separated by '|', fields by '@', in the element schema's order.
+                const elemSchema = spec.arrayElements[type] && spec.arrayElements[type][fieldName];
+                const textual = !Array.isArray(value);
+                const elements = !elemSchema ? [] : textual ? parseSideDetails(value, elemSchema.map(e => e[0])) : value;
                 if (elemSchema) {
-                    for (let ei = 0; ei < value.length; ei++) {
-                        const elem = value[ei];
+                    for (let ei = 0; ei < elements.length; ei++) {
+                        const elem = elements[ei];
                         if (!elem || typeof elem !== 'object') {
                             addError(fieldName, 'error', `Element [${ei}]: expected object, got ${typeof elem}`, 2134);
                             continue;
@@ -2390,23 +3013,23 @@ function validateRecord(record, format) {
                             const eEmpty = eVal === undefined || eVal === null || eVal === '';
                             // Nested field error code lookup — prefer parent→child specific codes from Table 177
                             const nestedCode = (NESTED_FIELD_CODES[fieldName] && NESTED_FIELD_CODES[fieldName][eName]) || FIELD_ERROR_CODES[eName] || fc;
-                            // Required check (only for NEW)
-                            if (eReq === 'R' && eEmpty && isNew) {
+                            // Required check (an absent JSON Boolean means false)
+                            if (eReq === 'R' && eEmpty && !(eType === 'B' && !textual && eVal === undefined)) {
                                 addError(fieldName, 'error', `Element [${ei}]: required field "${eName}" is missing`, nestedCode);
                                 continue;
                             }
                             if (eEmpty) continue;
                             // Type checks
                             if (eType === 'B') {
-                                if (typeof eVal !== 'boolean') {
-                                    addError(fieldName, 'error', `Element [${ei}].${eName}: expected boolean, got ${typeof eVal}`, nestedCode);
+                                if (textual ? !/^(true|false)$/i.test(eVal) : typeof eVal !== 'boolean') {
+                                    addError(fieldName, 'error', `Element [${ei}].${eName}: expected boolean, got ${textual ? `"${String(eVal).slice(0, 20)}"` : typeof eVal}`, nestedCode);
                                 }
                             } else if (eType === 'N') {
-                                if (typeof eVal !== 'number') {
-                                    addError(fieldName, 'error', `Element [${ei}].${eName}: expected number, got ${typeof eVal}`, nestedCode);
+                                if (textual ? !/^-?\d+(\.\d+)?$/.test(eVal) : typeof eVal !== 'number' && !isLosslessNumber(elem, eName)) {
+                                    addError(fieldName, 'error', `Element [${ei}].${eName}: expected number, got ${textual ? `"${String(eVal).slice(0, 20)}"` : typeof eVal}`, nestedCode);
                                 } else if (eCons.length >= 2) {
                                     const [maxInt, maxFrac] = eCons;
-                                    const parts = String(eVal).replace('-', '').split('.');
+                                    const parts = plainNumberText(eVal).replace('-', '').split('.');
                                     const intP = (parts[0].replace(/^0+/, '') || '0');
                                     const fracP = parts[1] || '';
                                     if (intP.length > maxInt) {
@@ -2423,14 +3046,22 @@ function validateRecord(record, format) {
                                     addError(fieldName, 'error', `Element [${ei}].${eName}: exceeds max length ${eCons[0]}`, nestedCode);
                                 }
                                 // Choice value validation for known fields inside array elements
-                                if (typeof eVal === 'string' && CAT_CHOICE_VALUES[eName]) {
-                                    if (!CAT_CHOICE_VALUES[eName].has(eVal)) {
-                                        addError(fieldName, 'warn', `Element [${ei}].${eName}: unexpected value "${eVal.slice(0, 20)}"`, nestedCode);
+                                if (typeof eVal === 'string' && spec.choices[eName]) {
+                                    // A leg's product follows its instrument: optionID → option, symbol → equity
+                                    const legIsOption = fieldName !== 'legDetails' ? undefined
+                                        : elem.optionID ? true : elem.symbol ? false : null;
+                                    const productValues = legIsOption === null ? null : productChoiceValues(eName, type, legIsOption);
+                                    if (!spec.choices[eName].has(eVal)) {
+                                        addError(fieldName, 'error', `Element [${ei}].${eName}: invalid value "${eVal.slice(0, 20)}"`, nestedCode);
+                                    } else if (productValues && !productValues.has(eVal)) {
+                                        addError(fieldName, 'error', `Element [${ei}].${eName}: "${eVal}" is not allowed here (allowed: ${[...productValues].join(', ')})`, nestedCode);
                                     }
                                 }
                             } else if (eType === 'SN') {
                                 if (typeof eVal !== 'string' && typeof eVal !== 'number') {
                                     addError(fieldName, 'error', `Element [${ei}].${eName}: expected string or number, got ${typeof eVal}`, nestedCode);
+                                } else if (catTimestampToNs(eVal) === null || (/^\d+$/.test(String(eVal)) && String(eVal).length !== 19)) {
+                                    addError(fieldName, 'error', `Element [${ei}].${eName}: invalid timestamp "${String(eVal).slice(0, 30)}"`, nestedCode);
                                 }
                             }
                         }
@@ -2542,15 +3173,18 @@ function validateRecord(record, format) {
         }
 
         // Allowed values check for Choice fields
-        if (typeCode === 'S' && CAT_CHOICE_VALUES[fieldName]) {
+        if (typeCode === 'S' && spec.choices[fieldName]) {
             const sv = String(value);
-            if (!CAT_CHOICE_VALUES[fieldName].has(sv)) {
-                addError(fieldName, 'warn', `Unexpected value "${sv.slice(0, 20)}" for ${fieldName}`, fc);
+            const productValues = productChoiceValues(fieldName, type);
+            if (!spec.choices[fieldName].has(sv)) {
+                addError(fieldName, 'error', `Invalid value "${sv.slice(0, 20)}" for ${fieldName}`, fc);
+            } else if (productValues && !productValues.has(sv)) {
+                addError(fieldName, 'error', `"${sv}" is not an allowed ${fieldName} for ${type} (allowed: ${[...productValues].join(', ')})`, fc);
             }
         }
 
         // Message type validation
-        if (fieldName === 'type' && !CAT_ALLOWED_TYPES.has(String(value))) {
+        if (fieldName === 'type' && !spec.types.has(String(value))) {
             addError(fieldName, 'error', `Unknown message type: ${String(value)}`, 2105);
         }
     }
@@ -2560,7 +3194,18 @@ function validateRecord(record, format) {
         if (VALIDATION_SKIP_FIELDS.has(key)) continue;
         if (key.startsWith('retiredFieldPosition') || key.startsWith('reservedForFutureUse')) continue;
         if (!schema[key]) {
-            addError(key, 'warn', `Unknown field for ${type}`, 2133);
+            const v = record[key];
+            const baseHasField = CAT_BASE_SPEC.schema[type] && CAT_BASE_SPEC.schema[type][key];
+            if (baseHasField && isCSV) {
+                // CSV is parsed with the base layout; a field later specs removed is now a retired position
+                if (v !== undefined && v !== null && v !== '') {
+                    addError(key, 'error', `${key} was removed in ${spec.label}; its CSV position is retired and must be blank`, 2207);
+                }
+            } else if (baseHasField) {
+                addError(key, 'error', `${key} is not a field of ${type} in ${spec.label}`, 2133);
+            } else {
+                addError(key, 'warn', `Unknown field for ${type}`, 2133);
+            }
         }
     }
 
@@ -2602,15 +3247,18 @@ function validateRecord(record, format) {
     // 2027: eventTimestamp precision based on manualFlag
     if (schema.eventTimestamp && schema.manualFlag) {
         const ets = strVal('eventTimestamp');
-        const mf = val('manualFlag');
-        if (ets && mf !== undefined) {
-            const isManual = mf === true || mf === 'true';
-            // String timestamp format: YYYYMMDDTHHMMSS.CCC...
+        // An absent JSON manualFlag means false
+        if (ets && !isTrue(val('manualFlag'))) {
+            // String timestamp format: YYYYMMDDTHHMMSS.CCC... (epoch numbers are always nanoseconds)
             const tsMatch = ets.match(/^\d{8}[T ]\d{6}(\.(\d+))?$/);
             if (tsMatch) {
                 const fracDigits = tsMatch[2] ? tsMatch[2].length : 0;
-                if (!isManual && fracDigits < 3) {
-                    addError('eventTimestamp', 'warn', 'Non-manual events must report eventTimestamp in at least millisecond precision', 2027);
+                if (fracDigits < 3) {
+                    if (CHILD_ORDER_TYPES.has(type)) {
+                        addError('eventTimestamp', 'warn', 'Child order eventTimestamp must be reported to at least milliseconds (child orders are exempt from ingestion error 2027)', 2027);
+                    } else {
+                        addError('eventTimestamp', 'error', 'Electronic events (manualFlag false) must report eventTimestamp to at least milliseconds', 2027);
+                    }
                 }
             }
         }
@@ -2707,8 +3355,8 @@ function validateRecord(record, format) {
     if (schema.electronicDupFlag && schema.manualFlag) {
         const edf = val('electronicDupFlag');
         const mf = val('manualFlag');
-        const edfBool = edf === true || edf === 'true';
-        const mfBool = mf === true || mf === 'true';
+        const edfBool = isTrue(edf);
+        const mfBool = isTrue(mf);
         // electronicDupFlag cannot be true if manualFlag is true
         if (edfBool && mfBool) {
             addError('electronicDupFlag', 'error', 'electronicDupFlag cannot be true when manualFlag is true', 2143);
@@ -2719,10 +3367,12 @@ function validateRecord(record, format) {
     if (schema.electronicTimestamp && schema.manualFlag) {
         const et = val('electronicTimestamp');
         const mf = val('manualFlag');
-        const mfBool = mf === true || mf === 'true';
-        // If manualFlag is true, electronicTimestamp should not be populated (for non-child events)
-        if (mfBool && et !== undefined) {
-            addError('electronicTimestamp', 'warn', 'electronicTimestamp should not be populated when manualFlag is true', 2144);
+        const mfBool = isTrue(mf);
+        // electronicTimestamp records when a manual event was systematized: it is
+        // required when manualFlag is true and the event is systematized (which the
+        // file can't tell us), and has no meaning on an electronic event
+        if (!mfBool && et !== undefined) {
+            addError('electronicTimestamp', 'error', 'electronicTimestamp must be blank when manualFlag is false', 2144);
         }
     }
 
@@ -2898,37 +3548,27 @@ function validateRecord(record, format) {
     if (schema.RFQFlag && schema.RFQID) {
         const flag = val('RFQFlag');
         const id = val('RFQID');
-        const flagBool = flag === true || flag === 'true';
+        const flagBool = isTrue(flag);
         if (!flagBool && id !== undefined) {
-            addError('RFQID', 'warn', 'RFQID should not be populated when RFQFlag is false', 2257);
+            addError('RFQID', 'error', 'RFQID must be blank when RFQFlag is false', 2257);
         }
     }
 
     // 2014: cancelTimestamp required when cancelFlag is true
     if (schema.cancelTimestamp && schema.cancelFlag) {
         const cf = val('cancelFlag');
-        const cfBool = cf === true || cf === 'true';
+        const cfBool = isTrue(cf);
         if (cfBool && val('cancelTimestamp') === undefined) {
             addError('cancelTimestamp', 'error', 'cancelTimestamp must be populated when cancelFlag is true', 2014);
         }
     }
 
-    // 2139: eventTimestamp must not be in the future
+    // 2139: eventTimestamp must not be later than the current date and time.
+    // A minute of slack absorbs clock differences between the reporter and this machine.
     if (schema.eventTimestamp) {
-        const ets = val('eventTimestamp');
-        if (ets !== undefined) {
-            const s = String(ets);
-            let tsMs = null;
-            const m = s.match(/^(\d{4})(\d{2})(\d{2})[T ](\d{2})(\d{2})(\d{2})/);
-            if (m) {
-                // String timestamp in ET — approximate comparison (no TZ conversion needed for future check)
-                tsMs = new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]).getTime();
-            } else if (/^\d{13,20}$/.test(s)) {
-                tsMs = Number(s.length > 13 ? s.slice(0, 13) : s);
-            }
-            if (tsMs !== null && tsMs > Date.now() + 86400000) {
-                addError('eventTimestamp', 'warn', 'eventTimestamp is in the future', 2139);
-            }
+        const tsNs = catTimestampToNs(val('eventTimestamp'));
+        if (tsNs !== null && tsNs > BigInt(Date.now() + 60000) * 1000000n) {
+            addError('eventTimestamp', 'error', 'eventTimestamp is later than the current date and time', 2139);
         }
     }
 
@@ -2939,7 +3579,7 @@ function validateRecord(record, format) {
         if (ttid !== undefined && rec2 !== undefined) {
             addError('reportingExceptionCode', 'error', 'reportingExceptionCode must be blank when tapeTradeID is populated', 2169);
         }
-        if (ttid === undefined && rec2 === undefined && isNew) {
+        if (ttid === undefined && rec2 === undefined) {
             addError('tapeTradeID', 'error', 'tapeTradeID or reportingExceptionCode must be populated', 2169);
         }
     }
@@ -3003,7 +3643,7 @@ function validateRecord(record, format) {
     // 2261: BFMMFlag + accountHolderType: when BFMMFlag=true, accountHolderType must be O, P, or X
     if (schema.BFMMFlag && schema.accountHolderType) {
         const bf = val('BFMMFlag');
-        const bfBool = bf === true || bf === 'true';
+        const bfBool = isTrue(bf);
         if (bfBool) {
             const aht = strVal('accountHolderType');
             if (aht && aht !== 'O' && aht !== 'P' && aht !== 'X') {
@@ -3015,7 +3655,7 @@ function validateRecord(record, format) {
     // 2262: BFMMFlag + side: when BFMMFlag=true, side must be SS or SX
     if (schema.BFMMFlag && schema.side) {
         const bf = val('BFMMFlag');
-        const bfBool = bf === true || bf === 'true';
+        const bfBool = isTrue(bf);
         if (bfBool) {
             const s = strVal('side');
             if (s && s !== 'SS' && s !== 'SX') {
@@ -3033,7 +3673,7 @@ function validateRecord(record, format) {
                     const elem = arr[si];
                     if (!elem) continue;
                     const bf = elem.BFMMFlag;
-                    const bfBool = bf === true || bf === 'true';
+                    const bfBool = isTrue(bf);
                     if (bfBool) {
                         const aht = elem.accountHolderType ? String(elem.accountHolderType) : undefined;
                         if (aht && aht !== 'O' && aht !== 'P' && aht !== 'X') {
@@ -3059,7 +3699,7 @@ function validateRecord(record, format) {
             addError('firmDetails', 'error', `firmDetails must be blank when fulfillmentLinkType is ${flt}`, 2145);
         }
         // When fulfillmentLinkType is Y, O, or OML, firmDetails.orderID is required
-        if ((flt === 'Y' || flt === 'O' || flt === 'OML') && isNew) {
+        if ((flt === 'Y' || flt === 'O' || flt === 'OML')) {
             if (!hasFD) {
                 addError('firmDetails', 'error', `firmDetails is required when fulfillmentLinkType is ${flt}`, 2145);
             } else if (Array.isArray(fd) && fd.length > 0 && fd[0] && !fd[0].orderID) {
@@ -3067,8 +3707,10 @@ function validateRecord(record, format) {
             }
         }
         // When fulfillmentLinkType is YE or OE or OME, firmDetails must have firmDesignatedID + accountHolderType
-        if ((flt === 'YE' || flt === 'OE' || flt === 'OME') && isNew) {
-            if (Array.isArray(fd) && fd.length > 0 && fd[0]) {
+        if ((flt === 'YE' || flt === 'OE' || flt === 'OME')) {
+            if (!hasFD) {
+                addError('firmDetails', 'error', `firmDetails with firmDesignatedID and accountHolderType is required when fulfillmentLinkType is ${flt}`, 2145);
+            } else if (Array.isArray(fd) && fd.length > 0 && fd[0]) {
                 if (!fd[0].firmDesignatedID) {
                     addError('firmDetails', 'error', `firmDetails.firmDesignatedID is required when fulfillmentLinkType is ${flt}`, 2145);
                 }
@@ -3088,7 +3730,7 @@ function validateRecord(record, format) {
                 if (!leg) continue;
                 const hasSym = leg.symbol !== undefined && leg.symbol !== null && leg.symbol !== '';
                 const hasOpt = leg.optionID !== undefined && leg.optionID !== null && leg.optionID !== '';
-                if (!hasSym && !hasOpt && isNew) {
+                if (!hasSym && !hasOpt) {
                     addError('legDetails', 'error', `Element [${li}]: symbol or optionID must be populated`, 2213);
                 }
             }
@@ -3127,7 +3769,7 @@ function validateRecord(record, format) {
         const hasAgg = Array.isArray(agg) ? agg.length > 0 : (agg !== undefined);
         // YE/OE: aggregatedOrders must be blank
         if ((ri === 'YE' || ri === 'OE' || ri === 'OME') && hasAgg) {
-            addError('aggregatedOrders', 'error', `aggregatedOrders must be blank when representativeInd is ${ri}`, 2269);
+            addError('aggregatedOrders', 'error', `aggregatedOrders must be blank when representativeInd is ${ri}`, 2142);
         }
     }
 
@@ -3140,47 +3782,43 @@ function validateRecord(record, format) {
         }
     }
 
-    // 2244: firmDesignatedID + representativeQuoteInd: firmDesignatedID required when representativeQuoteInd is N
-    if (schema.firmDesignatedID && schema.representativeQuoteInd) {
+    // representativeQuoteInd (ADF quotes; MENQ fields 21-23 and 29-31, MENQS field 10).
+    // Blank means an ordinary quote: firmDesignatedID is required. Populated means the
+    // firm is displaying on a Display-only Facility: firmDesignatedID, accountHolderType
+    // and unsolicitedInd must be blank, and A/B/C need the matching aggregated orders.
+    if (schema.representativeQuoteInd) {
         const rqi = strVal('representativeQuoteInd');
-        const fdid = val('firmDesignatedID');
-        if (rqi === 'N' && fdid === undefined && isNew) {
-            addError('firmDesignatedID', 'error', 'firmDesignatedID is required when representativeQuoteInd is N', 2244);
+        const present = fn => {
+            const v = val(fn);
+            return Array.isArray(v) ? v.length > 0 : v !== undefined;
+        };
+        // 2244: firmDesignatedID + representativeQuoteInd
+        if (schema.firmDesignatedID) {
+            if (rqi === undefined && !present('firmDesignatedID')) {
+                addError('firmDesignatedID', 'error', 'firmDesignatedID is required when representativeQuoteInd is blank', 2244);
+            } else if (rqi !== undefined && present('firmDesignatedID')) {
+                addError('firmDesignatedID', 'error', 'firmDesignatedID must be blank when representativeQuoteInd is populated', 2244);
+            }
         }
-    }
-
-    // 2246: unsolicitedInd + representativeQuoteInd: unsolicitedInd must be N when representativeQuoteInd is Y
-    if (schema.unsolicitedInd && schema.representativeQuoteInd) {
-        const rqi = strVal('representativeQuoteInd');
-        const ui = strVal('unsolicitedInd');
-        if (rqi === 'Y' && ui !== undefined && ui !== 'N') {
-            addError('unsolicitedInd', 'error', 'unsolicitedInd must be N when representativeQuoteInd is Y', 2246);
+        if (rqi !== undefined && schema.accountHolderType && present('accountHolderType')) {
+            addError('accountHolderType', 'error', 'accountHolderType must be blank when representativeQuoteInd is populated', fieldCode('accountHolderType'));
         }
-    }
-
-    // 2237: representativeQuoteInd + askAggregatedOrders combination
-    if (schema.representativeQuoteInd && schema.askAggregatedOrders) {
-        const rqi = strVal('representativeQuoteInd');
-        const aag = val('askAggregatedOrders');
-        const hasAAG = Array.isArray(aag) ? aag.length > 0 : (aag !== undefined);
-        if (rqi === 'Y' && !hasAAG && isNew) {
-            addError('askAggregatedOrders', 'error', 'askAggregatedOrders is required when representativeQuoteInd is Y', 2237);
+        // 2246: unsolicitedInd + representativeQuoteInd
+        if (rqi !== undefined && schema.unsolicitedInd && present('unsolicitedInd')) {
+            addError('unsolicitedInd', 'error', 'unsolicitedInd must be blank when representativeQuoteInd is populated', 2246);
         }
-        if (rqi === 'N' && hasAAG) {
-            addError('askAggregatedOrders', 'error', 'askAggregatedOrders must be blank when representativeQuoteInd is N', 2237);
+        // MENQS: 'S' and 'N' are not valid (field 10)
+        if (type === 'MENQS' && (rqi === 'S' || rqi === 'N')) {
+            addError('representativeQuoteInd', 'error', `representativeQuoteInd '${rqi}' is not valid on ${type}`, 2231);
         }
-    }
-
-    // 2243: representativeQuoteInd + bidAggregatedOrders combination
-    if (schema.representativeQuoteInd && schema.bidAggregatedOrders) {
-        const rqi = strVal('representativeQuoteInd');
-        const bag = val('bidAggregatedOrders');
-        const hasBAG = Array.isArray(bag) ? bag.length > 0 : (bag !== undefined);
-        if (rqi === 'Y' && !hasBAG && isNew) {
-            addError('bidAggregatedOrders', 'error', 'bidAggregatedOrders is required when representativeQuoteInd is Y', 2243);
-        }
-        if (rqi === 'N' && hasBAG) {
-            addError('bidAggregatedOrders', 'error', 'bidAggregatedOrders must be blank when representativeQuoteInd is N', 2243);
+        // 2237 / 2243: aggregated orders per side
+        for (const [field, sides, code] of [['askAggregatedOrders', ['A', 'C'], 2237], ['bidAggregatedOrders', ['B', 'C'], 2243]]) {
+            if (!schema[field]) continue;
+            if (sides.includes(rqi) && !present(field)) {
+                addError(field, 'error', `${field} is required when representativeQuoteInd is ${rqi}`, code);
+            } else if ((rqi === 'N' || rqi === 'S') && present(field)) {
+                addError(field, 'error', `${field} must be blank when representativeQuoteInd is ${rqi}`, code);
+            }
         }
     }
 
@@ -3188,7 +3826,7 @@ function validateRecord(record, format) {
     if (schema.destination && schema.destinationType) {
         const dt = strVal('destinationType');
         const dest = strVal('destination');
-        if (dt === 'E' && dest && !CAT_ALLOWED_EXCHANGES.has(dest)) {
+        if (dt === 'E' && dest && !spec.exchanges.has(dest)) {
             addError('destination', 'error', `destination must be a valid Exchange ID when destinationType is E (got "${dest}")`, 2019);
         }
     }
@@ -3197,7 +3835,7 @@ function validateRecord(record, format) {
     if (schema.exchOriginCode && schema.destinationType) {
         const dt = strVal('destinationType');
         const eoc = val('exchOriginCode');
-        if (dt === 'E' && eoc === undefined && isNew) {
+        if (dt === 'E' && eoc === undefined) {
             addError('exchOriginCode', 'warn', 'exchOriginCode should be populated when destinationType is E', 2028);
         }
     }
@@ -3206,18 +3844,18 @@ function validateRecord(record, format) {
     if (schema.price && schema.orderType) {
         const ot = strVal('orderType');
         const p = val('price');
-        if (ot === 'LMT' && p === undefined && isNew) {
+        if (ot === 'LMT' && p === undefined) {
             addError('price', 'error', 'price is required when orderType is LMT', 2067);
         }
     }
 
-    // 2249: RFQID must be populated when RFQFlag is true
+    // 2257: RFQID must be populated when RFQFlag is true
     if (schema.RFQFlag && schema.RFQID) {
         const flag = val('RFQFlag');
         const id = val('RFQID');
-        const flagBool = flag === true || flag === 'true';
-        if (flagBool && id === undefined && isNew) {
-            addError('RFQID', 'error', 'RFQID must be populated when RFQFlag is true', 2187);
+        const flagBool = isTrue(flag);
+        if (flagBool && id === undefined) {
+            addError('RFQID', 'error', 'RFQID must be populated when RFQFlag is true', 2257);
         }
     }
 
@@ -3225,13 +3863,13 @@ function validateRecord(record, format) {
     if (schema.nbboSource) {
         const ns = strVal('nbboSource');
         if (ns && ns !== 'NA') {
-            if (val('nbboTimestamp') === undefined && isNew) {
+            if (val('nbboTimestamp') === undefined) {
                 addError('nbboTimestamp', 'warn', 'nbboTimestamp should be populated when nbboSource is not NA', 2048);
             }
-            if (schema.nbbPrice && val('nbbPrice') === undefined && isNew) {
+            if (schema.nbbPrice && val('nbbPrice') === undefined) {
                 addError('nbbPrice', 'warn', 'nbbPrice should be populated when nbboSource is not NA', 2049);
             }
-            if (schema.nboPrice && val('nboPrice') === undefined && isNew) {
+            if (schema.nboPrice && val('nboPrice') === undefined) {
                 addError('nboPrice', 'warn', 'nboPrice should be populated when nbboSource is not NA', 2051);
             }
         }
@@ -3241,7 +3879,7 @@ function validateRecord(record, format) {
     if (schema.openCloseIndicator && schema.optionID) {
         const optId = val('optionID');
         const oci = val('openCloseIndicator');
-        if (optId !== undefined && oci === undefined && isNew) {
+        if (optId !== undefined && oci === undefined) {
             addError('openCloseIndicator', 'warn', 'openCloseIndicator should be populated when optionID is populated', 2057);
         }
     }
@@ -3250,7 +3888,7 @@ function validateRecord(record, format) {
     if (schema.DVPCustodianID && schema.allocationType) {
         const at = strVal('allocationType');
         const dvp = val('DVPCustodianID');
-        if ((at === 'DVP' || at === 'DVPF') && dvp === undefined && isNew) {
+        if ((at === 'DVP' || at === 'DVPF') && dvp === undefined) {
             addError('DVPCustodianID', 'error', `DVPCustodianID is required when allocationType is ${at}`, 2179);
         }
     }
@@ -3261,7 +3899,7 @@ function validateRecord(record, format) {
         const fdid = val('firmDesignatedID');
         const aht = val('accountHolderType');
         if (aht !== undefined && fdid === undefined) {
-            addError('firmDesignatedID', 'warn', 'firmDesignatedID should be populated when accountHolderType is populated', 2031);
+            addError('firmDesignatedID', 'warn', 'firmDesignatedID should be populated when accountHolderType is populated', 2245);
         }
     }
 
@@ -3269,7 +3907,7 @@ function validateRecord(record, format) {
     if (schema.settlementDate && schema.tradeDate) {
         const sd = val('settlementDate');
         const td = val('tradeDate');
-        if (td !== undefined && sd === undefined && isNew) {
+        if (td !== undefined && sd === undefined) {
             addError('settlementDate', 'warn', 'settlementDate should be populated when tradeDate is populated', 2177);
         }
     }
@@ -3412,12 +4050,9 @@ function validateRecord(record, format) {
     }
 
     // 2132: Record exceeds maximum length (8190 bytes)
-    try {
-        const recLen = JSON.stringify(rec).length;
-        if (recLen > 8190) {
-            addError('type', 'error', `Record exceeds maximum length of 8190 bytes (~${recLen} chars)`, 2132);
-        }
-    } catch(e) { /* skip if not serializable */ }
+    if (record._lineBytes > 8190) {
+        addError('type', 'error', `Record is ${record._lineBytes.toLocaleString()} bytes; the maximum line length is 8190 bytes`, 2132);
+    }
 
     // 2271: MLOS supplement — firmDesignatedID/aggregatedOrders/routeRejectedFlag/legDetails combination
     // When routeRejectedFlag is false, at least one of firmDesignatedID, aggregatedOrders, or legDetails must be populated
@@ -3430,7 +4065,7 @@ function validateRecord(record, format) {
         const hasAgg = Array.isArray(agg) ? agg.length > 0 : (agg !== undefined);
         const hasLd = Array.isArray(ld) ? ld.length > 0 : (ld !== undefined);
         const hasFdid = fdid !== undefined && fdid !== '';
-        const isRejected = rrf === true || rrf === 'true';
+        const isRejected = isTrue(rrf);
         if (!isRejected && !hasFdid && !hasAgg && !hasLd) {
             addError('routeRejectedFlag', 'error', 'When firmDesignatedID, aggregatedOrders, and legDetails are all blank, routeRejectedFlag must be true', 2271);
         }
@@ -3444,7 +4079,7 @@ function validateRecord(record, format) {
         const ld = val('legDetails');
         const hasLd = Array.isArray(ld) ? ld.length > 0 : (ld !== undefined);
         const hasFdid = fdid !== undefined && fdid !== '';
-        const isRejected = qrf === true || qrf === 'true';
+        const isRejected = isTrue(qrf);
         if (!isRejected && !hasFdid && !hasLd) {
             addError('quoteRejectedFlag', 'error', 'When firmDesignatedID and legDetails are both blank, quoteRejectedFlag must be true', 2272);
         }
@@ -3457,7 +4092,7 @@ function processFileText(file, text, append) {
     try {
         if (append && loadedFiles.some(f => f.name === file.name)) {
             showError(`File "${file.name}" is already loaded.`);
-            return;
+            return false;
         }
 
         const fmt = detectFormat(file.name, text);
@@ -3471,9 +4106,14 @@ function processFileText(file, text, append) {
         }
         Perf.end('parse');
 
+        const skipped = newRecords.skippedLines || [];
+        const describeSkipped = () => {
+            const shown = skipped.slice(0, 5).map(s => `line ${s.line} (${s.message})`).join('; ');
+            return shown + (skipped.length > 5 ? `; and ${skipped.length - 5} more` : '');
+        };
         if (!newRecords.length) {
-            showError('No records found in file.');
-            return;
+            showError(skipped.length ? `No records loaded from ${file.name}: ${describeSkipped()}` : 'No records found in file.');
+            return false;
         }
 
         // Validate that the file contains CAT records
@@ -3485,12 +4125,12 @@ function processFileText(file, text, append) {
                     const parsed = JSON.parse(text);
                     if (isLayoutFile(parsed)) {
                         applyLayout(parsed);
-                        return;
+                        return false;
                     }
                 } catch { /* not a layout file */ }
             }
             showError('This does not appear to be a CAT file. No records with a valid CAT event type (ME/MO/ML) were found.');
-            return;
+            return false;
         }
 
         // Flatten nested objects for display
@@ -3504,6 +4144,10 @@ function processFileText(file, text, append) {
             allRecords = newRecords;
             loadedFiles = [];
         }
+        // Remember each record's source format (non-enumerable, so it stays out of
+        // columns, exports and raw views): appended files may mix CSV and JSON, and
+        // validation must type-check each record against its own format
+        for (const r of newRecords) Object.defineProperty(r, '_format', { value: fmt });
         loadedFiles.push({ name: file.name, format: fmt, size: file.size, count: newRecords.length });
         fileFormat = fmt;
         allRecords.forEach((r, i) => r._idx = i);
@@ -3516,16 +4160,21 @@ function processFileText(file, text, append) {
         Perf.end('initUI');
 
         // Deferred chunked validation — runs after UI is rendered
-        deferValidation(allRecords, fmt);
+        deferValidation(allRecords);
+        if (skipped.length) {
+            showWarning(`${file.name}: skipped ${skipped.length.toLocaleString()} line${skipped.length === 1 ? '' : 's'} that ${skipped.length === 1 ? 'is' : 'are'} not valid JSON — ${describeSkipped()}. CAT rejects unreadable records (error 2134).`);
+        }
+        return true;
     } catch (err) {
         showError('Error parsing file: ' + err.message);
+        return false;
     }
 }
 
 let _validationPending = false;
 let _validationGeneration = 0;
 
-function deferValidation(records, fmt) {
+function deferValidation(records) {
     if (!validationEnabled) return;
     _validationPending = true;
     const gen = ++_validationGeneration;
@@ -3537,7 +4186,9 @@ function deferValidation(records, fmt) {
         Perf.start('validateChunk');
         const end = Math.min(i + CHUNK, total);
         for (; i < end; i++) {
-            records[i]._errors = validateRecord(records[i]._original, fmt);
+            const spec = specForRecord(records[i]._original);
+            setRecordMeta(records[i], '_specVersion', spec.version);
+            records[i]._errors = validateRecord(records[i]._original, records[i]._format, spec);
         }
         Perf.end('validateChunk');
         updateValidationProgress(i, total);
@@ -3545,7 +4196,15 @@ function deferValidation(records, fmt) {
             setTimeout(processChunk, 0);
         } else {
             _validationPending = false;
+            Perf.start('crossRecordChecks');
+            const cross = crossRecordChecks(records);
+            for (const [r, list] of cross) {
+                const errors = r._errors || (r._errors = {});
+                for (const e of list) (errors[e.field] ||= []).push({ severity: e.severity, message: e.message, code: e.code });
+            }
+            Perf.end('crossRecordChecks');
             updateValidationStat();
+            updateSpecLabel();
             renderFilterBar();
             if (activeTab === 'table') renderTable();
         }
@@ -3909,7 +4568,7 @@ function renderCellWithErrors(content, cellErrors) {
     return `<td class="${cls}" data-tooltip="${escapeHtml(tip)}">${content}</td>`;
 }
 
-function renderLegDetailsHTML(value, mode, fieldErrors) {
+function renderLegDetailsHTML(value, mode, fieldErrors, record) {
     const legs = parseLegDetails(value);
     if (!legs.length) return escapeHtml(String(value));
     const errMap = parseArrayFieldErrors(fieldErrors);
@@ -3981,7 +4640,7 @@ function parseSideDetails(value, fields) {
     });
 }
 
-function renderSideDetailsHTML(value, fields, mode, fieldErrors) {
+function renderSideDetailsHTML(value, fields, mode, fieldErrors, record) {
     const items = parseSideDetails(value, fields);
     if (!items.length) return escapeHtml(String(value));
     const errMap = parseArrayFieldErrors(fieldErrors);
@@ -4021,7 +4680,7 @@ function renderSideDetailsHTML(value, fields, mode, fieldErrors) {
                 if (et) html += renderCellWithErrors(`<span title="${escapeHtml(String(raw))} (UTC epoch ns → ET)">${et}</span>`, cellErrs);
                 else html += renderCellWithErrors(escapeHtml(String(raw)), cellErrs);
             } else if (mode === 'translated' && LINKAGE_FIELDS[f] && lookupLinkedRecords(f, raw)) {
-                html += renderCellWithErrors(`<span class="order-link" data-link-field="${escapeHtml(f)}" data-link-value="${escapeHtml(raw)}" title="Show linked records">${escapeHtml(String(raw))}</span>`, cellErrs);
+                html += renderCellWithErrors(`<span ${linkAttrs(f, raw, linkOrderNode(f, raw, record, item))}>${escapeHtml(String(raw))}</span>`, cellErrs);
             } else {
                 html += renderCellWithErrors(escapeHtml(String(raw)), cellErrs);
             }
@@ -4084,7 +4743,7 @@ function renderCompoundArrayHTML(value, mode, fieldErrors) {
                 if (et) html += renderCellWithErrors(`<span title="${escapeHtml(String(raw))} (UTC epoch ns → ET)">${et}</span>`, cellErrs);
                 else html += renderCellWithErrors(escapeHtml(String(raw)), cellErrs);
             } else if (mode === 'translated' && LINKAGE_FIELDS[f] && lookupLinkedRecords(f, raw)) {
-                html += renderCellWithErrors(`<span class="order-link" data-link-field="${escapeHtml(f)}" data-link-value="${escapeHtml(raw)}" title="Show linked records">${escapeHtml(String(raw))}</span>`, cellErrs);
+                html += renderCellWithErrors(`<span ${linkAttrs(f, raw, linkOrderNode(f, raw, record, item))}>${escapeHtml(String(raw))}</span>`, cellErrs);
             } else {
                 html += renderCellWithErrors(escapeHtml(String(raw)), cellErrs);
             }
@@ -4098,7 +4757,9 @@ function renderCompoundArrayHTML(value, mode, fieldErrors) {
 // ── Linkage fields: maps field name → the target field it references ──
 const LINKAGE_FIELDS = {
     orderID: 'orderID', parentOrderID: 'orderID', priorOrderID: 'orderID',
-    manualOrderID: 'orderID', pairedOrderID: 'orderID', routedOrderID: 'orderID',
+    manualOrderID: 'orderID', pairedOrderID: 'orderID',
+    // Route linkage: the sender's route and the receiver's accepted order share a routedOrderID
+    routedOrderID: 'routedOrderID', priorRoutedOrderID: 'routedOrderID',
     tradeID: 'tradeID',
     fulfillmentID: 'fulfillmentID', priorFulfillmentID: 'fulfillmentID',
     allocationID: 'allocationID', priorAllocationID: 'allocationID',
@@ -4107,7 +4768,7 @@ const LINKAGE_FIELDS = {
 };
 
 // Fields indexed for linkage lookup (targets of LINKAGE_FIELDS)
-const INDEXED_ID_FIELDS = ['orderID', 'tradeID', 'fulfillmentID', 'allocationID', 'quoteID', 'RFQID'];
+const INDEXED_ID_FIELDS = ['orderID', 'routedOrderID', 'tradeID', 'fulfillmentID', 'allocationID', 'quoteID', 'RFQID'];
 
 // Side-detail compound arrays whose elements reference orders by orderID
 const SIDE_DETAIL_FIELDS = ['buyDetails', 'sellDetails', 'clientDetails', 'firmDetails'];
@@ -4122,14 +4783,14 @@ function sideDetailElementFields(recordType, fieldName) {
     return /aggregatedOrders$/i.test(fieldName) ? AGGREGATED_ORDER_FIELDS : TRADE_SIDE_FIELDS;
 }
 
-// orderIDs referenced inside a record's compound array fields — side details on
-// trades/fulfillments, aggregated orders on representative orders and quotes, or
-// any other array element carrying an orderID — regardless of event type.
-// Cached per record — records are immutable once loaded.
-const _nestedOrderIDCache = new WeakMap();
-function getNestedOrderIDs(r) {
-    if (_nestedOrderIDCache.has(r)) return _nestedOrderIDCache.get(r);
-    let ids = null;
+// Elements of a record's compound array fields that reference an order — side
+// details on trades/fulfillments, aggregated orders on representative orders and
+// quotes, or any other array element carrying an orderID — regardless of event
+// type. Cached per record — records are immutable once loaded.
+const _nestedOrderItemsCache = new WeakMap();
+function getNestedOrderItems(r) {
+    if (_nestedOrderItemsCache.has(r)) return _nestedOrderItemsCache.get(r);
+    let found = null;
     for (const f in r) {
         if (f[0] === '_') continue;
         const v = r[f];
@@ -4141,30 +4802,433 @@ function getNestedOrderIDs(r) {
         }
         if (!items) continue;
         for (const item of items) {
-            if (item && typeof item === 'object' && item.orderID) (ids ||= new Set()).add(String(item.orderID));
+            if (item && typeof item === 'object' && item.orderID) (found ||= []).push({ field: f, item });
         }
     }
-    const result = ids ? [...ids] : null;
-    _nestedOrderIDCache.set(r, result);
-    return result;
+    _nestedOrderItemsCache.set(r, found);
+    return found;
 }
 
-// The orderID(s) a record belongs to: its own orderID, or for events without one
-// (Order Trade, Order Fulfillment, multi-leg/quote events) the orderIDs
+// orderIDs referenced inside a record's compound array fields (raw values, for
+// filters and search)
+function getNestedOrderIDs(r) {
+    const items = getNestedOrderItems(r);
+    return items ? [...new Set(items.map(x => String(x.item.orderID)))] : null;
+}
+
+// ── Order identity ──
+// CAT identifies an order by its Order Key: orderKeyDate, CATReporterIMID,
+// symbol (equities) or optionID (options), and orderID; multi-leg Order Keys
+// have no instrument. Linkage (order chains, timeline lanes, clickable IDs)
+// uses one order node per distinct Order Key. When an orderID belongs to a
+// single Order Key in the loaded data its node ID is the orderID itself, so
+// ordinary files look exactly as before. When the same orderID is reused by
+// different orders (another day, instrument or reporter) each gets a qualified
+// node ID such as "ORD1 (2025-03-18 AAPL)", keeping their events apart.
+const ORDER_KEY_SEP = '\u001f';
+let _orderKeysByID = new Map();   // orderID → Map(full key → { keyDate, instrument, reporter })
+let _orderNodeByKey = new Map();  // full key → node ID
+let _orderIDByNode = new Map();   // node ID → orderID
+let _recordNodeCache = new WeakMap();
+
+const recordInstrument = r => r.symbol || r.optionID || '';
+// Key dates compare as exact UTC nanoseconds, so string and epoch forms of one instant match
+const _normalizedKeyDates = new Map();
+const normalizeKeyDate = v => {
+    if (v === undefined || v === null || v === '') return '';
+    const raw = String(v);
+    let norm = _normalizedKeyDates.get(raw);
+    if (norm === undefined) {
+        const ns = catTimestampToNs(raw);
+        norm = ns === null ? raw : String(ns);
+        if (_normalizedKeyDates.size > 1000000) _normalizedKeyDates.clear();
+        _normalizedKeyDates.set(raw, norm);
+    }
+    return norm;
+};
+const fullOrderKey = (orderID, keyDate, instrument, reporter) =>
+    [reporter || '', normalizeKeyDate(keyDate), instrument || '', String(orderID)].join(ORDER_KEY_SEP);
+
+// Every order reference a record makes: its own order, parent, prior, manual
+// original, and orders in its compound arrays. Nested references share the
+// record's instrument and reporter (they are intrafirm).
+function orderReferences(r) {
+    const inst = recordInstrument(r), rep = r.CATReporterIMID || '';
+    const refs = [];
+    const add = (role, orderID, keyDate, field) => { if (orderID) refs.push({ role, orderID: String(orderID), keyDate, instrument: inst, reporter: rep, field }); };
+    add('own', r.orderID, r.orderKeyDate);
+    add('parent', r.parentOrderID, r.parentOrderKeyDate);
+    add('prior', r.priorOrderID, r.priorOrderKeyDate);
+    add('manual', r.manualOrderID, r.manualOrderKeyDate);
+    for (const { field, item } of getNestedOrderItems(r) || []) add('nested', item.orderID, item.orderKeyDate, field);
+    return refs;
+}
+
+function buildOrderIdentity() {
+    _orderKeysByID = new Map();
+    _orderNodeByKey = new Map();
+    _orderIDByNode = new Map();
+    _recordNodeCache = new WeakMap();
+    for (const r of allRecords) {
+        for (const ref of orderReferences(r)) {
+            if (ref.keyDate === undefined || ref.keyDate === null || ref.keyDate === '') continue;
+            let keys = _orderKeysByID.get(ref.orderID);
+            if (!keys) _orderKeysByID.set(ref.orderID, keys = new Map());
+            const key = fullOrderKey(ref.orderID, ref.keyDate, ref.instrument, ref.reporter);
+            if (!keys.has(key)) keys.set(key, { keyDate: ref.keyDate, instrument: ref.instrument, reporter: ref.reporter });
+        }
+    }
+    for (const [orderID, keys] of _orderKeysByID) {
+        if (keys.size === 1) {
+            _orderNodeByKey.set(keys.keys().next().value, orderID);
+            _orderIDByNode.set(orderID, orderID);
+            continue;
+        }
+        // Qualify with only the parts that tell these orders apart
+        const list = [...keys.entries()];
+        const etDate = k => {
+            const ns = catTimestampToNs(k.keyDate);
+            return ns === null ? String(k.keyDate).slice(0, 8) : formatETDateCompact(Number(ns / 1000000n));
+        };
+        const distinct = fn => new Set(list.map(([, k]) => fn(k))).size > 1;
+        const byDate = distinct(etDate), byInst = distinct(k => k.instrument), byRep = distinct(k => k.reporter);
+        const dateOnlyAmbiguous = !byInst && !byRep && new Set(list.map(([, k]) => etDate(k))).size < list.length;
+        for (const [key, k] of list) {
+            const parts = [];
+            if (byDate || dateOnlyAmbiguous) {
+                const d = etDate(k);
+                parts.push(dateOnlyAmbiguous ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)} ${formatOrderKeyTime(k.keyDate)}` : `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`);
+            }
+            if (byInst) parts.push(k.instrument || 'no symbol');
+            if (byRep) parts.push(k.reporter || 'no reporter');
+            const node = `${orderID} (${parts.join(' ')})`;
+            _orderNodeByKey.set(key, node);
+            _orderIDByNode.set(node, orderID);
+        }
+    }
+}
+
+// Time of day of an orderKeyDate, for telling apart same-day reuse of an orderID
+function formatOrderKeyTime(keyDate) {
+    const s = String(keyDate);
+    const m = /^\d{8}[T ](\d{2})(\d{2})(\d{2})(\.\d+)?$/.exec(s);
+    if (m) return `${m[1]}:${m[2]}:${m[3]}${m[4] || ''}`;
+    const et = /^\d{13,19}$/.test(s) ? formatEpochNanosToET(s) : null;
+    return et ? et.split(' ')[1] : s;
+}
+
+// Node ID for an order reference. A reference without a key date (or one that
+// doesn't match a known Order Key) resolves to the only order with that
+// orderID and instrument, if there is one; otherwise to the plain orderID.
+function resolveOrderNode(orderID, keyDate, instrument, reporter) {
+    if (!orderID) return null;
+    orderID = String(orderID);
+    const keys = _orderKeysByID.get(orderID);
+    if (!keys) return orderID;
+    if (keyDate !== undefined && keyDate !== null && keyDate !== '') {
+        const node = _orderNodeByKey.get(fullOrderKey(orderID, keyDate, instrument, reporter));
+        if (node) return node;
+    }
+    const matches = [...keys.entries()].filter(([, k]) => (!instrument || !k.instrument || k.instrument === instrument) && (!reporter || !k.reporter || k.reporter === reporter));
+    return matches.length === 1 ? _orderNodeByKey.get(matches[0][0]) : orderID;
+}
+
+function orderIDOfNode(node) {
+    return _orderIDByNode.get(node) ?? node;
+}
+
+// Node of a record's own order, and of its parent/prior orders
+function recordOrderNode(r) {
+    return r.orderID ? resolveOrderNode(r.orderID, r.orderKeyDate, recordInstrument(r), r.CATReporterIMID) : null;
+}
+function referencedOrderNode(r, role) {
+    const ref = orderReferences(r).find(x => x.role === role);
+    return ref ? resolveOrderNode(ref.orderID, ref.keyDate, ref.instrument, ref.reporter) : null;
+}
+
+// The order node(s) a record belongs to: its own order, or for events without
+// an orderID (Order Trade, Order Fulfillment, multi-leg/quote events) the orders
 // referenced in its compound array fields.
 function getRecordLaneOrderIDs(r) {
-    if (r.orderID) return [r.orderID];
-    return getNestedOrderIDs(r) || [];
+    let nodes = _recordNodeCache.get(r);
+    if (nodes) return nodes;
+    if (r.orderID) {
+        nodes = [recordOrderNode(r)];
+    } else {
+        const inst = recordInstrument(r), rep = r.CATReporterIMID || '';
+        nodes = [...new Set((getNestedOrderItems(r) || []).map(({ item }) => resolveOrderNode(item.orderID, item.orderKeyDate, inst, rep)))];
+    }
+    _recordNodeCache.set(r, nodes);
+    return nodes;
+}
+
+// Order node a clickable ID cell links to, given the record it appears on (and
+// for nested tables, the array element)
+function linkOrderNode(field, value, record, item) {
+    if (!record || LINKAGE_FIELDS[field] !== 'orderID') return null;
+    const inst = recordInstrument(record), rep = record.CATReporterIMID || '';
+    if (item) return resolveOrderNode(value, item.orderKeyDate, inst, rep);
+    switch (field) {
+        case 'orderID': return value === record.orderID ? recordOrderNode(record) : resolveOrderNode(value, undefined, inst, rep);
+        case 'parentOrderID': return referencedOrderNode(record, 'parent');
+        case 'priorOrderID': return referencedOrderNode(record, 'prior');
+        case 'manualOrderID': return referencedOrderNode(record, 'manual');
+    }
+    return resolveOrderNode(value, undefined, inst, rep);
+}
+
+// ── Corrections (Section 7.6) ──
+// COR and RPR records restate the event reported with the same firmROEID and
+// replace it; a DEL instruction removes it. Records later in load order act on
+// earlier ones. A NEW record reusing a firmROEID is a duplicate (error 3002),
+// not a replacement, so the first one stays in place. A DEL naming only an
+// errorROEID refers to a record CAT rejected, which the files can't identify.
+let _corrections = new WeakMap(); // record → { supersededBy, deletedBy, replaces, deletes, unmatched }
+let correctionStats = { corrections: 0, superseded: 0, deleted: 0, unmatched: 0 };
+let effectiveViewEnabled = false;
+
+function buildCorrections(records) {
+    _corrections = new WeakMap();
+    const stats = { corrections: 0, superseded: 0, deleted: 0, unmatched: 0 };
+    const current = new Map(); // firmROEID → Map(CATReporterIMID → record in effect)
+    const info = r => { let i = _corrections.get(r); if (!i) _corrections.set(r, i = {}); return i; };
+    // The record in effect for r's firmROEID. A record without CATReporterIMID
+    // (typical of DEL instructions) matches when only one reporter used the firmROEID.
+    const find = r => {
+        const byRep = r.firmROEID ? current.get(String(r.firmROEID)) : null;
+        if (!byRep) return null;
+        if (r.CATReporterIMID) return byRep.get(r.CATReporterIMID) || byRep.get('') || null;
+        return byRep.size === 1 ? byRep.values().next().value : null;
+    };
+    const set = (r, value) => {
+        const id = String(r.firmROEID);
+        if (!current.has(id)) current.set(id, new Map());
+        const byRep = current.get(id);
+        if (value) byRep.set(r.CATReporterIMID || '', value);
+        else { for (const [k, v] of byRep) if (v === r) byRep.delete(k); }
+    };
+    for (const r of records) {
+        const at = r.actionType;
+        if (at !== 'DEL' && at !== 'COR' && at !== 'RPR') {
+            if (r.firmROEID && !find(r)) set(r, r);
+            continue;
+        }
+        stats.corrections++;
+        const prev = find(r);
+        if (at === 'DEL') {
+            if (prev) {
+                info(prev).deletedBy = r;
+                info(r).deletes = prev;
+                set(prev, null);
+                stats.deleted++;
+            } else {
+                info(r).unmatched = true;
+                stats.unmatched++;
+            }
+        } else {
+            if (prev) {
+                info(prev).supersededBy = r;
+                info(r).replaces = prev;
+                set(prev, null);
+                stats.superseded++;
+            } else {
+                info(r).unmatched = true;
+                stats.unmatched++;
+            }
+            if (r.firmROEID) set(r, r);
+        }
+    }
+    correctionStats = stats;
+}
+
+// Whether a record is part of the audit trail after corrections: not replaced,
+// not deleted, and not itself a delete instruction
+function isEffectiveRecord(r) {
+    if (r.actionType === 'DEL') return false;
+    const i = _corrections.get(r);
+    return !i || (!i.supersededBy && !i.deletedBy);
+}
+function correctionInfo(r) {
+    return _corrections.get(r) || null;
+}
+
+// ── Cross-record checks (Appendix E.3 linkage errors) ──
+// Checks that need the whole loaded data set rather than one record, run on
+// the records in effect after corrections. Each Event Key (Order, Trade,
+// Fulfillment, Quote, Allocation) is assigned by a primary event, or by a
+// secondary event that reassigns it (a prior/parent reference to a different
+// key); every other event carrying the key must refer to one that was assigned.
+// References to keys not in the loaded files are warnings, since the assigning
+// event may be in a file that isn't loaded.
+const EVENT_KEY_KINDS = [
+    { kind: 'Order', id: 'orderID', date: 'orderKeyDate', dupCode: 3004,
+      primary: ['MENO', 'MEOA', 'MONO', 'MOOA', 'MLNO', 'MLOA'],
+      derived: {
+          parent: { id: 'parentOrderID', date: 'parentOrderKeyDate', types: ['MECO', 'MOCO', 'MLCO', 'MEIR', 'MOIR', 'MLIR'] },
+          prior: { id: 'priorOrderID', date: 'priorOrderKeyDate', types: ['MEIM', 'MOIM', 'MLIM', 'MECOM', 'MOCOM', 'MLCOM', 'MEOM', 'MOOM', 'MLOM', 'MEOJ', 'MOOJ', 'MEOE', 'MOOE', 'MLOE'] },
+      } },
+    { kind: 'Trade', id: 'tradeID', date: 'tradeKeyDate', dupCode: 3010, primary: ['MEOT', 'MOOT'], derived: {} },
+    { kind: 'Fulfillment', id: 'fulfillmentID', date: 'fillKeyDate', dupCode: 3012, primary: ['MEOF', 'MOOF'],
+      derived: { prior: { id: 'priorFulfillmentID', date: 'priorFillKeyDate', types: ['MEFA', 'MOFA'] } } },
+    { kind: 'Quote', id: 'quoteID', date: 'quoteKeyDate', dupCode: 3016, primary: ['MENQ', 'MEQR', 'MONQ', 'MOQR', 'MLNQ', 'MLQR'],
+      derived: { prior: { id: 'priorQuoteID', date: 'priorQuoteKeyDate', types: ['MEQM', 'MOQM', 'MLQM'] } } },
+    { kind: 'Allocation', id: 'allocationID', date: 'allocationKeyDate', dupCode: 3020, primary: ['MEPA', 'MOPA'],
+      derived: { prior: { id: 'priorAllocationID', date: 'priorAllocationKeyDate', types: ['MEAA', 'MOAA'] } } },
+];
+// Supplements must carry their event's eventTimestamp (to the millisecond, 3602)
+const SUPPLEMENT_PARENTS = {
+    MENOS: ['Order', ['MENO']], MONOS: ['Order', ['MONO']], MEOMS: ['Order', ['MEOM']], MOOMS: ['Order', ['MOOM']],
+    MEOTS: ['Trade', ['MEOT']], MEOFS: ['Fulfillment', ['MEOF']], MOOFS: ['Fulfillment', ['MOOF']],
+};
+// Supplements that can supply the actual FDID for an order reported with 'PENDING'
+const FDID_SUPPLEMENT_TYPES = new Set(['MENOS', 'MONOS', 'MLOS']);
+// Nested order references per field, with their linkage error code
+const NESTED_ORDER_REF_CODES = { buyDetails: 3502, sellDetails: 3502, clientDetails: 3503, firmDetails: 3503,
+    aggregatedOrders: 3504, askAggregatedOrders: 3504, bidAggregatedOrders: 3504 };
+
+function eventKey(r, idField, dateField) {
+    const id = r[idField];
+    if (id === undefined || id === null || id === '') return null;
+    return [r.CATReporterIMID || '', normalizeKeyDate(r[dateField]), recordInstrument(r), String(id)].join(ORDER_KEY_SEP);
+}
+
+// Returns Map(record → [{ field, severity, message, code }])
+function crossRecordChecks(records) {
+    const found = new Map();
+    const add = (r, field, severity, message, code) => {
+        if (!found.has(r)) found.set(r, []);
+        found.get(r).push({ field, severity, message, code });
+    };
+    const ref = r => `#${r._idx + 1}`;
+    const tsNs = r => catTimestampToNs(r.eventTimestamp);
+    const manual = r => r.manualFlag === true || String(r.manualFlag).toLowerCase() === 'true';
+    const effective = records.filter(isEffectiveRecord);
+
+    // 3002: firmROEID unique per Event Date and reporter (corrections reuse it legitimately)
+    const byROE = new Map();
+    for (const r of effective) {
+        if (r.actionType !== 'NEW' || !r.firmROEID) continue;
+        const k = [recordEventDate(r) || '', r.CATReporterIMID || '', r.firmROEID].join(ORDER_KEY_SEP);
+        if (!byROE.has(k)) byROE.set(k, []);
+        byROE.get(k).push(r);
+    }
+    for (const group of byROE.values()) {
+        if (group.length < 2) continue;
+        for (const r of group) add(r, 'firmROEID', 'error', `Duplicate firmROEID: also used by ${group.filter(x => x !== r).map(ref).join(', ')}`, 3002);
+    }
+
+    for (const kind of EVENT_KEY_KINDS) {
+        const primary = new Set(kind.primary);
+        const derivedOf = new Map();
+        for (const d of Object.values(kind.derived)) for (const t of d.types) derivedOf.set(t, d);
+        // Assigned keys: key → assigning records
+        const assigned = new Map();
+        const pending = []; // records whose own key must already be assigned, with the field to report on
+        for (const r of effective) {
+            const own = eventKey(r, kind.id, kind.date);
+            if (!own) continue;
+            const d = derivedOf.get(r.type);
+            let assigns = primary.has(r.type);
+            if (d) {
+                const refId = r[d.id];
+                const refKey = refId ? [r.CATReporterIMID || '', normalizeKeyDate(r[d.date]), recordInstrument(r), String(refId)].join(ORDER_KEY_SEP) : null;
+                if (refKey && refKey !== own) {
+                    assigns = true;
+                    pending.push({ r, key: refKey, field: d.id, what: `${d.id} ${refId}` });
+                }
+            }
+            if (assigns) {
+                if (!assigned.has(own)) assigned.set(own, []);
+                assigned.get(own).push(r);
+            } else {
+                pending.push({ r, key: own, field: kind.id, what: `${kind.kind} Key for ${kind.id} ${r[kind.id]}` });
+            }
+        }
+        // 3004/3010/3012/3016/3020: a key assigned more than once
+        for (const group of assigned.values()) {
+            if (group.length < 2) continue;
+            for (const r of group) add(r, kind.id, 'error', `Duplicate ${kind.kind} Key: also assigned by ${group.filter(x => x !== r).map(ref).join(', ')}`, kind.dupCode);
+        }
+        // 3501: references to keys no loaded event assigned; 3601: events earlier than the event that assigned their key
+        for (const { r, key, field, what } of pending) {
+            const origin = assigned.get(key);
+            if (!origin) {
+                add(r, field, 'warn', `${what} was not assigned by any loaded event (its originating event may be in a file that isn't loaded)`, 3501);
+                continue;
+            }
+            const t = tsNs(r), t0 = tsNs(origin[0]);
+            if (t !== null && t0 !== null) {
+                const allowance = BigInt(manual(r) || manual(origin[0]) ? 1000 : 50) * 1000000n;
+                if (t + allowance < t0) {
+                    add(r, 'eventTimestamp', 'error', `Event is earlier than ${origin[0].type} ${ref(origin[0])}, which assigned its ${kind.kind} Key, by more than the ${allowance === 50000000n ? '50 ms' : '1 second'} clock drift allowance`, 3601);
+                }
+            }
+        }
+        kind._assigned = assigned;
+    }
+
+    // 3502/3503/3504: side details and aggregated orders must reference a known Order Key
+    const orderKeys = EVENT_KEY_KINDS[0]._assigned;
+    for (const r of effective) {
+        for (const { field, item } of getNestedOrderItems(r) || []) {
+            const code = NESTED_ORDER_REF_CODES[field];
+            if (!code) continue;
+            const key = [r.CATReporterIMID || '', normalizeKeyDate(item.orderKeyDate), recordInstrument(r), String(item.orderID)].join(ORDER_KEY_SEP);
+            if (!orderKeys.has(key)) {
+                add(r, field, 'warn', `${field} references orderID ${item.orderID}, whose Order Key was not assigned by any loaded event (it may be in a file that isn't loaded)`, code);
+            }
+        }
+    }
+
+    // 3602: supplements carry their event's eventTimestamp, compared to the millisecond
+    const kindByName = Object.fromEntries(EVENT_KEY_KINDS.map(k => [k.kind, k]));
+    const parentTypes = new Set(Object.values(SUPPLEMENT_PARENTS).flatMap(([, types]) => types));
+    const parentsByKey = new Map(); // type + key → records
+    for (const p of effective) {
+        if (!parentTypes.has(p.type)) continue;
+        for (const [kindName, types] of Object.values(SUPPLEMENT_PARENTS)) {
+            if (!types.includes(p.type)) continue;
+            const kind = kindByName[kindName];
+            const k = p.type + ORDER_KEY_SEP + eventKey(p, kind.id, kind.date);
+            if (!parentsByKey.has(k)) parentsByKey.set(k, []);
+            if (!parentsByKey.get(k).includes(p)) parentsByKey.get(k).push(p);
+        }
+    }
+    for (const r of effective) {
+        const sup = SUPPLEMENT_PARENTS[r.type];
+        if (!sup) continue;
+        const kind = kindByName[sup[0]];
+        const key = eventKey(r, kind.id, kind.date);
+        const parents = sup[1].flatMap(t => parentsByKey.get(t + ORDER_KEY_SEP + key) || []);
+        const t = tsNs(r);
+        if (!parents.length || t === null) continue;
+        const ms = v => v === null ? null : v / 1000000n;
+        if (!parents.some(p => ms(tsNs(p)) === ms(t))) {
+            add(r, 'eventTimestamp', 'error', `eventTimestamp differs from ${parents.map(p => `${p.type} ${ref(p)}`).join(', ')} (compared to the millisecond)`, 3602);
+        }
+    }
+
+    // 3711: firmDesignatedID 'PENDING' not yet replaced by a supplement with the actual FDID
+    const resolvedOrders = new Set(effective
+        .filter(r => FDID_SUPPLEMENT_TYPES.has(r.type) && r.firmDesignatedID && r.firmDesignatedID !== 'PENDING')
+        .map(r => eventKey(r, 'orderID', 'orderKeyDate')));
+    for (const r of effective) {
+        if (r.firmDesignatedID !== 'PENDING' || FDID_SUPPLEMENT_TYPES.has(r.type)) continue;
+        if (!resolvedOrders.has(eventKey(r, 'orderID', 'orderKeyDate'))) {
+            add(r, 'firmDesignatedID', 'error', "firmDesignatedID is 'PENDING' and no supplement or correction with the actual FDID is loaded (due by T+3 8:00 AM ET)", 3711);
+        }
+    }
+    return found;
 }
 
 // Index: targetField → id value → array of records
-let idIndex = {};
+let idIndex = Object.create(null);
 
 function buildIdIndex() {
-    idIndex = {};
+    idIndex = Object.create(null);
     const add = (field, val, r) => {
         if (!val) return;
-        ((idIndex[field] ||= {})[val] ||= []).push(r);
+        ((idIndex[field] ||= Object.create(null))[val] ||= []).push(r);
     };
     for (const r of allRecords) {
         for (const field of INDEXED_ID_FIELDS) add(field, r[field], r);
@@ -4184,21 +5248,26 @@ function lookupLinkedRecords(fieldName, value) {
 }
 
 // ── Order Chain / Hierarchy ──
+// Keys are order nodes (see Order identity); parentOrderID/priorOrderID in the
+// entries hold parent/prior nodes
 function buildOrderIndex() {
-    orderIndex = {};
+    buildCorrections(allRecords);
+    buildOrderIdentity();
+    orderIndex = Object.create(null);
+    const entry = node => orderIndex[node] ||= { parentOrderID: null, children: new Set(), priorSuccessors: new Set(), priorOrderID: null };
     for (const r of allRecords) {
-        const oid = r.orderID;
+        const oid = recordOrderNode(r);
         if (!oid) continue;
-        if (!orderIndex[oid]) orderIndex[oid] = { parentOrderID: null, children: new Set(), priorSuccessors: new Set(), priorOrderID: null };
-        if (r.parentOrderID && r.parentOrderID !== oid) {
-            orderIndex[oid].parentOrderID = r.parentOrderID;
-            if (!orderIndex[r.parentOrderID]) orderIndex[r.parentOrderID] = { parentOrderID: null, children: new Set(), priorSuccessors: new Set(), priorOrderID: null };
-            orderIndex[r.parentOrderID].children.add(oid);
+        entry(oid);
+        const parent = r.parentOrderID ? referencedOrderNode(r, 'parent') : null;
+        if (parent && parent !== oid) {
+            orderIndex[oid].parentOrderID = parent;
+            entry(parent).children.add(oid);
         }
-        if (r.priorOrderID && r.priorOrderID !== oid) {
-            orderIndex[oid].priorOrderID = r.priorOrderID;
-            if (!orderIndex[r.priorOrderID]) orderIndex[r.priorOrderID] = { parentOrderID: null, children: new Set(), priorSuccessors: new Set(), priorOrderID: null };
-            orderIndex[r.priorOrderID].priorSuccessors.add(oid);
+        const prior = r.priorOrderID ? referencedOrderNode(r, 'prior') : null;
+        if (prior && prior !== oid) {
+            orderIndex[oid].priorOrderID = prior;
+            entry(prior).priorSuccessors.add(oid);
         }
     }
     buildIdIndex();
@@ -4302,15 +5371,20 @@ const CHAIN_ORIGIN_TYPES = new Set(['MENO', 'MEOA', 'MECO', 'MEIR', 'MONO', 'MOO
 const CHAIN_ORIGIN_SUPPLEMENT_TYPES = new Set(['MENOS', 'MONOS', 'MLOS']);
 
 function compareChainRecords(a, b) {
-    const t = (a.eventTimestamp || '').localeCompare(b.eventTimestamp || '');
-    if (t) return t;
+    // eventTimestamp may be an ET string or a UTC epoch number; missing sorts first
+    const ta = catTimestampToNs(a.eventTimestamp), tb = catTimestampToNs(b.eventTimestamp);
+    if (ta !== tb) {
+        if (ta === null) return -1;
+        if (tb === null) return 1;
+        return ta < tb ? -1 : 1;
+    }
     const rank = r => CHAIN_ORIGIN_TYPES.has(r.type) ? 0 : CHAIN_ORIGIN_SUPPLEMENT_TYPES.has(r.type) ? 1 : 2;
     return rank(a) - rank(b);
 }
 
 function buildChainDisplay(rootID, maxDepth, records) {
     const result = [];
-    const byOrder = {};
+    const byOrder = Object.create(null);
     for (const r of records) {
         for (const oid of getRecordLaneOrderIDs(r)) {
             (byOrder[oid] ||= []).push(r);
@@ -4366,7 +5440,7 @@ function buildChainDisplay(rootID, maxDepth, records) {
                         : (lastFlags[d] ? '    ' : '│   ');
                 }
             }
-            result.push({ record: recs[i], depth, orderID: recs[i].orderID || id, isFirstOfOrder: i === 0, treePrefix: prefix });
+            result.push({ record: recs[i], depth, orderID: recs[i].orderID ? recordOrderNode(recs[i]) : id, isFirstOfOrder: i === 0, treePrefix: prefix });
         }
         if (depth < maxDepth) {
             const kids = Array.from(getChildrenWithPriorChain(id)).sort().filter(c => hasRecords(c, depth + 1));
@@ -4723,10 +5797,13 @@ function handleLinkClick(el) {
     expandedFilters.clear();
     renderFilterBar();
 
-    // If target is orderID, use order chain view
+    // If target is orderID, use order chain view of the linked order (its Order
+    // Key, not just the orderID text, when the link carries one)
     if (target === 'orderID') {
-        enterOrderChain(value, prevChainDepth);
-        const record = filteredRecords.find(r => r.orderID === value);
+        const node = el.dataset.linkNode || resolveOrderNode(value);
+        enterOrderChain(node, prevChainDepth);
+        const record = filteredRecords.find(r => r.orderID && recordOrderNode(r) === node)
+            || filteredRecords.find(r => getRecordLaneOrderIDs(r).includes(node));
         if (record) showDetail(record);
         window.scrollTo(0, scrollY);
         return;
@@ -5003,11 +6080,22 @@ function initializeUI() {
     renderRawTab();
 }
 
+// Why a record is not in effect (replaced, deleted, or a delete instruction), or null
+function correctionNote(r) {
+    const i = correctionInfo(r);
+    if (r.actionType === 'DEL') {
+        return i && i.deletes ? `Delete instruction for record #${i.deletes._idx + 1}` : 'Delete instruction (its target is not in the loaded files)';
+    }
+    if (i && i.supersededBy) return `Replaced by ${i.supersededBy.actionType} record #${i.supersededBy._idx + 1}`;
+    if (i && i.deletedBy) return `Deleted by DEL record #${i.deletedBy._idx + 1}`;
+    return null;
+}
+
 function renderSummaryCards() {
     const cards = $('summaryCards');
-    const typeCounts = {};
-    const actionCounts = {};
-    const sideCounts = {};
+    const typeCounts = Object.create(null);
+    const actionCounts = Object.create(null);
+    const sideCounts = Object.create(null);
     let symbols = new Set();
 
     allRecords.forEach(r => {
@@ -5034,6 +6122,11 @@ function renderSummaryCards() {
     }
 
     html += card('Actions', '', Object.entries(actionCounts).map(([k, v]) => `${k}: ${v}`).join(', '));
+    if (correctionStats.corrections) {
+        const c = correctionStats;
+        html += card('Corrections', `${(c.superseded + c.deleted).toLocaleString()} applied`,
+            `${c.superseded} replaced, ${c.deleted} deleted` + (c.unmatched ? `; ${c.unmatched} with no matching record loaded` : ''));
+    }
 
     if (Object.keys(sideCounts).length) {
         html += card('Sides', '', Object.entries(sideCounts).map(([k, v]) => `${FIELD_LABELS.side[k] || k}: ${v}`).join(', '));
@@ -5052,6 +6145,17 @@ function card(label, value, detail) {
 
 // ── Dynamic Filters ──
 const PRICE_FIELDS = new Set(['price', 'fillPrice', 'displayPrice', 'workingPrice', 'netPrice']);
+
+// Formats decimal text without converting to a double, so 8-decimal prices and
+// 6-decimal quantities show every digit. Returns null for non-numeric text.
+function formatDecimalText(value, { group = false, minFractionDigits = 0 } = {}) {
+    const m = /^(-?)(\d+)(?:\.(\d*))?$/.exec(plainNumberText(value));
+    if (!m) return null;
+    let [, sign, int, frac = ''] = m;
+    if (group) int = int.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    if (frac.length < minFractionDigits) frac = frac.padEnd(minFractionDigits, '0');
+    return sign + int + (frac ? '.' + frac : '');
+}
 const QTY_FIELDS = new Set(['quantity', 'fillQty', 'leavesQty', 'minQty', 'displayQty', 'cancelQty']);
 let filterModes = {}; // col → 'exact' | 'range'
 
@@ -5104,17 +6208,35 @@ function translateFilterValue(col, rawValue) {
         }
     }
     // Prices: format with decimals
-    if (PRICE_FIELDS.has(col) && !isNaN(Number(s))) {
-        return Number(s).toFixed(s.includes('.') ? Math.max(2, (s.split('.')[1] || '').length) : 0);
+    if (PRICE_FIELDS.has(col)) {
+        const text = plainNumberText(s);
+        const f = formatDecimalText(text, { minFractionDigits: text.includes('.') ? 2 : 0 });
+        if (f !== null) return f;
     }
     // Quantities: format with thousands separators
-    if (QTY_FIELDS.has(col) && !isNaN(Number(s))) {
-        return Number(s).toLocaleString();
+    if (QTY_FIELDS.has(col)) {
+        const f = formatDecimalText(s, { group: true });
+        if (f !== null) return f;
     }
     return null;
 }
 
+// Column types are sampled from the data, so cache them per loaded record set
+const _columnTypeCache = { records: null, types: new Map() };
 function getColumnType(col) {
+    if (_columnTypeCache.records !== allRecords) {
+        _columnTypeCache.records = allRecords;
+        _columnTypeCache.types.clear();
+    }
+    let type = _columnTypeCache.types.get(col);
+    if (type === undefined) {
+        type = detectColumnType(col);
+        _columnTypeCache.types.set(col, type);
+    }
+    return type;
+}
+
+function detectColumnType(col) {
     if (col === '#') return 'number';
     if (/Timestamp$|KeyDate$/.test(col)) return 'timestamp';
     if (/Date$/.test(col)) return 'date';
@@ -5158,17 +6280,19 @@ function getFilterValues() {
     return values;
 }
 
+// Value for range comparisons and sorting, or null if it has none. Numbers
+// beyond double precision compare as BigInt (JS orders BigInt against Number
+// exactly); timestamps compare as exact UTC nanoseconds, so ET strings and
+// epoch numbers interleave correctly.
 function getComparableValue(col, value, colType) {
     if (value == null || value === '') return null;
     const s = String(value);
-    if (colType === 'number') return Number(s);
-    if (colType === 'timestamp') {
-        // String format: YYYYMMDDTHHMMSS.ffffff → sortable as-is (strip T/ )
-        if (/^\d{8}[T ]\d{6}(\.\d+)?$/.test(s)) return s.replace(/[T ]/g, '');
-        // Epoch nanos
-        if (/^\d{13,19}$/.test(s)) return s;
-        return s;
+    if (colType === 'number') {
+        if (/^-?\d{16,}$/.test(s)) return BigInt(s);
+        const n = Number(s);
+        return Number.isNaN(n) ? null : n;
     }
+    if (colType === 'timestamp') return catTimestampToNs(s);
     if (colType === 'date') {
         if (/^\d{8}$/.test(s)) return s;
         return s;
@@ -6008,28 +7132,39 @@ function applyFilters(skipSync) {
         if (Array.isArray(fv)) filterSets[col] = new Set(fv);
     }
 
-    let pool = allRecords;
+    // With corrections applied, replaced and deleted records and DEL instructions drop out
+    const basePool = effectiveViewEnabled ? allRecords.filter(isEffectiveRecord) : allRecords;
+    let pool = basePool;
     let branchData = null;
     if (orderChainRoot) {
         if (orderChainDepth === 'branch') {
             branchData = getBranchOrderIDs(orderChainRoot);
-            pool = allRecords.filter(r => getRecordLaneOrderIDs(r).some(id => branchData.ids.has(id)));
+            pool = basePool.filter(r => getRecordLaneOrderIDs(r).some(id => branchData.ids.has(id)));
         } else {
             const chainIDs = getChainOrderIDs(orderChainRoot, orderChainDepth);
-            pool = allRecords.filter(r => getRecordLaneOrderIDs(r).some(id => chainIDs.has(id)));
+            pool = basePool.filter(r => getRecordLaneOrderIDs(r).some(id => chainIDs.has(id)));
         }
     }
 
+    const rangeBounds = {};
+    for (const col in filterValues) {
+        const fv = filterValues[col];
+        if (typeof fv !== 'object' || fv.mode !== 'range') continue;
+        const colType = getColumnType(col);
+        rangeBounds[col] = {
+            colType,
+            min: fv.min ? getComparableValue(col, fv.min, colType) : null,
+            max: fv.max ? getComparableValue(col, fv.max, colType) : null,
+        };
+    }
     filteredRecords = pool.filter(r => {
         for (const col in filterValues) {
             const fv = filterValues[col];
             const rv_raw = col === '#' ? r._idx + 1 : r[col];
             if (typeof fv === 'object' && fv.mode === 'range') {
-                const colType = getColumnType(col);
+                const { colType, min: minB, max: maxB } = rangeBounds[col];
                 const val = getComparableValue(col, rv_raw, colType);
                 if (val === null) return false;
-                const minB = fv.min ? getComparableValue(col, fv.min, colType) : null;
-                const maxB = fv.max ? getComparableValue(col, fv.max, colType) : null;
                 if (minB !== null && val < minB) return false;
                 if (maxB !== null && val > maxB) return false;
             } else if (filterSets[col]) {
@@ -6080,11 +7215,28 @@ function applyFilters(skipSync) {
     } else {
         chainDisplayData = null;
         if (sortKeys.length) {
+            // Timestamp columns sort by instant (ET strings and epoch numbers
+            // interleave); keys are computed once per record, not per comparison
+            const exactKeys = new Map();
+            for (const { col } of sortKeys) {
+                if (col === '#' || getColumnType(col) !== 'timestamp') continue;
+                const keys = new Map();
+                for (const r of filteredRecords) keys.set(r, getComparableValue(col, r[col], 'timestamp'));
+                exactKeys.set(col, keys);
+            }
             filteredRecords.sort((a, b) => {
                 for (const {col, asc} of sortKeys) {
                     if (col === '#') {
                         if (a._idx !== b._idx) return asc ? a._idx - b._idx : b._idx - a._idx;
                         continue;
+                    }
+                    const keys = exactKeys.get(col);
+                    if (keys) {
+                        const ka = keys.get(a), kb = keys.get(b);
+                        if (ka !== null && kb !== null) {
+                            if (ka !== kb) return (ka < kb) === asc ? -1 : 1;
+                            continue;
+                        }
                     }
                     const ra = a[col], rb = b[col];
                     const ea = ra == null || ra === '';
@@ -6095,6 +7247,11 @@ function applyFilters(skipSync) {
                     const na = Number(va), nb = Number(vb);
                     if (va !== '' && vb !== '' && !isNaN(na) && !isNaN(nb)) {
                         if (na !== nb) return asc ? na - nb : nb - na;
+                        // Equal as doubles: integers beyond double precision may still differ
+                        const sa = String(va), sb = String(vb);
+                        if (sa !== sb && /^-?\d{16,}$/.test(sa) && /^-?\d{16,}$/.test(sb)) {
+                            return (BigInt(sa) < BigInt(sb)) === asc ? -1 : 1;
+                        }
                         continue;
                     }
                     va = String(va); vb = String(vb);
@@ -6133,8 +7290,10 @@ function renderRowHtml(record, globalIdx, visCols) {
     }
     let cls = selectedRow === globalIdx ? 'selected' : '';
     if (groupFirst) cls += ' order-group-first';
+    const correction = correctionNote(record);
+    if (correction) cls += ' row-superseded';
     let h = `<tr data-idx="${globalIdx}" class="${cls}" style="height:${ROW_HEIGHT}px">`;
-    h += `<td>${hasErrors ? valIconSvg(worstSev) : ''}${record._idx + 1}</td>`;
+    h += `<td>${hasErrors ? valIconSvg(worstSev) : ''}${record._idx + 1}${correction ? ` <span class="correction-chip" data-tooltip="${escapeHtml(correction)}">${record.actionType === 'DEL' ? 'DEL' : '\u21bb'}</span>` : ''}</td>`;
     if (chainDisplayData) {
         h += `<td class="tree-cell">${chainEntry ? escapeHtml(chainEntry.treePrefix) : ''}</td>`;
     }
@@ -6510,6 +7669,17 @@ const FIELD_LABELS = {
     sideDetailsInd: { BUY: 'Buy Side', SELL: 'Sell Side', NA: 'N/A' },
 };
 
+// These tables are indexed by values read from files (event types, field names,
+// choice codes). Drop their prototypes so a value such as "constructor" or
+// "toString" finds nothing instead of an inherited Object method.
+for (const table of [EVENT_CATEGORIES, FIELD_TOOLTIPS, FIELD_LABELS, CAT_CSV_FIELDS, CAT_SCHEMA,
+                     CAT_ARRAY_ELEMENTS, CAT_CHOICE_VALUES, LINKAGE_FIELDS, SIDE_SLOT_ROLES]) {
+    Object.setPrototypeOf(table, null);
+    for (const v of Object.values(table)) {
+        if (v && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype) Object.setPrototypeOf(v, null);
+    }
+}
+
 // Convert nanosecond Unix epoch (NUMBER format) to Eastern Time string
 // Returns "YYYY-MM-DD HH:MM:SS.fffffffff" in ET, or null if not a valid epoch
 function formatEpochNanosToET(val) {
@@ -6551,7 +7721,9 @@ function formatCell(col, value, record) {
     const slot = col.startsWith('side1.') ? 'side1' : col.startsWith('side2.') ? 'side2' : null;
     if (slot) {
         const base = col.slice(6);
-        let html = formatCellBase(base, value);
+        // A side slot's orderID pairs with the same slot's orderKeyDate
+        const node = base === 'orderID' && record ? linkOrderNode('orderID', value, record, { orderKeyDate: record[`${slot}.orderKeyDate`] }) : null;
+        let html = formatCellBase(base, value, node);
         const meta = record && record._sideSlots && record._sideSlots[slot];
         if (base === 'orderID' && meta) {
             const role = SIDE_SLOT_ROLES[meta.field];
@@ -6560,10 +7732,14 @@ function formatCell(col, value, record) {
         }
         return html;
     }
-    return formatCellBase(col, value);
+    return formatCellBase(col, value, linkOrderNode(col, value, record));
 }
 
-function formatCellBase(col, value) {
+function linkAttrs(field, value, node) {
+    return `class="order-link" data-link-field="${escapeHtml(field)}" data-link-value="${escapeHtml(value)}"${node ? ` data-link-node="${escapeHtml(node)}"` : ''} title="${node && node !== String(value) ? `Show linked records for ${escapeHtml(node)}` : 'Show linked records'}"`;
+}
+
+function formatCellBase(col, value, linkNode) {
     if (value === undefined || value === null || value === '') return '<span style="color:var(--surface2)">&mdash;</span>';
     const s = String(value);
 
@@ -6593,7 +7769,7 @@ function formatCellBase(col, value) {
         return escapeHtml(s);
     }
     if (LINKAGE_FIELDS[col] && lookupLinkedRecords(col, s)) {
-        return `<span class="order-link" data-link-field="${escapeHtml(col)}" data-link-value="${escapeHtml(s)}" title="Show linked records">${escapeHtml(s)}</span>`;
+        return `<span ${linkAttrs(col, s, linkNode)}>${escapeHtml(s)}</span>`;
     }
     if (col === 'type') {
         const cat = EVENT_CATEGORIES[s] || 'other';
@@ -6649,11 +7825,14 @@ function formatCellBase(col, value) {
             return `<span title="${escapeHtml(s)}">${d} ${t}</span>`;
         }
     }
-    if ((col === 'price' || col === 'fillPrice' || col === 'displayPrice' || col === 'workingPrice' || col === 'netPrice') && !isNaN(Number(s))) {
-        return Number(s).toFixed(s.includes('.') ? Math.max(2, (s.split('.')[1] || '').length) : 0);
+    if (PRICE_FIELDS.has(col)) {
+        const text = plainNumberText(s);
+        const f = formatDecimalText(text, { minFractionDigits: text.includes('.') ? 2 : 0 });
+        if (f !== null) return escapeHtml(f);
     }
-    if ((col === 'quantity' || col === 'fillQty' || col === 'leavesQty' || col === 'minQty' || col === 'displayQty') && !isNaN(Number(s))) {
-        return Number(s).toLocaleString();
+    if (QTY_FIELDS.has(col)) {
+        const f = formatDecimalText(s, { group: true });
+        if (f !== null) return escapeHtml(f);
     }
     return escapeHtml(s);
 }
@@ -6832,7 +8011,7 @@ function renderDetailGrid(record, mode, showAll) {
                 html += `<div class="detail-field-wide${topClass}">
                     <div class="field-name">${escapeHtml(key)}</div>
                     ${topBadges ? `<div class="val-badges" style="margin-bottom:4px">${topBadges}</div>` : ''}
-                    ${renderLegDetailsHTML(value, mode, elemErrs.length ? elemErrs : null)}
+                    ${renderLegDetailsHTML(value, mode, elemErrs.length ? elemErrs : null, record)}
                 </div>`;
                 continue;
             }
@@ -6848,7 +8027,7 @@ function renderDetailGrid(record, mode, showAll) {
                 html += `<div class="detail-field-wide${topClass}">
                     <div class="field-name">${escapeHtml(key)}</div>
                     ${topBadges ? `<div class="val-badges" style="margin-bottom:4px">${topBadges}</div>` : ''}
-                    ${renderSideDetailsHTML(value, fields, mode, elemErrs.length ? elemErrs : null)}
+                    ${renderSideDetailsHTML(value, fields, mode, elemErrs.length ? elemErrs : null, record)}
                 </div>`;
                 continue;
             }
@@ -6895,7 +8074,17 @@ function showDetail(record, push) {
         tlScheduleDraw();
     }
     const typeTooltip = FIELD_TOOLTIPS.type[record.type] || '';
-    $('detailTitle').innerHTML = `Record Detail &mdash; <span class="event-type ${cls}"${typeTooltip ? ` data-tooltip="${escapeHtml(typeTooltip)}"` : ''}>${escapeHtml(record.type || 'Unknown')}</span>`;
+    const specLabel = validationEnabled && record._specVersion && CAT_SPECS[record._specVersion]
+        ? ` <span class="detail-spec" title="Validated against this CAT spec version">${escapeHtml(CAT_SPECS[record._specVersion].label)}</span>` : '';
+    // Link to the record this one replaces, or that replaces or deletes it
+    const ci = correctionInfo(record);
+    const related = ci && (ci.supersededBy || ci.deletedBy || ci.replaces || ci.deletes);
+    const relatedText = !ci ? '' : ci.supersededBy ? `replaced by ${ci.supersededBy.actionType} #${ci.supersededBy._idx + 1}`
+        : ci.deletedBy ? `deleted by DEL #${ci.deletedBy._idx + 1}`
+        : ci.replaces ? `replaces #${ci.replaces._idx + 1}`
+        : ci.deletes ? `deletes #${ci.deletes._idx + 1}` : '';
+    const correctionLabel = related ? ` <span class="detail-correction" data-record-idx="${related._idx}" title="Open that record">${escapeHtml(relatedText)}</span>` : '';
+    $('detailTitle').innerHTML = `Record Detail &mdash; <span class="event-type ${cls}"${typeTooltip ? ` data-tooltip="${escapeHtml(typeTooltip)}"` : ''}>${escapeHtml(record.type || record.actionType || 'Unknown')}</span>${specLabel}${correctionLabel}`;
 
     renderDetailGrid(record, detailMode, $('showAllFields').checked);
 
@@ -7013,12 +8202,47 @@ let tlHeatmapDirty = true;
 
 // ── Timestamp parsing ──
 
+let _etHourFormat = null;
 function getETHour(utcMs) {
-    const p = new Intl.DateTimeFormat('en-US', {
+    _etHourFormat ||= new Intl.DateTimeFormat('en-US', {
         timeZone: 'America/New_York', hour: '2-digit', hour12: false
-    }).formatToParts(new Date(utcMs));
-    const h = p.find(x => x.type === 'hour');
+    });
+    const h = _etHourFormat.formatToParts(new Date(utcMs)).find(x => x.type === 'hour');
     return h ? (h.value === '24' ? 0 : Number(h.value)) : -1;
+}
+
+// Eastern Time calendar date of a UTC instant as YYYYMMDD
+let _etDateFormat = null;
+function formatETDateCompact(utcMs) {
+    _etDateFormat ||= new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
+    });
+    return _etDateFormat.format(new Date(utcMs)).replace(/-/g, '');
+}
+
+// Exact UTC epoch nanoseconds (BigInt) for a CAT timestamp, or null if it is
+// not one. Epoch forms are UTC digits (13 = ms, 16 = us, 19 = ns); string forms
+// (YYYYMMDD[T| ]HHMMSS[.fraction]) are Eastern Time. Unlike
+// parseCATTimestampToUTCMs this keeps full nanosecond precision, so events a few
+// nanoseconds apart still order correctly, and it compares string and epoch
+// timestamps on the same scale.
+const _etOffsetByHour = new Map(); // "YYYYMMDD HH" (either separator) → 4 or 5 hours
+function catTimestampToNs(raw) {
+    if (raw == null || raw === '') return null;
+    const s = String(raw);
+    if (/^\d{13,19}$/.test(s)) return BigInt(s) * 10n ** BigInt(19 - s.length);
+    const m = s.match(/^(\d{4})(\d{2})(\d{2})[T ](\d{2})(\d{2})(\d{2})(?:\.(\d{1,9}))?$/);
+    if (!m) return null;
+    const [, yr, mo, dy, hh, mm, ss, frac] = m;
+    const utcGuess = Date.UTC(+yr, +mo - 1, +dy, +hh, +mm, +ss);
+    // The Eastern offset only changes at DST transitions (on the hour), so cache it per date and hour
+    const hourKey = s.slice(0, 11);
+    let offset = _etOffsetByHour.get(hourKey);
+    if (offset === undefined) {
+        offset = (getETHour(utcGuess + 5 * 3600000) === +hh) ? 5 : 4;
+        _etOffsetByHour.set(hourKey, offset);
+    }
+    return BigInt(utcGuess + offset * 3600000) * 1000000n + BigInt((frac || '').padEnd(9, '0'));
 }
 
 function parseCATTimestampToUTCMs(raw) {
@@ -7238,8 +8462,9 @@ function tlBuildData() {
     const priorSuccessors = new Map(); // priorOrderID → Set of successor orderIDs
     const successorOf = new Map();     // orderID → its priorOrderID
     for (const r of filteredRecords) {
-        const oid = r.orderID;
-        const pid = r.priorOrderID;
+        if (!r.orderID || !r.priorOrderID) continue;
+        const oid = recordOrderNode(r);
+        const pid = referencedOrderNode(r, 'prior');
         if (!pid || pid === oid) continue;
         if (!byOrder.has(oid) || !byOrder.has(pid)) continue;
         if (!priorSuccessors.has(pid)) priorSuccessors.set(pid, new Set());
@@ -8651,7 +9876,7 @@ function tlSetupInteractions() {
             tlScheduleDraw();
         } else if (hit.type === 'label') {
             enterOrderChain(hit.node.orderID, 'branch');
-            const record = filteredRecords.find(r => r.orderID === hit.node.orderID);
+            const record = filteredRecords.find(r => r.orderID && recordOrderNode(r) === hit.node.orderID);
             if (record) showDetail(record);
         } else if (hit.type === 'event') {
             let target = hit.event;
@@ -9047,7 +10272,12 @@ function renderEventSummary() {
 function renderRawTab() {
     const maxShow = Infinity;
     const sample = allRecords.slice(0, maxShow);
-    const replacer = (k, v) => (k === '_idx' || k === '_timeInForce_original' || k === '_errors' || k === '_original' || k === '_searchText' || k === '_sideSlots' || /^side[12]\./.test(k) || isNVPAttrColumn(k)) ? undefined : v;
+    const replacer = function (k, v) {
+        if (k === '_idx' || k === '_timeInForce_original' || k === '_errors' || k === '_original' || k === '_searchText' || k === '_sideSlots' || /^side[12]\./.test(k) || isNVPAttrColumn(k)) return undefined;
+        // Long JSON numbers are kept as exact text; print them as numbers again
+        if (typeof v === 'string' && JSON.rawJSON && (isLosslessNumber(this, k) || isLosslessNumber(this._original, k))) return JSON.rawJSON(v);
+        return v;
+    };
     $('rawContent').textContent = JSON.stringify(sample, replacer, 2) +
         (allRecords.length > maxShow ? `\n\n... (${allRecords.length - maxShow} more records)` : '');
 }
@@ -9087,7 +10317,7 @@ $('validationToggle').addEventListener('click', () => {
         }
     } else if (allRecords.length) {
         // Re-validate if toggled on with records loaded
-        deferValidation(allRecords, fileFormat);
+        deferValidation(allRecords);
     }
     renderFilterBar();
     updateValidationStat();
@@ -9096,6 +10326,58 @@ $('validationToggle').addEventListener('click', () => {
     if (currentDetailRecord) {
         renderDetailGrid(currentDetailRecord, detailMode, $('showAllFields').checked);
     }
+});
+
+// ── Corrections view ──
+$('effectiveToggle').addEventListener('click', () => {
+    effectiveViewEnabled = !effectiveViewEnabled;
+    $('effectiveToggle').textContent = (effectiveViewEnabled ? '\u2713 ' : '') + 'Apply Corrections';
+    applyFilters();
+});
+$('detailTitle').addEventListener('click', e => {
+    const link = e.target.closest('.detail-correction');
+    if (!link) return;
+    const target = allRecords[Number(link.dataset.recordIdx)];
+    if (target) showDetail(target);
+});
+
+// ── Spec version ──
+// Header link names the spec version(s) the loaded records were validated against
+function updateSpecLabel() {
+    const link = $('specLink');
+    const counts = new Map();
+    for (const r of allRecords) if (r._specVersion) counts.set(r._specVersion, (counts.get(r._specVersion) || 0) + 1);
+    const used = CAT_SPEC_VERSIONS.filter(v => counts.has(v.version));
+    const shown = used.length ? used
+        : [specVersionSetting !== 'auto' && CAT_SPECS[specVersionSetting] ? CAT_SPECS[specVersionSetting] : specForDate(formatETDateCompact(Date.now()))];
+    link.textContent = 'Spec ' + shown.map(v => v.label).join(' + ') + (specVersionSetting !== 'auto' ? ' (forced)' : '');
+    link.href = shown[shown.length - 1].url;
+    const later = CAT_SPEC_VERSIONS.filter(v => v.from).map(v => `${v.label} from ${v.from.slice(0, 4)}-${v.from.slice(4, 6)}-${v.from.slice(6)}`);
+    link.title = (specVersionSetting === 'auto'
+        ? `Each record is validated against the spec in effect on its event date (${later.join('; ')}).`
+        : 'All records are validated against this version (Tools \u2192 Spec).')
+        + (used.length > 1 ? '\n' + used.map(v => `${v.label}: ${counts.get(v.version).toLocaleString()} record${counts.get(v.version) === 1 ? '' : 's'}`).join('\n') : '');
+}
+
+function updateSpecVersionButton() {
+    $('specVersionBtn').textContent = 'Spec: ' + (specVersionSetting === 'auto' ? 'Auto (by event date)' : CAT_SPECS[specVersionSetting].label);
+}
+
+try {
+    const saved = localStorage.getItem('catViewer_specVersion');
+    if (saved && (saved === 'auto' || CAT_SPECS[saved])) specVersionSetting = saved;
+} catch { /* storage unavailable */ }
+updateSpecVersionButton();
+updateSpecLabel();
+
+// Cycles Auto → each version → Auto, then re-validates
+$('specVersionBtn').addEventListener('click', () => {
+    const options = ['auto', ...CAT_SPEC_VERSIONS.map(v => v.version)];
+    specVersionSetting = options[(options.indexOf(specVersionSetting) + 1) % options.length];
+    try { localStorage.setItem('catViewer_specVersion', specVersionSetting); } catch { /* storage unavailable */ }
+    updateSpecVersionButton();
+    if (validationEnabled && allRecords.length) deferValidation(allRecords);
+    updateSpecLabel();
 });
 
 // ── Performance panel ──
@@ -9776,21 +11058,40 @@ $('colCtxMoveEnd').addEventListener('click', () => {
 $('colCtxManage').addEventListener('click', openColMgr);
 
 // ── Export ──
+// Text of one exported cell. Compound arrays use CAT's CSV notation (elements
+// separated by '|', fields by '@' in the element schema's order) rather than
+// "[object Object]"; numbers are written without exponent notation. Text a
+// spreadsheet would run as a formula (= + - @, tab, CR) gets a leading "'",
+// except plain numbers such as -5.
+function exportCellText(value, col, record) {
+    if (value === undefined || value === null) return '';
+    let s;
+    if (Array.isArray(value)) {
+        const fields = record ? sideDetailElementFields(record.type, col) : null;
+        s = value.map(el => {
+            if (!el || typeof el !== 'object') return String(el ?? '');
+            const names = fields && fields.some(f => f in el) ? fields : Object.keys(el);
+            const parts = names.map(f => (el[f] === undefined || el[f] === null) ? '' : plainNumberText(el[f]));
+            while (parts.length && parts[parts.length - 1] === '') parts.pop();
+            return parts.join('@');
+        }).join('|');
+    } else if (typeof value === 'object') {
+        s = formatNameValuePairs(value);
+    } else {
+        s = typeof value === 'number' ? plainNumberText(value) : String(value);
+    }
+    if (/^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s)) s = "'" + s;
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
 $('exportBtn').addEventListener('click', () => {
     if (!filteredRecords.length) return;
     const exportCols = visibleColumns();
-    const header = exportCols.join(',');
+    const header = exportCols.map(c => exportCellText(c)).join(',');
     const rows = filteredRecords.map(r =>
-        exportCols.map(c => {
-            const v = r[c];
-            if (v === undefined || v === null) return '';
-            const s = String(v);
-            return s.includes(',') || s.includes('"') || s.includes('\n')
-                ? '"' + s.replace(/"/g, '""') + '"'
-                : s;
-        }).join(',')
+        exportCols.map(c => exportCellText(c === '#' ? r._idx + 1 : r[c], c, r)).join(',')
     );
-    const csv = header + '\n' + rows.join('\n');
+    const csv = header + '\r\n' + rows.join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -9839,10 +11140,10 @@ $('exportBtn').addEventListener('click', () => {
 })();
 
 // ── Helpers ──
+// Safe for both element content and quoted attribute values
+const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 function escapeHtml(s) {
-    const div = document.createElement('div');
-    div.textContent = s;
-    return div.innerHTML;
+    return String(s ?? '').replace(/[&<>"']/g, ch => HTML_ESCAPES[ch]);
 }
 
 function formatSize(bytes) {
