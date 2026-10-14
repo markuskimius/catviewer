@@ -1,6 +1,6 @@
 # CAT File Viewer
 
-Version v2026.09.28
+Version v2026.10.13
 
 Copyright (c) 2026 Mark Kim. Licensed under [GPL-2.0](LICENSE).
 
@@ -36,7 +36,7 @@ Open `index.html` in any modern browser. No server, build step, or dependencies 
 - **Column manager** — show, hide, and reorder columns with search highlighting and layout persistence
 - **Sticky header** — stays visible while scrolling through records
 - **Color-coded event types** — orders, routes, trades, cancels, modifications, quotes, and allocations are visually distinguished
-- **Dynamic filters** — searchable, collapsible comboboxes with range support for event type (with detailed descriptions), action type (NEW/RPR/COR/DEL), side (Buy/Sell/Short), error code, and free-text search across all fields; filter layout persists across sessions
+- **Dynamic filters** — searchable, collapsible comboboxes with range support for event type (with detailed descriptions), action type (NEW/RPR/COR/DEL), side (Buy/Sell/Short), error code, and free-text search across all fields. The filter bar starts with type, actionType, symbol, side, and orderID (empty on phones); any other column can be added, and the filter layout persists across sessions
 - **Record detail panel** — fixed and resizable at the bottom of the viewport with animated slide-up/down transitions and translated/original view modes
 - **Translated display** — human-readable timestamps (string format and epoch nanoseconds → Eastern Time), dates, side codes, and compound fields (legDetails, buyDetails, sellDetails, clientDetails, firmDetails)
 - **Side-slot columns** — side-detail compound arrays are flattened into positional `side1.*` (buy/client side) and `side2.*` (sell/firm side) columns, so trades (buyDetails/sellDetails) and fulfillments (clientDetails/firmDetails) line up in the same columns. All subfields (orderID, side, quantity, firmDesignatedID, accountHolderType, originatingIMID, orderKeyDate, BFMMFlag) are shown by default, grouped per slot; the orderID cells carry a role chip (B/S/C/F for the source array) and clickable orderID linkage. The raw compound columns are hidden by default and available via the column manager. Slot columns support sorting, filtering, and CSV export like regular columns, and surface their source field's validation errors. Arrays with more than one element show a "+N" chip — open the record's detail panel for the full list
@@ -90,6 +90,8 @@ node --test tests/
 `tests/linkage.test.js` covers Order Key identity (orderID reuse across days, symbols and times; epoch vs string key dates; parent/prior resolution), corrections (COR/RPR/DEL), and the cross-record checks.
 
 `tests/ingestion.test.js` covers lossless JSON numbers, skipped-line reporting, bzip2 decoding and ZIP reading (fixtures in `tests/fixtures` were written by Python's `bz2` and `zipfile`), and exact sort/range comparisons.
+
+`tests/default-filters.test.js` covers the default filter list, the desktop/mobile switch, and that each default names a visible column the sample file populates.
 
 `tests/spec-tables.test.js` checks the embedded spec tables against the official JSON schema files (`03.18.26-IM-4.1.0-r15.json` and `08.14.26-IM-4.2.0.json` in the repository root, from the [CAT IM specifications page](https://www.catnmsplan.com/specifications/im)); those tests are skipped if the files are missing.
 
